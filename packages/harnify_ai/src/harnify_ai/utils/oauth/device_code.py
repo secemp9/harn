@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 CANCEL_MESSAGE = "Login cancelled"
 TIMEOUT_MESSAGE = "Device flow timed out"
@@ -20,20 +20,20 @@ SLOW_DOWN_INTERVAL_INCREMENT_MS = 5000
 
 
 class OAuthDeviceCodePendingResult(TypedDict):
-    status: str
+    status: Literal["pending"]
 
 
 class OAuthDeviceCodeSlowDownResult(TypedDict):
-    status: str
+    status: Literal["slow_down"]
 
 
 class OAuthDeviceCodeCompleteResult(TypedDict):
-    status: str
+    status: Literal["complete"]
     accessToken: str
 
 
 class OAuthDeviceCodeFailedResult(TypedDict):
-    status: str
+    status: Literal["failed"]
     message: str
 
 
@@ -43,6 +43,13 @@ OAuthDeviceCodePollResult = (
     | OAuthDeviceCodeCompleteResult
     | OAuthDeviceCodeFailedResult
 )
+
+
+class OAuthDeviceCodePollOptions(TypedDict, total=False):
+    intervalSeconds: int | float
+    expiresInSeconds: int | float
+    poll: Callable[[], Awaitable[OAuthDeviceCodePollResult]]
+    signal: Any | None
 
 
 def _signal_aborted(signal: Any) -> bool:
@@ -73,14 +80,25 @@ async def _abortable_sleep(ms: int, signal: Any, cancel_message: str) -> None:
 
 
 async def poll_oauth_device_code_flow(
+    options: OAuthDeviceCodePollOptions | None = None,
     *,
     intervalSeconds: int | float | None = None,
     expiresInSeconds: int | float | None = None,
-    poll: Callable[[], Awaitable[OAuthDeviceCodePollResult]],
+    poll: Callable[[], Awaitable[OAuthDeviceCodePollResult]] | None = None,
     signal: Any | None = None,
 ) -> str:
+    if options is not None:
+        intervalSeconds = options.get("intervalSeconds", intervalSeconds)
+        expiresInSeconds = options.get("expiresInSeconds", expiresInSeconds)
+        poll = options.get("poll", poll)
+        signal = options.get("signal", signal)
+
+    if poll is None:
+        raise TypeError("poll is required")
+
     deadline = time.time() + expiresInSeconds if isinstance(expiresInSeconds, (int, float)) else float("inf")
-    interval_ms = max(MINIMUM_INTERVAL_MS, int((intervalSeconds or DEFAULT_POLL_INTERVAL_SECONDS) * 1000))
+    interval_seconds = intervalSeconds if intervalSeconds is not None else DEFAULT_POLL_INTERVAL_SECONDS
+    interval_ms = max(MINIMUM_INTERVAL_MS, int(interval_seconds * 1000))
 
     slow_down_responses = 0
     while time.time() < deadline:
