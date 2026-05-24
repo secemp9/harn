@@ -387,6 +387,8 @@ async def test_stream_openai_completions_surfaces_response_model_and_streamed_bl
 
 @pytest.mark.asyncio
 async def test_stream_openai_completions_applies_request_timeout_retries_and_on_response() -> None:
+    model = _openai_model()
+    context = Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}])
     raw_response = _RawResponse(
         _FakeCompletionStream(
             [
@@ -405,23 +407,13 @@ async def test_stream_openai_completions_applies_request_timeout_retries_and_on_
         captured["model"] = model
 
     result = await stream_openai_completions(
-        _openai_model(),
-        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+        model,
+        context,
         {"client": fake_client, "timeoutMs": 2500, "maxRetries": 7, "onResponse": on_response},
     ).result()
 
     assert fake_client.with_options_calls == [{"timeout": 2.5, "max_retries": 7}]
-    assert fake_client.chat.completions.with_raw_response.calls == [
-        {
-            "model": _openai_model().id,
-            "messages": [{"role": "user", "content": "hi"}],
-            "stream": True,
-            "stream_options": {"include_usage": True},
-            "store": False,
-            "prompt_cache_key": None,
-            "prompt_cache_retention": None,
-        }
-    ]
+    assert fake_client.chat.completions.with_raw_response.calls == [build_params(model, context)]
     assert captured["metadata"] == {"status": 202, "headers": {"x-request-id": "req-123"}}
     assert captured["model"].provider == "openai"
     assert result.content[0].text == "ok"
