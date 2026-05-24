@@ -845,16 +845,19 @@ async def iterate_anthropic_events(source: Any, signal: Any = None) -> AsyncIter
 
 async def _create_raw_response(client: Any, params: dict[str, Any], options: Any = None) -> Any:
     signal = _option(options, "signal")
-    request_kwargs: dict[str, Any] = {}
+    request_client = client
+    request_client_options: dict[str, Any] = {}
     if _option(options, "timeoutMs") is not None:
-        request_kwargs["timeout"] = _option(options, "timeoutMs") / 1000
+        request_client_options["timeout"] = _option(options, "timeoutMs") / 1000
     if _option(options, "maxRetries") is not None:
-        request_kwargs["max_retries"] = _option(options, "maxRetries")
+        request_client_options["max_retries"] = _option(options, "maxRetries")
+    if request_client_options and hasattr(client, "with_options"):
+        request_client = client.with_options(**request_client_options)
 
-    if hasattr(getattr(client, "messages", None), "with_raw_response"):
-        return await _await_maybe_with_signal(client.messages.with_raw_response.create(**params, **request_kwargs), signal)
+    if hasattr(getattr(request_client, "messages", None), "with_raw_response"):
+        return await _await_maybe_with_signal(request_client.messages.with_raw_response.create(**params), signal)
 
-    created = await _await_maybe_with_signal(client.messages.create(**params, **request_kwargs), signal)
+    created = await _await_maybe_with_signal(request_client.messages.create(**params), signal)
     if hasattr(created, "asResponse"):
         return await _await_maybe_with_signal(created.asResponse(), signal)
     return created
