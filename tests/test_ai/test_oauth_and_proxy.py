@@ -141,11 +141,104 @@ def test_github_copilot_helpers_normalize_domains_and_base_urls() -> None:
     assert github_copilot.normalize_domain("company.ghe.com") == "company.ghe.com"
     assert github_copilot.normalize_domain("https://company.ghe.com/login") == "company.ghe.com"
     assert github_copilot.normalize_domain("   ") is None
+    assert github_copilot.normalize_domain("https://not a url") is None
 
     token = "tid=1;proxy-ep=proxy.individual.githubcopilot.com;exp=2"
     assert github_copilot.get_github_copilot_base_url(token) == "https://api.individual.githubcopilot.com"
     assert github_copilot.get_github_copilot_base_url(None, "enterprise.example.com") == "https://copilot-api.enterprise.example.com"
     assert github_copilot.get_github_copilot_base_url() == "https://api.individual.githubcopilot.com"
+
+
+@pytest.mark.asyncio
+async def test_github_copilot_helpers_use_timeout_free_fetch_and_normalized_device_flow_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_timeouts: list[object] = []
+
+    class _FakeResponse:
+        status_code = 200
+        reason_phrase = "OK"
+        text = ""
+
+        def json(self) -> dict[str, object]:
+            return {
+                "device_code": "device-code",
+                "user_code": "user-code",
+                "verification_uri": "https://example.com/verify",
+                "interval": 5,
+                "expires_in": 900,
+                "extra": "ignored",
+            }
+
+    class _FakeClient:
+        def __init__(self, *, timeout: object = object()) -> None:
+            captured_timeouts.append(timeout)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def request(self, method: str, url: str, **kwargs):
+            assert method == "POST"
+            assert url == "https://github.com/login/device/code"
+            return _FakeResponse()
+
+    monkeypatch.setattr(github_copilot.httpx, "AsyncClient", _FakeClient)
+
+    result = await github_copilot._start_device_flow("github.com")
+
+    assert captured_timeouts == [None]
+    assert result == {
+        "device_code": "device-code",
+        "user_code": "user-code",
+        "verification_uri": "https://example.com/verify",
+        "interval": 5,
+        "expires_in": 900,
+    }
+
+
+@pytest.mark.asyncio
+async def test_github_copilot_enable_model_uses_timeout_free_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_timeouts: list[object] = []
+
+    class _FakeResponse:
+        is_success = True
+
+    class _FakeClient:
+        def __init__(self, *, timeout: object = object()) -> None:
+            captured_timeouts.append(timeout)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, **kwargs):
+            assert url.endswith("/models/model-1/policy")
+            return _FakeResponse()
+
+    monkeypatch.setattr(github_copilot.httpx, "AsyncClient", _FakeClient)
+
+    assert await github_copilot._enable_github_copilot_model("token", "model-1") is True
+    assert captured_timeouts == [None]
+
+
+def test_github_copilot_module_exports_expected_names() -> None:
+    assert github_copilot.__all__ == [
+        "getGitHubCopilotBaseUrl",
+        "get_github_copilot_base_url",
+        "githubCopilotOAuthProvider",
+        "github_copilot_oauth_provider",
+        "loginGitHubCopilot",
+        "login_github_copilot",
+        "normalizeDomain",
+        "normalize_domain",
+        "refreshGitHubCopilotToken",
+        "refresh_github_copilot_token",
+    ]
 
 
 def test_anthropic_format_error_details_prefers_runtime_metadata() -> None:
