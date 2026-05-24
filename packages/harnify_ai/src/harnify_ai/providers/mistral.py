@@ -486,6 +486,7 @@ async def consume_chat_stream(
     output: AssistantMessage,
     stream: AssistantMessageEventStream,
     mistral_stream: AsyncIterable[Any],
+    signal: Any = None,
 ) -> None:
     current_block: TextContent | ThinkingContent | None = None
     tool_blocks_by_key: dict[str, int] = {}
@@ -502,7 +503,7 @@ async def consume_chat_stream(
         else:
             stream.push(ThinkingEndEvent(contentIndex=block_index(), content=block.thinking, partial=output))
 
-    async for event in mistral_stream:
+    async for event in _iterate_with_abort(mistral_stream, signal):
         chunk = _coalesce_attr(event, "data") or event
         output.responseId = output.responseId or _coalesce_attr(chunk, "id")
 
