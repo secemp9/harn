@@ -1472,9 +1472,9 @@ class AgentSession:
             if not has_post_compaction_usage:
                 return {"tokens": None, "contextWindow": model.contextWindow, "percent": None}
 
-        estimated_tokens = _estimate_context_tokens(self.messages)
-        percent = (estimated_tokens / model.contextWindow) * 100 if model.contextWindow else None
-        return {"tokens": estimated_tokens, "contextWindow": model.contextWindow, "percent": percent}
+        estimate = estimate_compaction_context_tokens(list(self.messages))
+        percent = (estimate.tokens / model.contextWindow) * 100 if model.contextWindow else None
+        return {"tokens": estimate.tokens, "contextWindow": model.contextWindow, "percent": percent}
 
     async def _set_model_if_configured(self, model: Model[Any]) -> bool:
         if not self._modelRegistry.hasConfiguredAuth(model):

@@ -12,6 +12,7 @@ from harnify_ai.providers.faux import faux_assistant_message, register_faux_prov
 from harnify_ai.types import Usage
 from harnify_coding_agent.core.agent_session import AgentSession, parseSkillBlock
 from harnify_coding_agent.core.auth_storage import AuthStorage
+from harnify_coding_agent.core.compaction import estimate_context_tokens as estimate_compaction_context_tokens
 from harnify_coding_agent.core.compaction.branch_summarization import BranchSummaryResult
 from harnify_coding_agent.core.model_registry import ModelRegistry
 from harnify_coding_agent.core.resource_loader import DefaultResourceLoader
@@ -328,6 +329,33 @@ async def test_agent_session_set_thinking_level_off_without_model_keeps_default_
         session.setThinkingLevel("off")
 
         assert session.settingsManager.getDefaultThinkingLevel() == "high"
+    finally:
+        session.dispose()
+
+
+@pytest.mark.asyncio
+async def test_agent_session_context_usage_uses_shared_estimator(tmp_path: Path) -> None:
+    session = _create_session(tmp_path)
+    try:
+        session.agent.state.messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "hello"},
+                    {"type": "thinking", "thinking": "considering"},
+                    {"type": "toolCall", "name": "read", "arguments": {"path": "file.txt"}},
+                ],
+                "usage": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "totalTokens": 0},
+                "timestamp": 1,
+            },
+            {"role": "custom", "customType": "demo", "content": "next", "display": True, "timestamp": 2},
+        ]
+
+        usage = session.getContextUsage()
+        expected = estimate_compaction_context_tokens(list(session.agent.state.messages))
+
+        assert usage is not None
+        assert usage["tokens"] == expected.tokens
     finally:
         session.dispose()
 
