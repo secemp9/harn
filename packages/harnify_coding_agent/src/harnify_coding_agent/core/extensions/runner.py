@@ -6,7 +6,7 @@ import inspect
 import sys
 import traceback
 from collections.abc import Mapping
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
