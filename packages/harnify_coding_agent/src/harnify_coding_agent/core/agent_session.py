@@ -34,10 +34,10 @@ from harnify_coding_agent.core.compaction import (
 )
 from harnify_coding_agent.core.compaction import (
     CompactionSettings,
-    calculate_context_tokens as calculate_compaction_context_tokens,
-    estimate_context_tokens as estimate_compaction_context_tokens,
-    prepare_compaction,
-    should_compact,
+    calculateContextTokens as calculate_compaction_context_tokens,
+    estimateContextTokens as estimate_compaction_context_tokens,
+    prepareCompaction as prepare_compaction,
+    shouldCompact as should_compact,
 )
 from harnify_coding_agent.core.compaction.branch_summarization import (
     GenerateBranchSummaryOptions,
