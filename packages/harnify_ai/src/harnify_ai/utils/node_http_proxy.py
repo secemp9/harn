@@ -116,7 +116,6 @@ __all__ = [
     "NodeHttpProxyAgents",
     "UNSUPPORTED_PROXY_PROTOCOL_MESSAGE",
     "createHttpProxyAgentsForTarget",
-    "createHttpProxyAgentsForTarget",
     "create_http_proxy_agents_for_target",
     "resolveHttpProxyUrlForTarget",
     "resolve_http_proxy_url_for_target",
