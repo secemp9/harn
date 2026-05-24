@@ -12,3 +12,5 @@ def headers_to_record(headers: Mapping[str, str] | Iterable[tuple[str, str]]) ->
 
 
 headersToRecord = headers_to_record
+
+__all__ = ["headersToRecord"]

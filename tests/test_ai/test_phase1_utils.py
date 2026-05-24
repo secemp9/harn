@@ -10,6 +10,7 @@ from pydantic import BaseModel
 import harnify_ai.env_api_keys as env_api_keys
 import harnify_ai.session_resources as session_resources_module
 import harnify_ai.utils.hash as hash_module
+import harnify_ai.utils.headers as headers_module
 import harnify_ai.utils.validation as validation_utils
 from harnify_ai.session_resources import cleanup_session_resources, register_session_resource_cleanup
 from harnify_ai.types import AssistantMessage, Tool, ToolCall, Usage, UsageCost
@@ -54,6 +55,10 @@ def test_short_hash_matches_upstream_js_outputs() -> None:
 
 def test_hash_module_exports_match_ts_surface() -> None:
     assert hash_module.__all__ == ["shortHash"]
+
+
+def test_headers_module_exports_match_ts_surface() -> None:
+    assert headers_module.__all__ == ["headersToRecord"]
 
 
 def test_headers_to_record_and_sanitize_surrogates_preserve_expected_content() -> None:
