@@ -976,7 +976,6 @@ async def process_websocket_stream(
         headers,
         session_id,
         _option(options, "signal"),
-        _option(options, "timeoutMs"),
     )
     keep_connection = True
     use_cached_context = _option(options, "transport") in {"websocket-cached", "auto"}
