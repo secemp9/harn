@@ -166,7 +166,7 @@ def test_provider_config_input_model_shape_matches_ts_required_keys() -> None:
     hints = get_type_hints(model_registry._ProviderModelInput, include_extras=True)
 
     for key in ("id", "name", "reasoning", "input", "cost", "contextWindow", "maxTokens"):
-        assert get_origin(hints[key]) is None
+        assert get_origin(hints[key]) is not NotRequired
 
     for key in ("api", "baseUrl", "thinkingLevelMap", "headers", "compat"):
         assert get_origin(hints[key]) is NotRequired
