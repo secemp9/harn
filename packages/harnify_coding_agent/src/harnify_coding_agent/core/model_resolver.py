@@ -12,7 +12,7 @@ from typing import Any, Literal
 from harnify_ai.models import models_are_equal
 from harnify_ai.types import Model
 
-from harnify_coding_agent.cli.args import isValidThinkingLevel
+from harnify_coding_agent.cli.args import isValidThinkingLevel as _isValidThinkingLevel
 from harnify_coding_agent.core.defaults import DEFAULT_THINKING_LEVEL
 
 type ResolvedThinkingLevel = Literal["off", "minimal", "low", "medium", "high", "xhigh"]
@@ -178,7 +178,7 @@ def parseModelPattern(
     prefix = pattern[:last_colon_index]
     suffix = pattern[last_colon_index + 1 :]
 
-    if isValidThinkingLevel(suffix):
+    if _isValidThinkingLevel(suffix):
         result = parseModelPattern(prefix, availableModels, options)
         if result.model is not None:
             return ParsedModelResult(
@@ -213,7 +213,7 @@ async def resolveModelScope(patterns: list[str], modelRegistry: Any) -> list[Sco
             thinking_level: ResolvedThinkingLevel | None = None
             if colon_index != -1:
                 suffix = pattern[colon_index + 1 :]
-                if isValidThinkingLevel(suffix):
+                if _isValidThinkingLevel(suffix):
                     thinking_level = suffix  # type: ignore[assignment]
                     glob_pattern = pattern[:colon_index]
 
