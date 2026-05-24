@@ -18,6 +18,7 @@ from harnify_agent.agent import AbortController, Agent
 from harnify_agent.types import AgentMessage, AgentState, AgentTool, ThinkingLevel
 from harnify_ai.models import clamp_thinking_level, get_supported_thinking_levels, models_are_equal
 from harnify_ai.session_resources import cleanup_session_resources
+from harnify_ai.stream import stream_simple
 from harnify_ai.types import AssistantMessage, ImageContent, Model, TextContent, validate_message
 from harnify_ai.utils.overflow import is_context_overflow
 
@@ -26,6 +27,7 @@ from harnify_coding_agent.core.auth_guidance import (
     format_no_model_selected_message,
 )
 from harnify_coding_agent.core.bash_executor import BashResult, execute_bash_with_operations
+from harnify_coding_agent.core.compaction import compact as run_compaction
 from harnify_coding_agent.core.compaction import (
     CompactionResult as SessionCompactionResult,
 )
@@ -35,9 +37,6 @@ from harnify_coding_agent.core.compaction import (
     estimate_context_tokens as estimate_compaction_context_tokens,
     prepare_compaction,
     should_compact,
-)
-from harnify_coding_agent.core.compaction import (
-    compact as run_compaction,
 )
 from harnify_coding_agent.core.compaction.branch_summarization import (
     GenerateBranchSummaryOptions,
@@ -74,7 +73,10 @@ from harnify_coding_agent.core.tools.tool_definition_wrapper import (
     create_tool_definition_from_agent_tool,
     wrap_tool_definition,
 )
+from harnify_coding_agent.modes.interactive.theme.theme import theme
+from harnify_coding_agent.utils.frontmatter import strip_frontmatter
 from harnify_coding_agent.utils.paths import resolve_path
+from harnify_coding_agent.utils.sleep import sleep
 
 _SKILL_BLOCK_PATTERN = re.compile(
     r'^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n</skill>(?:\n\n([\s\S]+))?$'
@@ -220,8 +222,13 @@ class AgentSession:
         self._extensionAbortHandler: Callable[[], None] | None = None
         self._extensionShutdownHandler: Callable[[], None] | None = None
         self._extensionBindings: ExtensionBindings | None = None
+        self._extensionUIContext: ExtensionUIContext | None = None
+        self._extensionCommandContextActions: ExtensionCommandContextActions | None = None
+        self._extensionErrorListener: ExtensionErrorListener | None = None
         self._steeringMessages: list[str] = []
         self._followUpMessages: list[str] = []
+        self._pendingNextTurnMessages: list[dict[str, Any]] = []
+        self._pendingBashMessages: list[BashExecutionMessage] = []
         self._bashAbortController: AbortController | None = None
         self._auto_compaction_abort_controller: AbortController | None = None
         self._compactionAbortController: AbortController | None = None
@@ -229,6 +236,7 @@ class AgentSession:
         self._overflow_recovery_attempted = False
         self._retryAbortController: AbortController | None = None
         self._retryAttempt = 0
+        self._turnIndex = 0
         self._lastAssistantMessage: AssistantMessage | None = None
         self._toolRegistry: dict[str, AgentTool] = {}
         self._toolDefinitions: dict[str, _ToolDefinitionEntry] = {}
