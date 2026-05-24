@@ -26,6 +26,7 @@ def render_page(*, title: str, heading: str, message: str, details: str | None =
     heading = escape_html(heading)
     message = escape_html(message)
     details = escape_html(details) if details else None
+    details_html = f'<div class="details">{details}</div>' if details else ""
 
     return f"""<!doctype html>
 <html lang="en">
@@ -97,7 +98,7 @@ def render_page(*, title: str, heading: str, message: str, details: str | None =
     <div class="logo">{LOGO_SVG}</div>
     <h1>{heading}</h1>
     <p>{message}</p>
-    {"<div class=\"details\">" + details + "</div>" if details else ""}
+    {details_html}
   </main>
 </body>
 </html>"""
