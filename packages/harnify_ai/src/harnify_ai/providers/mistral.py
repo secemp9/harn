@@ -669,7 +669,7 @@ def to_chat_messages(messages: list[MessageValue], supports_images: bool) -> lis
                 if item.type == "text":
                     content.append({"type": "text", "text": sanitize_surrogates(item.text)})
                 elif supports_images:
-                    content.append({"type": "image_url", "image_url": f"data:{item.mimeType};base64,{item.data}"})
+                    content.append({"type": "image_url", "imageUrl": f"data:{item.mimeType};base64,{item.data}"})
             if content:
                 result.append({"role": "user", "content": content})
                 continue
@@ -709,7 +709,7 @@ def to_chat_messages(messages: list[MessageValue], supports_images: bool) -> lis
             if content_parts:
                 assistant_message["content"] = content_parts
             if tool_calls:
-                assistant_message["tool_calls"] = tool_calls
+                assistant_message["toolCalls"] = tool_calls
             if content_parts or tool_calls:
                 result.append(assistant_message)
             continue
@@ -724,11 +724,11 @@ def to_chat_messages(messages: list[MessageValue], supports_images: bool) -> lis
         ]
         for part in message.content:
             if supports_images and part.type == "image":
-                tool_content.append({"type": "image_url", "image_url": f"data:{part.mimeType};base64,{part.data}"})
+                tool_content.append({"type": "image_url", "imageUrl": f"data:{part.mimeType};base64,{part.data}"})
         result.append(
             {
                 "role": "tool",
-                "tool_call_id": message.toolCallId,
+                "toolCallId": message.toolCallId,
                 "name": message.toolName,
                 "content": tool_content,
             }
