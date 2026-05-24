@@ -560,13 +560,59 @@ def _collect_auto_theme_entries(dir_path: str) -> list[str]:
     return entries
 
 
+def _resolve_extension_entries(dir_path: str) -> list[str] | None:
+    package_json_path = os.path.join(dir_path, "package.json")
+    if os.path.exists(package_json_path):
+        manifest = _read_pi_manifest_file(package_json_path)
+        if manifest and manifest.get("extensions"):
+            entries = [
+                os.path.abspath(os.path.join(dir_path, candidate))
+                for candidate in manifest["extensions"]
+                if os.path.exists(os.path.join(dir_path, candidate))
+            ]
+            if entries:
+                return entries
+    index_py = os.path.join(dir_path, "index.py")
+    if os.path.exists(index_py):
+        return [index_py]
+    return None
+
+
 def _collect_auto_extension_entries(dir_path: str) -> list[str]:
     if not os.path.isdir(dir_path):
         return []
-    root_entries = resolve_extension_entries(dir_path)
-    if root_entries:
+    root_entries = _resolve_extension_entries(dir_path)
+    if root_entries is not None:
         return root_entries
-    return discover_extensions_in_dir(dir_path)
+
+    matcher = _IgnoreMatcher()
+    _add_ignore_rules(matcher, dir_path, dir_path)
+    entries: list[str] = []
+    try:
+        for entry in os.scandir(dir_path):
+            if entry.name.startswith(".") or entry.name == "node_modules":
+                continue
+
+            full_path = entry.path
+            try:
+                is_dir, is_file = _resolve_dir_entry(entry)
+            except OSError:
+                continue
+
+            rel_path = _to_posix_path(os.path.relpath(full_path, dir_path))
+            ignore_path = f"{rel_path}/" if is_dir else rel_path
+            if matcher.ignores(ignore_path):
+                continue
+
+            if is_file and entry.name.endswith(".py"):
+                entries.append(full_path)
+            elif is_dir:
+                resolved_entries = _resolve_extension_entries(full_path)
+                if resolved_entries:
+                    entries.extend(resolved_entries)
+    except OSError:
+        return entries
+    return entries
 
 
 def _collect_resource_files(dir_path: str, resource_type: ResourceType) -> list[str]:
