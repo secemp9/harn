@@ -353,11 +353,11 @@ def _build_builtin_keybindings(resolvedKeybindings: Mapping[str, str | list[str]
 
 @dataclass(slots=True)
 class ExtensionRunner:
-    extensions: list[Extension] = field(default_factory=list)
-    runtime: ExtensionRuntime = field(default_factory=create_extension_runtime)
-    cwd: str = "."
-    sessionManager: Any = None
-    modelRegistry: Any = None
+    extensions: list[Extension]
+    runtime: ExtensionRuntime
+    cwd: str
+    sessionManager: Any
+    modelRegistry: Any
     uiContext: Any = field(default_factory=_NoUIContext)
     errorListeners: list[Any] = field(default_factory=list)
     getModel: Any = field(default=lambda: None)
