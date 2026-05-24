@@ -812,9 +812,9 @@ class SessionBeforeCompactResult(TypedDict, total=False):
     compaction: SessionCompactionResult
 
 
-class BranchSummaryPayload(TypedDict, total=False):
+class BranchSummaryPayload(TypedDict):
     summary: str
-    details: Any
+    details: NotRequired[Any]
 
 
 class SessionBeforeTreeResult(TypedDict, total=False):
