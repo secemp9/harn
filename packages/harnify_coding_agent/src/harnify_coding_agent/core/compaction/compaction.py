@@ -24,10 +24,10 @@ from harnify_coding_agent.core.compaction.utils import (
     serialize_conversation as _serialize_conversation,
 )
 from harnify_coding_agent.core.messages import (
-    convert_to_llm,
-    create_branch_summary_message,
-    create_compaction_summary_message,
-    create_custom_message,
+    convertToLlm,
+    createBranchSummaryMessage,
+    createCompactionSummaryMessage,
+    createCustomMessage,
 )
 from harnify_coding_agent.core.session_manager import SessionEntry, build_session_context
 
@@ -388,7 +388,7 @@ async def generate_summary(
     if custom_instructions:
         base_prompt = f"{base_prompt}\n\nAdditional focus: {custom_instructions}"
 
-    conversation_text = _serialize_conversation(convert_to_llm(current_messages))
+    conversation_text = _serialize_conversation(convertToLlm(current_messages))
     prompt_text = f"<conversation>\n{conversation_text}\n</conversation>\n\n"
     if previous_summary:
         prompt_text += f"<previous-summary>\n{previous_summary}\n</previous-summary>\n\n"
@@ -572,7 +572,7 @@ def _get_message_from_entry(entry: SessionEntry) -> AgentMessage | None:
     if entry_type == "message":
         return entry.get("message")
     if entry_type == "custom_message":
-        return create_custom_message(
+        return createCustomMessage(
             entry.get("customType"),
             entry.get("content"),
             entry.get("display"),
@@ -580,13 +580,13 @@ def _get_message_from_entry(entry: SessionEntry) -> AgentMessage | None:
             entry.get("timestamp"),
         )
     if entry_type == "branch_summary":
-        return create_branch_summary_message(
+        return createBranchSummaryMessage(
             entry.get("summary"),
             entry.get("fromId"),
             entry.get("timestamp"),
         )
     if entry_type == "compaction":
-        return create_compaction_summary_message(
+        return createCompactionSummaryMessage(
             entry.get("summary"),
             entry.get("tokensBefore"),
             entry.get("timestamp"),
@@ -628,7 +628,7 @@ async def _generate_turn_prefix_summary(
         math.floor(0.5 * reserve_tokens),
         model.maxTokens if model.maxTokens > 0 else math.inf,
     )
-    conversation_text = _serialize_conversation(convert_to_llm(messages))
+    conversation_text = _serialize_conversation(convertToLlm(messages))
     prompt_text = f"<conversation>\n{conversation_text}\n</conversation>\n\n{_TURN_PREFIX_SUMMARIZATION_PROMPT}"
     response = await _complete_summarization(
         model,

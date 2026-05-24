@@ -9,7 +9,7 @@ from harnify_coding_agent.config import ENV_AGENT_DIR
 from harnify_coding_agent.core.extensions.loader import create_extension_runtime, discover_and_load_extensions
 from harnify_coding_agent.core.extensions.runner import ExtensionRunner
 from harnify_coding_agent.core.extensions.wrapper import wrap_registered_tools
-from harnify_coding_agent.core.messages import BashExecutionMessage, bash_execution_to_text, convert_to_llm
+from harnify_coding_agent.core.messages import BashExecutionMessage, bashExecutionToText, convertToLlm
 from harnify_coding_agent.core.prompt_templates import (
     expand_prompt_template,
     load_prompt_templates,
@@ -32,8 +32,8 @@ def test_core_messages_reexport_harness_behaviour() -> None:
         timestamp=1,
     )
 
-    assert bash_execution_to_text(message) == "Ran `echo hi`\n```\nhi\n```"
-    converted = convert_to_llm([message])
+    assert bashExecutionToText(message) == "Ran `echo hi`\n```\nhi\n```"
+    converted = convertToLlm([message])
     assert converted[0].role == "user"
     assert converted[0].content[0].text == "Ran `echo hi`\n```\nhi\n```"
 

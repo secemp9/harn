@@ -21,10 +21,10 @@ from harnify_coding_agent.core.compaction.utils import (
     serialize_conversation,
 )
 from harnify_coding_agent.core.messages import (
-    convert_to_llm,
-    create_branch_summary_message,
-    create_compaction_summary_message,
-    create_custom_message,
+    convertToLlm,
+    createBranchSummaryMessage,
+    createCompactionSummaryMessage,
+    createCustomMessage,
 )
 from harnify_coding_agent.core.session_manager import ReadonlySessionManager, SessionEntry
 
@@ -194,7 +194,7 @@ async def generate_branch_summary(
 
     prompt_text = (
         "<conversation>\n"
-        f"{serialize_conversation(convert_to_llm(preparation.messages))}\n"
+        f"{serialize_conversation(convertToLlm(preparation.messages))}\n"
         f"</conversation>\n\n{instructions}"
     )
     response = await complete_simple(
@@ -233,7 +233,7 @@ def _get_message_from_entry(entry: SessionEntry) -> AgentMessage | None:
             return None
         return message
     if entry_type == "custom_message":
-        return create_custom_message(
+        return createCustomMessage(
             entry.get("customType"),
             entry.get("content"),
             entry.get("display"),
@@ -241,13 +241,13 @@ def _get_message_from_entry(entry: SessionEntry) -> AgentMessage | None:
             entry.get("timestamp"),
         )
     if entry_type == "branch_summary":
-        return create_branch_summary_message(
+        return createBranchSummaryMessage(
             entry.get("summary"),
             entry.get("fromId"),
             entry.get("timestamp"),
         )
     if entry_type == "compaction":
-        return create_compaction_summary_message(
+        return createCompactionSummaryMessage(
             entry.get("summary"),
             entry.get("tokensBefore"),
             entry.get("timestamp"),

@@ -17,7 +17,7 @@ from harnify_coding_agent.core.auth_guidance import format_no_models_available_m
 from harnify_coding_agent.core.auth_storage import AuthStorage
 from harnify_coding_agent.core.defaults import DEFAULT_THINKING_LEVEL
 from harnify_coding_agent.core.extensions.types import ExtensionFactory, LoadExtensionsResult, ToolDefinition
-from harnify_coding_agent.core.messages import convert_to_llm
+from harnify_coding_agent.core.messages import convertToLlm
 from harnify_coding_agent.core.model_registry import ModelRegistry
 from harnify_coding_agent.core.model_resolver import findInitialModel
 from harnify_coding_agent.core.resource_loader import DefaultResourceLoader, ResourceLoaderLike
@@ -179,7 +179,7 @@ async def create_agent_session(options: CreateAgentSessionOptions | None = None)
     extension_runner_ref: dict[str, Any] = {}
 
     def convert_to_llm_with_block_images(messages: list[AgentMessage]) -> list[Any]:
-        converted = convert_to_llm(messages)
+        converted = convertToLlm(messages)
         if not settings_manager.getBlockImages():
             return converted
 

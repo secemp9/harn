@@ -59,7 +59,7 @@ from harnify_coding_agent.core.agent_session import parse_skill_block
 from harnify_coding_agent.core.agent_session_runtime import SessionImportFileNotFoundError
 from harnify_coding_agent.core.footer_data_provider import FooterDataProvider
 from harnify_coding_agent.core.keybindings import KEYBINDINGS, KeybindingsManager
-from harnify_coding_agent.core.messages import create_compaction_summary_message
+from harnify_coding_agent.core.messages import createCompactionSummaryMessage
 from harnify_coding_agent.core.model_resolver import findExactModelReferenceMatch, resolveModelScope
 from harnify_coding_agent.core.package_manager import DefaultPackageManager
 from harnify_coding_agent.core.session_cwd import MissingSessionCwdError, format_missing_session_cwd_prompt
@@ -3084,7 +3084,7 @@ class InteractiveMode:
                     clear_chat()
                 self.rebuildChatFromMessages()
                 self.addMessageToChat(
-                    create_compaction_summary_message(
+                    createCompactionSummaryMessage(
                         str(_value(result, "summary", "")),
                         int(_value(result, "tokensBefore", 0)),
                         datetime.now(UTC).isoformat(),
