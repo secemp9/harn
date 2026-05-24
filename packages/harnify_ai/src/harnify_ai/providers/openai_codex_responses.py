@@ -1147,18 +1147,17 @@ def stream_openai_codex_responses(
                         raise
                     _record_sse_fallback(session_id)
 
-            timeout_ms = _option(options, "timeoutMs")
-            timeout = (timeout_ms / 1000) if timeout_ms is not None else None
             url = resolve_codex_url(model.baseUrl)
+            signal = _option(options, "signal")
 
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
                 last_error: RuntimeError | None = None
                 for attempt in range(MAX_RETRIES + 1):
-                    if _is_aborted(_option(options, "signal")):
+                    if _is_aborted(signal):
                         raise RuntimeError("Request was aborted")
                     try:
                         request = client.build_request("POST", url, headers=sse_headers, json=body)
-                        response = await client.send(request, stream=True)
+                        response = await _await_with_abort(client.send(request, stream=True), signal)
                         on_response = _option(options, "onResponse")
                         if callable(on_response):
                             await _maybe_await(
@@ -1175,7 +1174,7 @@ def stream_openai_codex_responses(
                         if attempt < MAX_RETRIES and _is_retryable_error(response.status_code, error_text):
                             delay_ms = _parse_retry_after_delay_ms(response, BASE_DELAY_MS * (2**attempt))
                             await response.aclose()
-                            await _sleep(delay_ms, _option(options, "signal"))
+                            await _sleep(delay_ms, signal)
                             continue
                         await response.aclose()
                         raise CodexApiError(error_info.get("friendlyMessage") or error_info["message"])
@@ -1186,7 +1185,7 @@ def stream_openai_codex_responses(
                             raise
                         last_error = error if isinstance(error, RuntimeError) else RuntimeError(str(error))
                         if attempt < MAX_RETRIES:
-                            await _sleep(BASE_DELAY_MS * (2**attempt), _option(options, "signal"))
+                            await _sleep(BASE_DELAY_MS * (2**attempt), signal)
                             continue
                         raise last_error from error
 
@@ -1196,11 +1195,19 @@ def stream_openai_codex_responses(
                 stream.push(StartEvent(partial=output))
                 await process_stream(response, output, stream, model, options)
 
-                if _is_aborted(_option(options, "signal")):
+                if _is_aborted(signal):
                     raise RuntimeError("Request was aborted")
                 stream.push(DoneEvent(reason=output.stopReason, message=output))
             stream.end()
         except Exception as error:  # noqa: BLE001
+            for block in output.content:
+                if isinstance(block, dict):
+                    block.pop("partialJson", None)
+                    continue
+                try:
+                    delattr(block, "partialJson")
+                except AttributeError:
+                    continue
             output.stopReason = "aborted" if _is_aborted(_option(options, "signal")) else "error"
             output.errorMessage = str(error)
             stream.push(ErrorEvent(reason=output.stopReason, error=output))
