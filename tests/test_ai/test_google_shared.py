@@ -283,7 +283,6 @@ def test_google_shared_module_exports_expected_names() -> None:
         "requiresToolCallId",
         "convertMessages",
         "convertTools",
-        "sanitizeForOpenApi",
         "mapToolChoice",
         "mapStopReason",
         "mapStopReasonString",
