@@ -17,13 +17,13 @@ _UNSET = object()
 
 
 @dataclass(slots=True)
-class GitPaths:
+class _GitPaths:
     repoDir: str
     commonGitDir: str
     headPath: str
 
 
-def find_git_paths(cwd: str) -> GitPaths | None:
+def _find_git_paths(cwd: str) -> _GitPaths | None:
     dir_path = cwd
     while True:
         git_path = os.path.join(dir_path, ".git")
@@ -47,12 +47,12 @@ def find_git_paths(cwd: str) -> GitPaths | None:
                             if os.path.exists(common_dir_path)
                             else git_dir
                         )
-                        return GitPaths(repoDir=dir_path, commonGitDir=common_git_dir, headPath=head_path)
+                        return _GitPaths(repoDir=dir_path, commonGitDir=common_git_dir, headPath=head_path)
                 elif os.path.isdir(git_path):
                     head_path = os.path.join(git_path, "HEAD")
                     if not os.path.exists(head_path):
                         return None
-                    return GitPaths(repoDir=dir_path, commonGitDir=git_path, headPath=head_path)
+                    return _GitPaths(repoDir=dir_path, commonGitDir=git_path, headPath=head_path)
             except OSError:
                 return None
         parent = os.path.dirname(dir_path)
@@ -61,7 +61,7 @@ def find_git_paths(cwd: str) -> GitPaths | None:
         dir_path = parent
 
 
-def resolve_branch_with_git_sync(repo_dir: str) -> str | None:
+def _resolve_branch_with_git_sync(repo_dir: str) -> str | None:
     try:
         result = subprocess.run(
             ["git", "--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"],
@@ -95,7 +95,7 @@ class FooterDataProvider:
         self.cwd = cwd
         self.extensionStatuses: dict[str, str] = {}
         self.cachedBranch: object | str | None = _UNSET
-        self.gitPaths: GitPaths | None = find_git_paths(cwd)
+        self.gitPaths: _GitPaths | None = _find_git_paths(cwd)
         self.headWatcher: FSWatcher | None = None
         self.reftableWatcher: FSWatcher | None = None
         self.reftableTablesListWatcher: FSWatcher | None = None
@@ -157,7 +157,7 @@ class FooterDataProvider:
                 self.refreshTimer = None
         self.clearGitWatchers()
         self.cachedBranch = _UNSET
-        self.gitPaths = find_git_paths(cwd)
+        self.gitPaths = _find_git_paths(cwd)
         self.setupGitWatcher()
         self.notifyBranchChange()
 
@@ -221,7 +221,7 @@ class FooterDataProvider:
             content = Path(self.gitPaths.headPath).read_text(encoding="utf-8").strip()
             if content.startswith("ref: refs/heads/"):
                 branch = content[16:]
-                return resolve_branch_with_git_sync(self.gitPaths.repoDir) or "detached" if branch == ".invalid" else branch
+                return _resolve_branch_with_git_sync(self.gitPaths.repoDir) or "detached" if branch == ".invalid" else branch
             return "detached"
         except OSError:
             return None
@@ -233,7 +233,7 @@ class FooterDataProvider:
             content = Path(self.gitPaths.headPath).read_text(encoding="utf-8").strip()
             if content.startswith("ref: refs/heads/"):
                 branch = content[16:]
-                return resolve_branch_with_git_sync(self.gitPaths.repoDir) or "detached" if branch == ".invalid" else branch
+                return _resolve_branch_with_git_sync(self.gitPaths.repoDir) or "detached" if branch == ".invalid" else branch
             return "detached"
         except OSError:
             return None
