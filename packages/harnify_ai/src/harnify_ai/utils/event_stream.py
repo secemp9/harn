@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import AsyncIterator, Callable, Generic, TypeVar, cast
 
-from harnify_ai.types import AssistantMessage, AssistantMessageEventValue
+from harnify_ai.types import AssistantMessage, AssistantMessageEvent
 
 TEvent = TypeVar("TEvent")
 TResult = TypeVar("TResult")
@@ -82,7 +82,7 @@ class EventStream(Generic[TEvent, TResult]):
         return self._result_future
 
 
-class AssistantMessageEventStream(EventStream[AssistantMessageEventValue, AssistantMessage]):
+class AssistantMessageEventStream(EventStream[AssistantMessageEvent, AssistantMessage]):
     def __init__(self) -> None:
         super().__init__(
             lambda event: event.type in {"done", "error"},
@@ -95,3 +95,10 @@ def create_assistant_message_event_stream() -> AssistantMessageEventStream:
 
 
 createAssistantMessageEventStream = create_assistant_message_event_stream
+
+__all__ = [
+    "AssistantMessageEventStream",
+    "EventStream",
+    "createAssistantMessageEventStream",
+    "create_assistant_message_event_stream",
+]
