@@ -443,11 +443,11 @@ class AgentSession:
                 return
 
             current_text = text
-            current_images = list(resolved.images or [])
+            current_images = None if resolved.images is None else list(resolved.images)
             if self._extensionRunner.has_handlers("input"):
                 input_result = await self._extensionRunner.emit_input(
                     current_text,
-                    current_images or None,
+                    current_images,
                     resolved.source,
                 )
                 action = _event_field(input_result, "action", "continue")
@@ -466,11 +466,11 @@ class AgentSession:
 
             if self.isStreaming:
                 if resolved.streamingBehavior == "followUp":
-                    await self._queue_follow_up(current_text, current_images or None)
+                    await self._queue_follow_up(current_text, current_images)
                     report_preflight(True)
                     return
                 if resolved.streamingBehavior == "steer":
-                    await self._queue_steer(current_text, current_images or None)
+                    await self._queue_steer(current_text, current_images)
                     report_preflight(True)
                     return
                 raise RuntimeError(
@@ -501,13 +501,13 @@ class AgentSession:
                     self._flush_pending_bash_messages()
 
             messages: list[Any] = []
-            messages.append(self._build_user_message(current_text, current_images or None))
+            messages.append(self._build_user_message(current_text, current_images))
             messages.extend(self._pendingNextTurnMessages)
             self._pendingNextTurnMessages = []
             if self._extensionRunner.has_handlers("before_agent_start"):
                 before_result = await self._extensionRunner.emit_before_agent_start(
                     current_text,
-                    current_images or None,
+                    current_images,
                     self._baseSystemPrompt,
                     self._baseSystemPromptOptions,
                 )

@@ -361,6 +361,27 @@ async def test_agent_session_context_usage_uses_shared_estimator(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_agent_session_before_agent_start_preserves_explicit_empty_images(tmp_path: Path) -> None:
+    seen_images: list[object] = []
+
+    def extension_factory(pi: object) -> None:
+        def on_before_agent_start(event: dict[str, object], _ctx: object) -> None:
+            seen_images.append(event["images"])
+            return None
+
+        pi.on("before_agent_start", on_before_agent_start)  # type: ignore[attr-defined]
+
+    session = await _create_loaded_session(tmp_path, extension_factories=[extension_factory])
+    session.agent.set_responses([faux_assistant_message("ok")])
+    try:
+        await session.prompt("hello", {"images": []})
+
+        assert seen_images == [[]]
+    finally:
+        session.dispose()
+
+
+@pytest.mark.asyncio
 async def test_agent_session_cycles_models_records_bash_and_reads_last_assistant_text(tmp_path: Path) -> None:
     session = _create_session(tmp_path)
     session.modelRegistry.authStorage.setRuntimeApiKey("openai", "other-key")
