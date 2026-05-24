@@ -158,30 +158,32 @@ def test_build_request_options_matches_upstream_surface() -> None:
 
 
 def test_to_chat_messages_uses_upstream_key_casing() -> None:
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "hello"},
-                {"type": "image", "mimeType": "image/png", "data": "abc"},
-            ],
-            "timestamp": 1,
-        },
-        {
-            "role": "assistant",
-            "content": [{"type": "toolCall", "id": "call-1", "name": "calc", "arguments": {"a": 1}}],
-            "timestamp": 2,
-        },
-        {
-            "role": "tool",
-            "toolCallId": "call-1",
-            "toolName": "calc",
-            "content": [{"type": "image", "mimeType": "image/png", "data": "xyz"}],
-            "timestamp": 3,
-        },
-    ]
+    context = Context(
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "hello"},
+                    {"type": "image", "mimeType": "image/png", "data": "abc"},
+                ],
+                "timestamp": 1,
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "toolCall", "id": "call-1", "name": "calc", "arguments": {"a": 1}}],
+                "timestamp": 2,
+            },
+            {
+                "role": "tool",
+                "toolCallId": "call-1",
+                "toolName": "calc",
+                "content": [{"type": "image", "mimeType": "image/png", "data": "xyz"}],
+                "timestamp": 3,
+            },
+        ]
+    )
 
-    chat_messages = mistral_provider.to_chat_messages(messages, supports_images=True)
+    chat_messages = mistral_provider.to_chat_messages(context.messages, supports_images=True)
 
     assert chat_messages[0]["content"][1] == {"type": "image_url", "imageUrl": "data:image/png;base64,abc"}
     assert chat_messages[1]["toolCalls"][0]["function"]["arguments"] == '{"a": 1}'
