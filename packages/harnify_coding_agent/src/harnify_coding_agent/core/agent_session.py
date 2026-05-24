@@ -49,6 +49,7 @@ from harnify_coding_agent.core.export_html.tool_renderer import create_tool_html
 from harnify_coding_agent.core.extensions.runner import ExtensionRunner, emit_session_shutdown_event
 from harnify_coding_agent.core.extensions.types import (
     ExtensionCommandContextActions,
+    ExtensionError,
     ExtensionErrorListener,
     ExtensionUIContext,
     ToolDefinition,
@@ -564,11 +565,11 @@ class AgentSession:
                 return f"{skill_block}\n\n{args}" if args else skill_block
             except Exception as error:  # noqa: BLE001
                 self._extensionRunner.emit_error(
-                    {
-                        "extensionPath": skill_file_path,
-                        "event": "skill_expansion",
-                        "error": str(error),
-                    }
+                    ExtensionError(
+                        extensionPath=skill_file_path,
+                        event="skill_expansion",
+                        error=str(error),
+                    )
                 )
                 return text
         return text
@@ -1550,11 +1551,11 @@ class AgentSession:
                 await result
         except Exception as error:  # noqa: BLE001
             self._extensionRunner.emit_error(
-                {
-                    "extensionPath": f"command:{command_name}",
-                    "event": "command",
-                    "error": str(error),
-                }
+                ExtensionError(
+                    extensionPath=f"command:{command_name}",
+                    event="command",
+                    error=str(error),
+                )
             )
         return True
 
