@@ -4,13 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
+import harnify_ai.providers.faux as faux_provider
 import harnify_ai.utils.oauth.pkce as pkce_module
 from harnify_ai.image_models import get_image_model, get_image_providers
 from harnify_ai.images import generate_images
 from harnify_ai.providers.faux import faux_assistant_message, faux_text, faux_thinking, register_faux_provider
 from harnify_ai.providers.images import register_builtins as image_register_builtins
 from harnify_ai.stream import complete_simple
-from harnify_ai.types import AssistantImages
+from harnify_ai.types import AssistantImages, Context, Tool
 from harnify_ai.utils.oauth.pkce import generate_pkce
 
 
@@ -46,6 +47,51 @@ async def test_faux_provider_returns_error_message_when_no_responses_are_queued(
     assert message.errorMessage == "No more faux responses queued"
 
     registration.unregister()
+
+
+def test_faux_helpers_match_ts_contract_for_timestamp_and_json_serialization() -> None:
+    message = faux_assistant_message("hello", {"timestamp": 0, "stopReason": "stop"})
+    tool_call = faux_provider.faux_tool_call("edit", {"path": "a.txt", "text": "hi"})
+    context = Context(
+        messages=[],
+        tools=[
+            Tool(
+                name="edit",
+                description="Edit a file.",
+                parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+            )
+        ],
+    )
+
+    assert message.timestamp == 0
+    assert faux_provider._assistant_content_to_text([tool_call]) == 'edit:{"path":"a.txt","text":"hi"}'
+    assert faux_provider._serialize_context(context) == (
+        'tools:[{"name":"edit","description":"Edit a file.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}]'
+    )
+
+
+def test_faux_module_exports_and_registration_method_names_match_ts_surface() -> None:
+    registration = register_faux_provider({"api": "faux-contract-suite"})
+    try:
+        assert registration.getModel() is not None
+        registration.setResponses([])
+        registration.appendResponses([])
+        assert registration.getPendingResponseCount() == 0
+        assert faux_provider.__all__ == [
+            "FauxModelDefinition",
+            "FauxContentBlock",
+            "fauxText",
+            "fauxThinking",
+            "fauxToolCall",
+            "fauxAssistantMessage",
+            "FauxResponseFactory",
+            "FauxResponseStep",
+            "RegisterFauxProviderOptions",
+            "FauxProviderRegistration",
+            "registerFauxProvider",
+        ]
+    finally:
+        registration.unregister()
 
 
 @pytest.mark.asyncio
