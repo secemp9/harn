@@ -300,7 +300,7 @@ async def test_openai_codex_helpers_build_authorization_url_and_extract_account_
     monkeypatch.setattr(openai_codex, "generate_pkce", fake_generate_pkce)
     monkeypatch.setattr(openai_codex, "_create_state", lambda: "state-789")
 
-    flow = await openai_codex.create_authorization_flow("cli-test")
+    flow = await openai_codex._create_authorization_flow("cli-test")
     parsed = urlparse(flow["url"])
     params = parse_qs(parsed.query)
 
@@ -310,8 +310,75 @@ async def test_openai_codex_helpers_build_authorization_url_and_extract_account_
     assert params["originator"] == ["cli-test"]
     assert params["state"] == ["state-789"]
 
-    token = _encode_jwt({openai_codex.JWT_CLAIM_PATH: {"chatgpt_account_id": "acct_123"}})
+    token = _encode_jwt({"https://api.openai.com/auth": {"chatgpt_account_id": "acct_123"}})
     assert openai_codex._get_account_id(token) == "acct_123"
+
+
+@pytest.mark.asyncio
+async def test_openai_codex_helpers_use_timeout_free_token_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_timeouts: list[object] = []
+
+    class _FakeResponse:
+        status_code = 200
+        text = ""
+        reason_phrase = "OK"
+
+        def json(self) -> dict[str, object]:
+            return {
+                "access_token": "access-123",
+                "refresh_token": "refresh-123",
+                "expires_in": 60,
+            }
+
+    class _FakeClient:
+        def __init__(self, *, timeout: object = object()) -> None:
+            captured_timeouts.append(timeout)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, **kwargs):
+            assert url == openai_codex.TOKEN_URL
+            return _FakeResponse()
+
+    monkeypatch.setattr(openai_codex.httpx, "AsyncClient", _FakeClient)
+
+    exchange = await openai_codex._exchange_authorization_code("code-1", "verifier-1")
+    refresh = await openai_codex._refresh_access_token("refresh-1")
+
+    assert exchange["type"] == "success"
+    assert refresh["type"] == "success"
+    assert captured_timeouts == [None, None]
+
+
+@pytest.mark.asyncio
+async def test_openai_codex_callback_server_uses_ts_status_lines() -> None:
+    server = await openai_codex._start_local_oauth_server("expected-state")
+    try:
+        reader, writer = await asyncio.open_connection(openai_codex.CALLBACK_HOST, 1455)
+        writer.write(b"GET /wrong HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        await writer.drain()
+        response = await reader.read()
+        writer.close()
+        await writer.wait_closed()
+
+        assert response.decode("utf-8", "ignore").splitlines()[0] == "HTTP/1.1 404 Not Found"
+    finally:
+        await server.close()
+
+
+def test_openai_codex_module_exports_expected_names() -> None:
+    assert openai_codex.__all__ == [
+        "loginOpenAICodex",
+        "login_openai_codex",
+        "openaiCodexOAuthProvider",
+        "openai_codex_oauth_provider",
+        "refreshOpenAICodexToken",
+        "refresh_openai_codex_token",
+    ]
 
 
 def test_oauth_registry_restores_built_ins_after_unregister() -> None:
