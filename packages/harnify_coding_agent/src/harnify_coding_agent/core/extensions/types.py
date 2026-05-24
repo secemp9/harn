@@ -363,7 +363,7 @@ class SessionBeforeCompactEvent(TypedDict, total=False):
 
 class SessionCompactEvent(TypedDict):
     type: Literal["session_compact"]
-    compactionEntry: dict[str, Any]
+    compactionEntry: CompactionEntry
     fromExtension: bool
 
 
@@ -394,7 +394,7 @@ class SessionTreeEvent(TypedDict, total=False):
     type: Literal["session_tree"]
     newLeafId: str | None
     oldLeafId: str | None
-    summaryEntry: dict[str, Any]
+    summaryEntry: BranchSummaryEntry
     fromExtension: bool | None
 
 
@@ -453,7 +453,7 @@ class TurnEndEvent(TypedDict, total=False):
     type: Literal["turn_end"]
     turnIndex: int
     message: AgentMessage
-    toolResults: list[AgentMessage]
+    toolResults: list[ToolResultMessage]
 
 
 class MessageStartEvent(TypedDict):
@@ -464,7 +464,7 @@ class MessageStartEvent(TypedDict):
 class MessageUpdateEvent(TypedDict):
     type: Literal["message_update"]
     message: AgentMessage
-    assistantMessageEvent: Any
+    assistantMessageEvent: AssistantMessageEvent
 
 
 class MessageEndEvent(TypedDict):
