@@ -11,7 +11,7 @@ import harnify_ai
 import harnify_ai.oauth as oauth_alias
 import harnify_ai.utils.oauth as oauth_registry
 from harnify_ai.utils import node_http_proxy
-from harnify_ai.utils.oauth import device_code, github_copilot, oauth_page, openai_codex
+from harnify_ai.utils.oauth import anthropic, device_code, github_copilot, oauth_page, openai_codex
 from harnify_ai.utils.oauth.types import OAuthCredentials
 
 
@@ -132,6 +132,46 @@ def test_github_copilot_helpers_normalize_domains_and_base_urls() -> None:
     assert github_copilot.get_github_copilot_base_url(token) == "https://api.individual.githubcopilot.com"
     assert github_copilot.get_github_copilot_base_url(None, "enterprise.example.com") == "https://copilot-api.enterprise.example.com"
     assert github_copilot.get_github_copilot_base_url() == "https://api.individual.githubcopilot.com"
+
+
+def test_anthropic_format_error_details_prefers_runtime_metadata() -> None:
+    class NamedError(Exception):
+        name = "NamedError"
+        code = "EFAIL"
+        errno = 7
+        cause = ValueError("inner")
+        stack = "STACK"
+
+    details = anthropic._format_error_details(NamedError("boom"))
+
+    assert details == "NamedError: boom; code=EFAIL; errno=7; cause=ValueError: inner; stack=STACK"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_callback_server_uses_ts_status_lines() -> None:
+    server = await anthropic._start_callback_server("expected-state")
+    try:
+        reader, writer = await asyncio.open_connection(anthropic.CALLBACK_HOST, anthropic.CALLBACK_PORT)
+        writer.write(b"GET /wrong HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        await writer.drain()
+        response = await reader.read()
+        writer.close()
+        await writer.wait_closed()
+
+        assert response.decode("utf-8", "ignore").splitlines()[0] == "HTTP/1.1 404 Not Found"
+    finally:
+        await server.close()
+
+
+def test_anthropic_oauth_module_exports_expected_names() -> None:
+    assert anthropic.__all__ == [
+        "anthropicOAuthProvider",
+        "anthropic_oauth_provider",
+        "loginAnthropic",
+        "login_anthropic",
+        "refreshAnthropicToken",
+        "refresh_anthropic_token",
+    ]
 
 
 @pytest.mark.asyncio
