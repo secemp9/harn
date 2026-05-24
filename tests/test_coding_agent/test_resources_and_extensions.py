@@ -167,7 +167,7 @@ async def test_extensions_and_resource_loader_compose_session_start_resources(tm
     extension = discovered.extensions[0]
     assert list(extension.tools) == ["demo"]
 
-    runner = ExtensionRunner(contextFactory=lambda: {"cwd": "runner-cwd"})
+    runner = ExtensionRunner(cwd="runner-cwd")
     wrapped = wrap_registered_tools(list(extension.tools.values()), runner)
     result = await wrapped[0].execute("call-1", {"value": "ok"}, None, None)
     assert isinstance(result, AgentToolResult)
