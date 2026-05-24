@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
+import harnify_ai.providers.google as google_provider
 from harnify_ai.providers.google import (
     build_params,
     is_gemini3_flash_model,
@@ -75,6 +77,28 @@ class _FakeModels:
                 yield chunk
 
         return _iterate()
+
+
+class _BlockingStream:
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+        self.closed = False
+        self.cancelled = False
+
+    def __aiter__(self) -> _BlockingStream:
+        return self
+
+    async def __anext__(self):
+        self.entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        raise StopAsyncIteration
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 class _FakeAsyncClient:
