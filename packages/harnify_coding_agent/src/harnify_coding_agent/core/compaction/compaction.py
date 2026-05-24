@@ -533,10 +533,10 @@ async def compact(
         summary=summary,
         firstKeptEntryId=preparation.firstKeptEntryId,
         tokensBefore=preparation.tokensBefore,
-        details=CompactionDetails(
-            readFiles=file_lists["readFiles"],
-            modifiedFiles=file_lists["modifiedFiles"],
-        ),
+        details={
+            "readFiles": file_lists["readFiles"],
+            "modifiedFiles": file_lists["modifiedFiles"],
+        },
     )
 
 
