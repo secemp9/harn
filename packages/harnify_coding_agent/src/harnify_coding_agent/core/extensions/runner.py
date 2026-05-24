@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import inspect
+import sys
+import traceback
 from collections.abc import Mapping
-from copy import copy, deepcopy
+from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +25,7 @@ from harnify_coding_agent.core.extensions.types import (
     RegisteredTool,
     ResolvedCommand,
 )
+from harnify_coding_agent.modes.interactive.theme.theme import theme
 
 RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS = (
     "app.interrupt",
@@ -52,10 +55,12 @@ type SwitchSessionHandler = Any
 type ReloadHandler = Any
 type ShutdownHandler = Any
 
+_MISSING = object()
+
 
 @dataclass(slots=True)
 class _NoUIContext:
-    theme: Any = None
+    theme: Any = theme
 
     async def select(self, *_args: Any, **_kwargs: Any) -> Any:
         return None
@@ -367,7 +372,6 @@ class ExtensionRunner:
     cwd: str = "."
     sessionManager: Any = None
     modelRegistry: Any = None
-    contextFactory: Any = None
     uiContext: Any = field(default_factory=_NoUIContext)
     errorListeners: set[Any] = field(default_factory=set)
     getModel: Any = field(default=lambda: None)
@@ -434,13 +438,7 @@ class ExtensionRunner:
                 else:
                     raise RuntimeError("No provider registration handler bound")
             except Exception as error:
-                self.emit_error(
-                    ExtensionError(
-                        extensionPath=registration.extensionPath,
-                        event="register_provider",
-                        error=str(error),
-                    )
-                )
+                self._emit_extension_exception(registration.extensionPath, "register_provider", error)
         self.runtime.pendingProviderRegistrations.clear()
 
         def register_provider_now(name: str, config: ProviderConfig, _extension_path: str | None = None) -> None:
@@ -529,6 +527,8 @@ class ExtensionRunner:
 
         def add_diagnostic(message: str, extensionPath: str) -> None:
             self.shortcutDiagnostics.append(ResourceDiagnostic(type="warning", message=message, path=extensionPath))
+            if not self.has_ui():
+                print(message, file=sys.stderr)
 
         for extension in self.extensions:
             for key, shortcut in extension.shortcuts.items():
@@ -566,7 +566,7 @@ class ExtensionRunner:
         return extension_shortcuts
 
     def get_shortcut_diagnostics(self) -> list[ResourceDiagnostic]:
-        return list(self.shortcutDiagnostics)
+        return self.shortcutDiagnostics
 
     def invalidate(self, message: str | None = None) -> None:
         if self.staleMessage is not None:
@@ -575,7 +575,10 @@ class ExtensionRunner:
             message
             or (
                 "This extension ctx is stale after session replacement or reload. "
-                "Do not use a captured context after replacement."
+                "Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), "
+                "ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, "
+                "move post-replacement work into withSession and use the ctx passed to withSession. "
+                "For reload, do not use the old ctx after await ctx.reload()."
             )
         )
         self.runtime.invalidate(self.staleMessage)
@@ -595,6 +598,16 @@ class ExtensionRunner:
     def emit_error(self, error: ExtensionError) -> None:
         for listener in list(self.errorListeners):
             listener(error)
+
+    def _emit_extension_exception(self, extension_path: str, event: str, error: Exception) -> None:
+        self.emit_error(
+            ExtensionError(
+                extensionPath=extension_path,
+                event=event,
+                error=str(error),
+                stack="".join(traceback.format_exception(error)),
+            )
+        )
 
     def has_handlers(self, eventType: str) -> bool:
         return any(extension.handlers.get(eventType) for extension in self.extensions)
@@ -643,7 +656,7 @@ class ExtensionRunner:
         return self._resolve_registered_commands()
 
     def get_command_diagnostics(self) -> list[ResourceDiagnostic]:
-        return list(self.commandDiagnostics)
+        return self.commandDiagnostics
 
     def get_command(self, name: str) -> ResolvedCommand | None:
         for command in self._resolve_registered_commands():
@@ -655,12 +668,10 @@ class ExtensionRunner:
         self.shutdownHandler()
 
     def create_context(self) -> Any:
-        extras = _normalize_extras(self.contextFactory() if callable(self.contextFactory) else self.contextFactory)
-        return _ContextBase(self, extras)
+        return _ContextBase(self)
 
     def create_command_context(self) -> Any:
-        extras = _normalize_extras(self.contextFactory() if callable(self.contextFactory) else self.contextFactory)
-        return _CommandContextView(self, extras)
+        return _CommandContextView(self)
 
     async def emit(self, event: Any) -> Any:
         event_type = _event_type(event)
@@ -681,15 +692,9 @@ class ExtensionRunner:
                     } and handler_result:
                         result = handler_result
                         if _result_flag(result, "cancel", False):
-                            return result
+                                return result
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event=event_type,
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, event_type, error)
         return result
 
     async def emit_message_end(self, event: Any) -> Any:
@@ -718,18 +723,12 @@ class ExtensionRunner:
                     current_message = message
                     modified = True
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="message_end",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "message_end", error)
         return current_message if modified else None
 
     async def emit_tool_result(self, event: Any) -> Any:
         ctx = self.create_context()
-        current_event = deepcopy(event)
+        current_event = _clone_with(event)
         modified = False
         for extension in self.extensions:
             for handler in extension.handlers.get("tool_result", []):
@@ -740,21 +739,15 @@ class ExtensionRunner:
                     if handler_result is None:
                         continue
                     for field_name in ("content", "details", "isError"):
-                        value = _result_flag(handler_result, field_name, None)
-                        if value is not None:
+                        value = _result_flag(handler_result, field_name, _MISSING)
+                        if value is not _MISSING:
                             if isinstance(current_event, Mapping):
                                 current_event[field_name] = value
                             else:
                                 setattr(current_event, field_name, value)
                             modified = True
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="tool_result",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "tool_result", error)
         if not modified:
             return None
         return {
@@ -788,13 +781,7 @@ class ExtensionRunner:
                     if handler_result is not None:
                         return handler_result
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="user_bash",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "user_bash", error)
         return None
 
     async def emit_context(self, messages: list[Any]) -> list[Any]:
@@ -810,16 +797,10 @@ class ExtensionRunner:
                     )
                     if hasattr(handler_result, "__await__"):
                         handler_result = await handler_result
-                    if _result_flag(handler_result, "messages") is not None:
+                    if _result_flag(handler_result, "messages"):
                         current_messages = _result_flag(handler_result, "messages")
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="context",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "context", error)
         return current_messages
 
     async def emit_before_provider_request(self, payload: Any) -> Any:
@@ -838,13 +819,7 @@ class ExtensionRunner:
                     if handler_result is not None:
                         current_payload = handler_result
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="before_provider_request",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "before_provider_request", error)
         return current_payload
 
     async def emit_before_agent_start(
@@ -855,9 +830,7 @@ class ExtensionRunner:
         systemPromptOptions: Any,
     ) -> dict[str, Any] | None:
         current_system_prompt = systemPrompt
-        extras = _normalize_extras(self.contextFactory() if callable(self.contextFactory) else self.contextFactory)
-        extras["getSystemPrompt"] = lambda: current_system_prompt
-        ctx = _ContextBase(self, extras)
+        ctx = _ContextBase(self, {"getSystemPrompt": lambda: current_system_prompt})
         messages: list[Any] = []
         system_prompt_modified = False
         for extension in self.extensions:
@@ -880,13 +853,7 @@ class ExtensionRunner:
                         current_system_prompt = _result_flag(handler_result, "systemPrompt")
                         system_prompt_modified = True
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="before_agent_start",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "before_agent_start", error)
         if messages or system_prompt_modified:
             return {
                 "messages": messages or None,
@@ -917,13 +884,7 @@ class ExtensionRunner:
                         for path in _result_flag(handler_result, field_name, []) or []:
                             target.append({"path": path, "extensionPath": extension.path})
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="resources_discover",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "resources_discover", error)
         return {
             "skillPaths": skill_paths,
             "promptPaths": prompt_paths,
@@ -946,15 +907,11 @@ class ExtensionRunner:
                         return dict(handler_result)
                     if action == "transform":
                         current_text = _result_flag(handler_result, "text", current_text)
-                        current_images = _result_flag(handler_result, "images", current_images)
+                        images_result = _result_flag(handler_result, "images", _MISSING)
+                        if images_result is not _MISSING and images_result is not None:
+                            current_images = images_result
                 except Exception as error:
-                    self.emit_error(
-                        ExtensionError(
-                            extensionPath=extension.path,
-                            event="input",
-                            error=str(error),
-                        )
-                    )
+                    self._emit_extension_exception(extension.path, "input", error)
         if current_text != text or current_images != images:
             return {"action": "transform", "text": current_text, "images": current_images}
         return {"action": "continue"}
