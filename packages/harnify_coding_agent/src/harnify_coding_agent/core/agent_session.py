@@ -1807,12 +1807,6 @@ class AgentSession:
             cwd=self._cwd,
             sessionManager=self.sessionManager,
             modelRegistry=self._modelRegistry,
-            contextFactory=lambda: {
-                "cwd": self._cwd,
-                "sessionManager": self.sessionManager,
-                "modelRegistry": self._modelRegistry,
-                "model": self.model,
-            },
         )
         self._bind_extension_core(runner)
         if self._extensionRunnerRef is not None:
