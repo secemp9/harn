@@ -6,7 +6,7 @@ import os
 import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, TypedDict
+from typing import Any, NotRequired, Protocol, TypedDict
 
 from harnify_coding_agent.core.agent_session_services import (
     AgentSessionRuntimeDiagnostic,
@@ -74,11 +74,11 @@ class CreateAgentSessionRuntimeResult:
     modelFallbackMessage: str | None = None
 
 
-class CreateAgentSessionRuntimeOptions(TypedDict, total=False):
+class CreateAgentSessionRuntimeOptions(TypedDict):
     cwd: str
     agentDir: str
     sessionManager: SessionManager
-    sessionStartEvent: dict[str, Any]
+    sessionStartEvent: NotRequired[dict[str, Any]]
 
 
 CreateAgentSessionRuntimeFactory = Callable[
@@ -90,6 +90,7 @@ CreateAgentSessionRuntimeFactory = Callable[
 class SessionImportFileNotFoundError(Exception):
     def __init__(self, filePath: str) -> None:
         super().__init__(f"File not found: {filePath}")
+        self.name = "SessionImportFileNotFoundError"
         self.filePath = filePath
 
 
@@ -168,7 +169,7 @@ class AgentSessionRuntime:
                 "targetSessionFile": targetSessionFile,
             }
         )
-        return {"cancelled": bool(_result_flag(result, "cancel", False))}
+        return {"cancelled": _result_flag(result, "cancel", False) is True}
 
     async def emitBeforeFork(
         self,
@@ -186,7 +187,7 @@ class AgentSessionRuntime:
                 **options,
             }
         )
-        return {"cancelled": bool(_result_flag(result, "cancel", False))}
+        return {"cancelled": _result_flag(result, "cancel", False) is True}
 
     async def teardownCurrent(self, reason: str, targetSessionFile: str | None = None) -> None:
         await emit_session_shutdown_event(
@@ -383,7 +384,7 @@ class AgentSessionRuntime:
             return before_result
 
         previous_session_file = self.session.sessionFile
-        if os.path.realpath(destination_path) != os.path.realpath(resolved_path):
+        if os.path.abspath(destination_path) != resolved_path:
             shutil.copyfile(resolved_path, destination_path)
 
         session_manager = SessionManager.open(destination_path, session_dir, cwdOverride)
@@ -461,7 +462,6 @@ CreateAgentSessionServicesOptions = CreateAgentSessionServicesOptions
 createAgentSessionFromServices = create_agent_session_from_services
 createAgentSessionServices = create_agent_session_services
 createAgentSessionRuntime = create_agent_session_runtime
-extractUserMessageText = extract_user_message_text
 
 __all__ = [
     "AgentSessionRuntime",
@@ -469,16 +469,10 @@ __all__ = [
     "AgentSessionServices",
     "CreateAgentSessionFromServicesOptions",
     "CreateAgentSessionRuntimeFactory",
-    "CreateAgentSessionRuntimeOptions",
     "CreateAgentSessionRuntimeResult",
     "CreateAgentSessionServicesOptions",
     "SessionImportFileNotFoundError",
     "createAgentSessionFromServices",
     "createAgentSessionRuntime",
     "createAgentSessionServices",
-    "create_agent_session_from_services",
-    "create_agent_session_runtime",
-    "create_agent_session_services",
-    "extractUserMessageText",
-    "extract_user_message_text",
 ]
