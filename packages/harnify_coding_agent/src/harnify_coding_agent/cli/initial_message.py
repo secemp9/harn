@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 from harnify_ai.types import ImageContent
 
 from harnify_coding_agent.cli.args import Args
+
+
+class _InitialMessageInputRequired(TypedDict):
+    parsed: Args
+
+
+class InitialMessageInput(_InitialMessageInputRequired, total=False):
+    fileText: str
+    fileImages: list[ImageContent]
+    stdinContent: str
 
 
 @dataclass(slots=True)
@@ -38,4 +49,4 @@ def build_initial_message(
 
 buildInitialMessage = build_initial_message
 
-__all__ = ["InitialMessageResult", "buildInitialMessage", "build_initial_message"]
+__all__ = ["InitialMessageInput", "InitialMessageResult", "buildInitialMessage"]

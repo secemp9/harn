@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from harnify_ai.types import Model
 import harnify_coding_agent.cli.file_processor as file_processor_module
+import harnify_coding_agent.cli.initial_message as initial_message_module
 from harnify_coding_agent.cli.args import parse_args, print_help
 from harnify_coding_agent.cli.file_processor import process_file_arguments
 from harnify_coding_agent.cli.initial_message import build_initial_message
@@ -122,6 +123,11 @@ def test_build_initial_message_combines_inputs_and_consumes_first_message() -> N
 
     assert result.initialMessage == "stdin:<file>body</file>first"
     assert parsed.messages == ["second"]
+    assert initial_message_module.__all__ == [
+        "InitialMessageInput",
+        "InitialMessageResult",
+        "buildInitialMessage",
+    ]
 
 
 @pytest.mark.asyncio
