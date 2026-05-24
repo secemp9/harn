@@ -338,6 +338,7 @@ async def test_stream_google_maps_thinking_text_tool_calls_and_usage() -> None:
         "toolcall_end",
         "done",
     ]
+    assert result.api == "google-generative-ai"
     assert result.responseId == "resp_stream_1"
     assert result.stopReason == "toolUse"
     assert thinking_block.type == "thinking"
@@ -389,4 +390,51 @@ async def test_stream_google_strips_abort_signal_before_sdk_call() -> None:
     assert result.stopReason == "stop"
     assert captured_payload is not None
     assert captured_payload["config"]["abortSignal"] is signal
+    assert captured_payload["config"]["toolConfig"] is None
     assert "abortSignal" not in fake_client.aio.models.calls[0]["config"]
+    assert "toolConfig" not in fake_client.aio.models.calls[0]["config"]
+
+
+@pytest.mark.asyncio
+async def test_stream_google_aborts_while_waiting_for_stream_chunk() -> None:
+    blocking_stream = _BlockingStream()
+
+    class _BlockingModels:
+        def generate_content_stream(self, **kwargs: Any):
+            return blocking_stream
+
+    class _BlockingAsyncClient:
+        def __init__(self) -> None:
+            self.models = _BlockingModels()
+            self.closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class _BlockingClient:
+        def __init__(self) -> None:
+            self.aio = _BlockingAsyncClient()
+
+    signal = asyncio.Event()
+    stream = stream_google(
+        _make_model("gemini-3-flash-preview"),
+        _make_context(),
+        {"apiKey": "test-key", "client": _BlockingClient(), "signal": signal},
+    )
+
+    await asyncio.wait_for(blocking_stream.entered.wait(), timeout=1)
+    signal.set()
+    result = await asyncio.wait_for(stream.result(), timeout=1)
+
+    assert result.stopReason == "aborted"
+    assert result.errorMessage == "Request was aborted"
+    assert blocking_stream.cancelled is True
+    assert blocking_stream.closed is True
+
+
+def test_google_module_exports_expected_names() -> None:
+    assert google_provider.__all__ == [
+        "GoogleOptions",
+        "streamGoogle",
+        "streamSimpleGoogle",
+    ]
