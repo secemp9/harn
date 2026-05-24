@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import re
@@ -475,7 +474,7 @@ class ModelRegistry:
         self.loadError: str | None = None
         self.authStorage = authStorage
         self.modelsJsonPath = normalize_path(modelsJsonPath) if modelsJsonPath else None
-        self.loadModels()
+        self._loadModels()
 
     @classmethod
     def create(cls, authStorage: AuthStorage, modelsJsonPath: str | None = None) -> ModelRegistry:
@@ -491,20 +490,20 @@ class ModelRegistry:
         self.loadError = None
         resetApiProviders()
         resetOAuthProviders()
-        self.loadModels()
+        self._loadModels()
         for provider_name, config in self.registeredProviders.items():
-            self.applyProviderConfig(provider_name, config)
+            self._applyProviderConfig(provider_name, config)
 
     def getError(self) -> str | None:
         return self.loadError
 
-    def loadModels(self) -> None:
-        custom = self.loadCustomModels(self.modelsJsonPath) if self.modelsJsonPath else _empty_custom_models_result()
+    def _loadModels(self) -> None:
+        custom = self._loadCustomModels(self.modelsJsonPath) if self.modelsJsonPath else _empty_custom_models_result()
         if custom.error:
             self.loadError = custom.error
 
-        built_in_models = self.loadBuiltInModels(custom.overrides, custom.modelOverrides)
-        combined = self.mergeCustomModels(built_in_models, custom.models)
+        built_in_models = self._loadBuiltInModels(custom.overrides, custom.modelOverrides)
+        combined = self._mergeCustomModels(built_in_models, custom.models)
 
         for oauth_provider in self.authStorage.getOAuthProviders():
             credential = self.authStorage.get(oauth_provider.id)
@@ -520,7 +519,7 @@ class ModelRegistry:
 
         self.models = combined
 
-    def loadBuiltInModels(
+    def _loadBuiltInModels(
         self,
         overrides: dict[str, _ProviderOverride],
         modelOverrides: dict[str, dict[str, dict[str, Any]]],
@@ -546,7 +545,7 @@ class ModelRegistry:
         return result
 
     @staticmethod
-    def mergeCustomModels(builtInModels: list[Model], customModels: list[Model]) -> list[Model]:
+    def _mergeCustomModels(builtInModels: list[Model], customModels: list[Model]) -> list[Model]:
         merged = list(builtInModels)
         for custom_model in customModels:
             existing_index = next(
@@ -563,7 +562,7 @@ class ModelRegistry:
                 merged[existing_index] = custom_model
         return merged
 
-    def loadCustomModels(self, modelsJsonPath: str) -> _CustomModelsResult:
+    def _loadCustomModels(self, modelsJsonPath: str) -> _CustomModelsResult:
         if not os.path.exists(modelsJsonPath):
             return _empty_custom_models_result()
 
@@ -577,7 +576,7 @@ class ModelRegistry:
                 return _empty_custom_models_result(f"Invalid models.json schema:\n{rendered}\n\nFile: {modelsJsonPath}")
 
             providers = parsed["providers"]
-            self.validateConfig(providers)
+            self._validateConfig(providers)
             overrides: dict[str, _ProviderOverride] = {}
             model_overrides: dict[str, dict[str, dict[str, Any]]] = {}
 
@@ -588,17 +587,17 @@ class ModelRegistry:
                         compat=_coerce_compat(provider_config.get("compat")),
                     )
 
-                self.storeProviderRequestConfig(provider_name, provider_config)
+                self._storeProviderRequestConfig(provider_name, provider_config)
 
                 raw_model_overrides = provider_config.get("modelOverrides")
                 if isinstance(raw_model_overrides, dict):
-                    model_overrides[provider_name] = copy.deepcopy(raw_model_overrides)
+                    model_overrides[provider_name] = dict(raw_model_overrides)
                     for model_id, model_override in raw_model_overrides.items():
                         if isinstance(model_override, dict):
-                            self.storeModelHeaders(provider_name, model_id, model_override.get("headers"))
+                            self._storeModelHeaders(provider_name, model_id, model_override.get("headers"))
 
             return _CustomModelsResult(
-                models=self.parseModels(providers),
+                models=self._parseModels(providers),
                 overrides=overrides,
                 modelOverrides=model_overrides,
                 error=None,
@@ -608,7 +607,7 @@ class ModelRegistry:
         except Exception as error:  # noqa: BLE001
             return _empty_custom_models_result(f"Failed to load models.json: {error}\n\nFile: {modelsJsonPath}")
 
-    def validateConfig(self, providers: dict[str, Any]) -> None:
+    def _validateConfig(self, providers: dict[str, Any]) -> None:
         built_in_providers = set(get_providers())
         for provider_name, provider_config in providers.items():
             is_built_in = provider_name in built_in_providers
@@ -645,7 +644,7 @@ class ModelRegistry:
                 if model_def.get("maxTokens") is not None and model_def["maxTokens"] <= 0:
                     raise ValueError(f'Provider {provider_name}, model {model_def["id"]}: invalid maxTokens')
 
-    def parseModels(self, providers: dict[str, Any]) -> list[Model]:
+    def _parseModels(self, providers: dict[str, Any]) -> list[Model]:
         models: list[Model] = []
         built_in_providers = set(get_providers())
         defaults_cache: dict[str, dict[str, str]] = {}
@@ -683,7 +682,7 @@ class ModelRegistry:
                     _coerce_compat(provider_config.get("compat")),
                     _coerce_compat(model_def.get("compat")),
                 )
-                self.storeModelHeaders(provider_name, model_def["id"], model_def.get("headers"))
+                self._storeModelHeaders(provider_name, model_def["id"], model_def.get("headers"))
                 cost = model_def.get("cost")
                 if cost is None:
                     cost = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
@@ -722,10 +721,10 @@ class ModelRegistry:
         )
 
     @staticmethod
-    def getModelRequestKey(provider: str, modelId: str) -> str:
+    def _getModelRequestKey(provider: str, modelId: str) -> str:
         return f"{provider}:{modelId}"
 
-    def storeProviderRequestConfig(self, providerName: str, config: Mapping[str, Any]) -> None:
+    def _storeProviderRequestConfig(self, providerName: str, config: Mapping[str, Any]) -> None:
         api_key = config.get("apiKey")
         headers = config.get("headers")
         auth_header = config.get("authHeader")
@@ -734,16 +733,16 @@ class ModelRegistry:
 
         self.providerRequestConfigs[providerName] = _ProviderRequestConfig(
             apiKey=cast(str | None, api_key),
-            headers=copy.deepcopy(headers),
+            headers=cast(dict[str, str] | None, headers),
             authHeader=cast(bool | None, auth_header),
         )
 
-    def storeModelHeaders(self, providerName: str, modelId: str, headers: dict[str, str] | None) -> None:
-        key = self.getModelRequestKey(providerName, modelId)
+    def _storeModelHeaders(self, providerName: str, modelId: str, headers: dict[str, str] | None) -> None:
+        key = self._getModelRequestKey(providerName, modelId)
         if not headers:
             self.modelRequestHeaders.pop(key, None)
             return
-        self.modelRequestHeaders[key] = copy.deepcopy(headers)
+        self.modelRequestHeaders[key] = headers
 
     async def getApiKeyAndHeaders(self, model: Model) -> ResolvedRequestAuth:
         try:
@@ -758,7 +757,7 @@ class ModelRegistry:
                 f'provider "{model.provider}"',
             )
             model_headers = resolveHeadersOrThrow(
-                self.modelRequestHeaders.get(self.getModelRequestKey(model.provider, model.id)),
+                self.modelRequestHeaders.get(self._getModelRequestKey(model.provider, model.id)),
                 f'model "{model.provider}/{model.id}"',
             )
 
@@ -817,9 +816,9 @@ class ModelRegistry:
         return isinstance(credential, dict) and credential.get("type") == "oauth"
 
     def registerProvider(self, providerName: str, config: ProviderConfigInput) -> None:
-        self.validateProviderConfig(providerName, config)
-        self.applyProviderConfig(providerName, config)
-        self.upsertRegisteredProvider(providerName, config)
+        self._validateProviderConfig(providerName, config)
+        self._applyProviderConfig(providerName, config)
+        self._upsertRegisteredProvider(providerName, config)
 
     def unregisterProvider(self, providerName: str) -> None:
         if providerName not in self.registeredProviders:
@@ -827,16 +826,16 @@ class ModelRegistry:
         self.registeredProviders.pop(providerName, None)
         self.refresh()
 
-    def upsertRegisteredProvider(self, providerName: str, config: ProviderConfigInput) -> None:
+    def _upsertRegisteredProvider(self, providerName: str, config: ProviderConfigInput) -> None:
         existing = self.registeredProviders.get(providerName)
         if existing is None:
-            self.registeredProviders[providerName] = copy.deepcopy(config)
+            self.registeredProviders[providerName] = config
             return
         for key, value in config.items():
             if value is not None:
-                existing[key] = copy.deepcopy(value)
+                existing[key] = value
 
-    def validateProviderConfig(self, providerName: str, config: ProviderConfigInput) -> None:
+    def _validateProviderConfig(self, providerName: str, config: ProviderConfigInput) -> None:
         if config.get("streamSimple") and not config.get("api"):
             raise ValueError(f'Provider {providerName}: "api" is required when registering streamSimple.')
 
@@ -852,7 +851,7 @@ class ModelRegistry:
             if not (model_def.get("api") or config.get("api")):
                 raise ValueError(f'Provider {providerName}, model {model_def["id"]}: no "api" specified.')
 
-    def applyProviderConfig(self, providerName: str, config: ProviderConfigInput) -> None:
+    def _applyProviderConfig(self, providerName: str, config: ProviderConfigInput) -> None:
         oauth = config.get("oauth")
         if oauth:
             registerOAuthProvider(_build_oauth_provider(providerName, oauth))
@@ -872,14 +871,14 @@ class ModelRegistry:
                 f"provider:{providerName}",
             )
 
-        self.storeProviderRequestConfig(providerName, config)
+        self._storeProviderRequestConfig(providerName, config)
 
         models = config.get("models") or []
         if models:
             self.models = [model for model in self.models if model.provider != providerName]
             for model_def in models:
                 api = model_def.get("api") or config.get("api")
-                self.storeModelHeaders(providerName, model_def["id"], model_def.get("headers"))
+                self._storeModelHeaders(providerName, model_def["id"], model_def.get("headers"))
                 cost = model_def.get("cost")
                 self.models.append(
                     Model.model_construct(
