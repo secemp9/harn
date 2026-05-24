@@ -365,8 +365,8 @@ async def test_resource_loader_supports_inline_extension_factories_dynamic_exten
 
     assert [extension.path for extension in loader.getExtensions().extensions] == ["<inline:1>"]
     assert [skill.name for skill in loader.getSkills()["skills"]] == ["extra-skill", "inline-skills"]
-    assert [prompt.name for prompt in loader.getPrompts()["prompts"]] == ["inline", "shared"]
-    assert [theme.name for theme in loader.getThemes()["themes"]] == ["Inline Theme", "Shared Theme"]
+    assert [prompt.name for prompt in loader.getPrompts()["prompts"]] == ["shared", "inline"]
+    assert [theme.name for theme in loader.getThemes()["themes"]] == ["Shared Theme", "Inline Theme"]
     assert loader.getSkills()["skills"][0].sourceInfo.scope == "project"
     assert loader.getSkills()["skills"][1].sourceInfo.scope == "temporary"
     assert loader.getPrompts()["prompts"][0].sourceInfo.scope == "temporary"
