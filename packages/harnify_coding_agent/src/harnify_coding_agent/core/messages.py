@@ -1,0 +1,43 @@
+"""Coding-agent message helpers and LLM conversion adapters."""
+
+from harnify_agent.harness.messages import (
+    BRANCH_SUMMARY_PREFIX,
+    BRANCH_SUMMARY_SUFFIX,
+    COMPACTION_SUMMARY_PREFIX,
+    COMPACTION_SUMMARY_SUFFIX,
+    BashExecutionMessage,
+    BranchSummaryMessage,
+    CompactionSummaryMessage,
+    CustomMessage,
+    bash_execution_to_text,
+    bashExecutionToText,
+    convert_to_llm,
+    convertToLlm,
+    create_branch_summary_message,
+    create_compaction_summary_message,
+    create_custom_message,
+    createBranchSummaryMessage,
+    createCompactionSummaryMessage,
+    createCustomMessage,
+)
+
+__all__ = [
+    "BRANCH_SUMMARY_PREFIX",
+    "BRANCH_SUMMARY_SUFFIX",
+    "BashExecutionMessage",
+    "BranchSummaryMessage",
+    "COMPACTION_SUMMARY_PREFIX",
+    "COMPACTION_SUMMARY_SUFFIX",
+    "CompactionSummaryMessage",
+    "CustomMessage",
+    "bashExecutionToText",
+    "bash_execution_to_text",
+    "convertToLlm",
+    "convert_to_llm",
+    "createBranchSummaryMessage",
+    "createCompactionSummaryMessage",
+    "createCustomMessage",
+    "create_branch_summary_message",
+    "create_compaction_summary_message",
+    "create_custom_message",
+]

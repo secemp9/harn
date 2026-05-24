@@ -1,0 +1,1628 @@
+from __future__ import annotations
+
+import asyncio
+import os
+import re
+import signal
+import sys
+import threading
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+from harnify_ai.types import Model
+from harnify_coding_agent.core.agent_session_runtime import SessionImportFileNotFoundError
+from harnify_coding_agent.core.keybindings import KeybindingsManager
+from harnify_coding_agent.core.session_cwd import MissingSessionCwdError, SessionCwdIssue
+from harnify_coding_agent.config import APP_TITLE
+from harnify_coding_agent.modes.interactive.interactive_mode import (
+    ANTHROPIC_SUBSCRIPTION_AUTH_WARNING,
+    InteractiveMode,
+)
+from harnify_coding_agent.modes.interactive.theme.theme import init_theme
+from harnify_coding_agent.utils.changelog import ChangelogEntry
+from harnify_coding_agent.utils.version_check import LatestPiRelease
+from harnify_tui import Container, Text, setKeybindings
+
+_ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*m|\]8;;.*?\x07)", re.DOTALL)
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
+async def _noop_async(*_args: Any, **_kwargs: Any) -> None:
+    return None
+
+
+def setup_function() -> None:
+    setKeybindings(KeybindingsManager())
+    init_theme("dark")
+
+
+class FakeUi:
+    def __init__(self) -> None:
+        self.children: list[Any] = []
+        self.render_calls: list[bool | None] = []
+        self.started = 0
+        self.stopped = 0
+        self.focused: Any | None = None
+        self.invalidated = 0
+        self.overlays: list[tuple[Any, dict[str, Any]]] = []
+        self.input_listeners: list[Any] = []
+        self.overlay_handles: list[Any] = []
+        self.terminal_titles: list[str] = []
+        self.terminal = SimpleNamespace(
+            setProgress=lambda _value: None,
+            setTitle=lambda value: self.terminal_titles.append(value),
+        )
+
+    def requestRender(self, force: bool | None = None) -> None:
+        self.render_calls.append(force)
+
+    def start(self) -> None:
+        self.started += 1
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+    def addChild(self, component: Any) -> None:
+        self.children.append(component)
+
+    def removeChild(self, component: Any) -> None:
+        if component in self.children:
+            self.children.remove(component)
+
+    def setFocus(self, component: Any) -> None:
+        self.focused = component
+
+    def invalidate(self) -> None:
+        self.invalidated += 1
+
+    def showOverlay(self, component: Any, options: dict[str, Any] | None = None) -> Any:
+        self.overlays.append((component, dict(options or {})))
+        self.focused = component
+        hidden = {"value": False}
+        handle = SimpleNamespace(
+            hide=lambda: hidden.__setitem__("value", True),
+            focus=lambda: self.setFocus(component),
+            component=component,
+            hidden=hidden,
+        )
+        self.overlay_handles.append(handle)
+        return handle
+
+    def hideOverlay(self) -> None:
+        if self.overlay_handles:
+            self.overlay_handles[-1].hide()
+
+    def addInputListener(self, listener: Any) -> Any:
+        self.input_listeners.append(listener)
+
+        def unsubscribe() -> None:
+            if listener in self.input_listeners:
+                self.input_listeners.remove(listener)
+
+        return unsubscribe
+
+
+class FakeEditor:
+    def __init__(self) -> None:
+        self.providers: list[Any] = []
+        self.text = ""
+        self.onEscape = None
+        self.onCtrlD = None
+        self.onPasteImage = None
+        self.onExtensionShortcut = None
+        self.onChange = None
+        self.onSubmit = None
+        self.history: list[str] = []
+        self.actions: dict[str, Any] = {}
+        self.actionHandlers = self.actions
+        self.paddingX = 0
+        self.autocompleteMaxVisible = 0
+        self.borderColor = None
+        self.inserted: list[str] = []
+
+    def setAutocompleteProvider(self, provider: Any) -> None:
+        self.providers.append(provider)
+
+    def setText(self, text: str) -> None:
+        self.text = text
+
+    def getText(self) -> str:
+        return self.text
+
+    def getExpandedText(self) -> str:
+        return self.text
+
+    def addToHistory(self, text: str) -> None:
+        self.history.append(text)
+
+    def onAction(self, action: str, handler: Any) -> None:
+        self.actions[action] = handler
+
+    def insertTextAtCursor(self, text: str) -> None:
+        self.inserted.append(text)
+        self.text += text
+
+    def handleInput(self, data: str) -> None:
+        self.text += data
+
+    def setPaddingX(self, padding: int) -> None:
+        self.paddingX = padding
+
+    def setAutocompleteMaxVisible(self, value: int) -> None:
+        self.autocompleteMaxVisible = value
+
+
+def _model(provider: str, model_id: str) -> Model:
+    return Model(
+        id=model_id,
+        name=model_id,
+        api="openai-responses",
+        provider=provider,
+        baseUrl=f"https://{provider}.example.com",
+        reasoning=True,
+        input=["text"],
+        cost={"input": 1, "output": 2, "cacheRead": 0.1, "cacheWrite": 0.2},
+        contextWindow=200_000,
+        maxTokens=16_000,
+    )
+
+
+def test_show_status_coalesces_and_appends_when_interleaved() -> None:
+    ui = FakeUi()
+    mode = InteractiveMode(chatContainer=Container(), ui=ui)
+
+    mode.showStatus("STATUS_ONE")
+    assert len(mode.chatContainer.children) == 2
+    assert "STATUS_ONE" in _strip_ansi("\n".join(mode.lastStatusText.render(120)))
+
+    mode.showStatus("STATUS_TWO")
+    assert len(mode.chatContainer.children) == 2
+    assert "STATUS_TWO" in _strip_ansi("\n".join(mode.lastStatusText.render(120)))
+    assert "STATUS_ONE" not in _strip_ansi("\n".join(mode.lastStatusText.render(120)))
+
+    mode.chatContainer.addChild(Text("OTHER", 0, 0))
+    mode.showStatus("STATUS_THREE")
+
+    assert len(mode.chatContainer.children) == 5
+    assert "STATUS_THREE" in _strip_ansi("\n".join(mode.lastStatusText.render(120)))
+    assert ui.render_calls == [None, None, None]
+
+
+def test_set_tools_expanded_updates_header_and_chat_children() -> None:
+    header_calls: list[bool] = []
+    child_calls: list[bool] = []
+    ui = FakeUi()
+    mode = InteractiveMode(
+        ui=ui,
+        builtInHeader=SimpleNamespace(setExpanded=lambda expanded: header_calls.append(expanded)),
+        chatContainer=SimpleNamespace(
+            children=[SimpleNamespace(setExpanded=lambda expanded: child_calls.append(expanded))]
+        ),
+    )
+
+    mode.setToolsExpanded(True)
+
+    assert mode.toolOutputExpanded is True
+    assert header_calls == [True]
+    assert child_calls == [True]
+    assert ui.render_calls == [None]
+
+
+def test_extension_ui_context_persists_theme_and_rebuilds_autocomplete() -> None:
+    current_theme = {"value": "dark"}
+    settings = SimpleNamespace(
+        getTheme=lambda: current_theme["value"],
+        setTheme=lambda value: current_theme.__setitem__("value", value),
+    )
+    ui = FakeUi()
+    mode = InteractiveMode(settingsManager=settings, ui=ui)
+    rebuilds: list[str] = []
+    mode.setupAutocompleteProvider = lambda: rebuilds.append("rebuilt")  # type: ignore[method-assign]
+
+    ctx = mode.createExtensionUIContext()
+    ok = ctx.setTheme("light")
+    bad = ctx.setTheme("__missing_theme__")
+    ctx.addAutocompleteProvider(lambda current: current)
+
+    assert ok["success"] is True
+    assert bad["success"] is False
+    assert current_theme["value"] == "light"
+    assert len(mode.autocompleteProviderWrappers) == 1
+    assert rebuilds == ["rebuilt"]
+    assert ui.render_calls == [None]
+
+
+@pytest.mark.asyncio
+async def test_extension_ui_context_dialog_methods_delegate() -> None:
+    mode = InteractiveMode()
+    mode.showExtensionSelector = lambda title, options, opts=None: asyncio.sleep(0, result=options[0])  # type: ignore[method-assign]
+    mode.showExtensionConfirm = lambda title, message, opts=None: asyncio.sleep(0, result=True)  # type: ignore[method-assign]
+    mode.showExtensionInput = lambda title, placeholder=None, opts=None: asyncio.sleep(0, result=placeholder)  # type: ignore[method-assign]
+    mode.showExtensionEditor = lambda title, prefill=None: asyncio.sleep(0, result=prefill)  # type: ignore[method-assign]
+
+    ctx = mode.createExtensionUIContext()
+
+    assert await ctx.select("Pick", ["A", "B"]) == "A"
+    assert await ctx.confirm("Confirm", "Question?") is True
+    assert await ctx.input("Input", "placeholder") == "placeholder"
+    assert await ctx.editor("Editor", "prefill") == "prefill"
+
+
+def test_extension_ui_context_status_widget_and_terminal_helpers() -> None:
+    ui = FakeUi()
+    mode = InteractiveMode(ui=ui, defaultEditor=FakeEditor(), editor=FakeEditor())
+    ctx = mode.createExtensionUIContext()
+
+    calls: list[str] = []
+    unsubscribe = ctx.onTerminalInput(lambda data: {"consume": True, "data": data})
+    ctx.setStatus("build", "Busy")
+    ctx.setWidget("summary", ["line one", "line two"])
+    ctx.setTitle("Title from extension")
+    ctx.setEditorText("hello")
+    ctx.pasteToEditor(" world")
+
+    assert "build" in mode.footerDataProvider.getExtensionStatuses()
+    assert len(mode.widgetContainerAbove.children) == 2
+    assert ui.terminal_titles == ["Title from extension"]
+    assert "world" in ctx.getEditorText()
+    assert len(ui.input_listeners) == 1
+
+    unsubscribe()
+    ctx.setStatus("build", None)
+    assert mode.footerDataProvider.getExtensionStatuses() == {}
+    assert ui.input_listeners == []
+
+
+def test_set_extension_header_footer_and_reset_ui_restore_builtins() -> None:
+    ui = FakeUi()
+    built_in_header = Text("Header", 0, 0)
+    header_container = Container()
+    header_container.addChild(built_in_header)
+    footer = Text("Footer", 0, 0)
+    mode = InteractiveMode(
+        ui=ui,
+        headerContainer=header_container,
+        builtInHeader=built_in_header,
+        footer=footer,
+        defaultEditor=FakeEditor(),
+        editor=FakeEditor(),
+    )
+    ui.addChild(footer)
+    disposed: list[str] = []
+
+    def make_component(label: str) -> Any:
+        return SimpleNamespace(
+            label=label,
+            render=lambda _width: [label],
+            dispose=lambda: disposed.append(label),
+        )
+
+    mode.setExtensionHeader(lambda _ui, _theme: make_component("custom-header"))
+    mode.setExtensionFooter(lambda _ui, _theme, _footer_data: make_component("custom-footer"))
+    mode.setExtensionWidget("widget", ["one"])
+    mode.setExtensionStatus("status", "Active")
+    mode.resetExtensionUI()
+
+    assert mode.customHeader is None
+    assert mode.customFooter is None
+    assert mode.headerContainer.children[0] is built_in_header
+    assert footer in ui.children
+    assert mode.extensionWidgetsAbove == {}
+    assert mode.footerDataProvider.getExtensionStatuses() == {}
+    assert {"custom-header", "custom-footer"} <= set(disposed)
+
+
+@pytest.mark.asyncio
+async def test_setup_extension_shortcuts_wires_default_and_custom_editors() -> None:
+    default_editor = FakeEditor()
+    custom_editor = FakeEditor()
+    mode = InteractiveMode(ui=FakeUi(), defaultEditor=default_editor, editor=custom_editor)
+    shortcut_contexts: list[Any] = []
+
+    async def shortcut_handler(ctx: Any) -> None:
+        shortcut_contexts.append(ctx)
+
+    extension_runner = SimpleNamespace(
+        getShortcuts=lambda _config: {"k": SimpleNamespace(handler=shortcut_handler)},
+        createContext=lambda: {"source": "extension-shortcut"},
+    )
+
+    mode.setupExtensionShortcuts(extension_runner)
+    assert default_editor.onExtensionShortcut("k") is True
+    assert custom_editor.onExtensionShortcut("k") is True
+    await asyncio.sleep(0)
+
+    assert shortcut_contexts == [{"source": "extension-shortcut"}, {"source": "extension-shortcut"}]
+
+
+def test_set_custom_editor_component_preserves_text_and_handlers() -> None:
+    ui = FakeUi()
+    default_editor = FakeEditor()
+    default_editor.setText("seed")
+    default_editor.onSubmit = lambda text: None
+    default_editor.onChange = lambda text: None
+    default_editor.onEscape = lambda: None
+    default_editor.onCtrlD = lambda: None
+    default_editor.onPasteImage = lambda: None
+    default_editor.onExtensionShortcut = lambda _data: True
+    default_editor.onAction("app.clear", lambda: None)
+    container = Container()
+    container.addChild(default_editor)
+    mode = InteractiveMode(ui=ui, defaultEditor=default_editor, editor=default_editor, editorContainer=container)
+
+    class CustomSwapEditor(FakeEditor):
+        pass
+
+    mode.setCustomEditorComponent(lambda _ui, _theme, _keybindings: CustomSwapEditor())
+    swapped = mode.editor
+    assert swapped is not default_editor
+    assert swapped.getText() == "seed"
+    assert swapped.onSubmit is default_editor.onSubmit
+    assert swapped.onChange is default_editor.onChange
+    assert "app.clear" in swapped.actionHandlers
+
+    swapped.setText("changed")
+    mode.setCustomEditorComponent(None)
+
+    assert mode.editor is default_editor
+    assert default_editor.getText() == "changed"
+
+
+@pytest.mark.asyncio
+async def test_show_extension_custom_restores_editor_inline_and_overlay() -> None:
+    ui = FakeUi()
+    editor = FakeEditor()
+    editor.setText("draft")
+    container = Container()
+    container.addChild(editor)
+    mode = InteractiveMode(ui=ui, defaultEditor=editor, editor=editor, editorContainer=container)
+
+    captured_inline: dict[str, Any] = {}
+
+    async def inline_factory(_ui: Any, _theme: Any, _keybindings: Any, done: Any) -> Any:
+        captured_inline["done"] = done
+        return SimpleNamespace(render=lambda _width: ["inline"], dispose=lambda: None)
+
+    inline_task = asyncio.create_task(mode.showExtensionCustom(inline_factory))
+    await asyncio.sleep(0)
+    assert mode.editorContainer.children[0] is not editor
+    captured_inline["done"]("inline-ok")
+    assert await inline_task == "inline-ok"
+    assert mode.editorContainer.children[0] is editor
+    assert editor.getText() == "draft"
+
+    captured_overlay: dict[str, Any] = {}
+    handles: list[Any] = []
+
+    async def overlay_factory(_ui: Any, _theme: Any, _keybindings: Any, done: Any) -> Any:
+        captured_overlay["done"] = done
+        return SimpleNamespace(render=lambda _width: ["overlay"], dispose=lambda: None)
+
+    overlay_task = asyncio.create_task(
+        mode.showExtensionCustom(
+            overlay_factory,
+            {"overlay": True, "onHandle": handles.append},
+        )
+    )
+    await asyncio.sleep(0)
+    assert ui.overlays and handles
+    captured_overlay["done"]("overlay-ok")
+    assert await overlay_task == "overlay-ok"
+    assert handles[0].hidden["value"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_terminal_title_and_reload_command_binding() -> None:
+    ui = FakeUi()
+    mode = InteractiveMode(
+        ui=ui,
+        sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project", getSessionName=lambda: "Session"),
+    )
+
+    mode.updateTerminalTitle()
+    assert ui.terminal_titles == [f"{APP_TITLE} - Session - project"]
+
+    calls: list[str] = []
+
+    async def fake_reload() -> None:
+        calls.append("reload")
+
+    mode.handleReloadCommand = fake_reload  # type: ignore[method-assign]
+    actions = mode._build_command_context_actions()
+    await actions["reload"]()
+
+    assert calls == ["reload"]
+
+
+@pytest.mark.asyncio
+async def test_rebind_current_session_shows_loaded_resources_and_diagnostics() -> None:
+    source_info = lambda path, base_dir: SimpleNamespace(  # noqa: E731
+        path=path,
+        source="local",
+        scope="project",
+        baseDir=base_dir,
+    )
+    skill = SimpleNamespace(
+        name="beads",
+        filePath="/tmp/project/.harnify/skills/beads/SKILL.md",
+        sourceInfo=source_info(
+            "/tmp/project/.harnify/skills/beads/SKILL.md",
+            "/tmp/project/.harnify/skills",
+        ),
+    )
+    prompt = SimpleNamespace(
+        name="review",
+        filePath="/tmp/project/.harnify/prompts/review.md",
+        sourceInfo=source_info(
+            "/tmp/project/.harnify/prompts/review.md",
+            "/tmp/project/.harnify/prompts",
+        ),
+    )
+    extension = SimpleNamespace(
+        path="/tmp/project/.harnify/extensions/example.py",
+        sourceInfo=source_info(
+            "/tmp/project/.harnify/extensions/example.py",
+            "/tmp/project/.harnify/extensions",
+        ),
+    )
+    theme = SimpleNamespace(
+        name="custom",
+        sourcePath="/tmp/project/.harnify/themes/custom.json",
+        sourceInfo=source_info(
+            "/tmp/project/.harnify/themes/custom.json",
+            "/tmp/project/.harnify/themes",
+        ),
+    )
+    resource_loader = SimpleNamespace(
+        getSkills=lambda: {
+            "skills": [skill],
+            "diagnostics": [SimpleNamespace(type="warning", message="skill warning", path=skill.filePath)],
+        },
+        getPrompts=lambda: {"prompts": [prompt], "diagnostics": []},
+        getThemes=lambda: {"themes": [theme], "diagnostics": []},
+        getAgentsFiles=lambda: {"agentsFiles": [{"path": "/tmp/project/AGENTS.md"}]},
+        getExtensions=lambda: SimpleNamespace(extensions=[extension], errors=[]),
+    )
+    session = SimpleNamespace(
+        resourceLoader=resource_loader,
+        promptTemplates=[prompt],
+        extensionRunner=SimpleNamespace(
+            getCommandDiagnostics=lambda: [],
+            getShortcutDiagnostics=lambda: [
+                SimpleNamespace(type="warning", message="shortcut warning", path=extension.path)
+            ],
+            get_registered_commands=lambda: [],
+            get_message_renderer=lambda _custom_type: None,
+        ),
+        bindExtensions=_noop_async,
+        subscribe=lambda _listener: (lambda: None),
+        modelRegistry=SimpleNamespace(getAvailable=lambda: []),
+        state=SimpleNamespace(messages=[]),
+        autoCompactionEnabled=False,
+        isStreaming=False,
+    )
+    mode = InteractiveMode(
+        ui=FakeUi(),
+        session=session,
+        sessionManager=SimpleNamespace(
+            getCwd=lambda: "/tmp/project",
+            getSessionName=lambda: None,
+        ),
+    )
+
+    await mode.rebindCurrentSession()
+
+    rendered = "\n".join(
+        line
+        for child in mode.chatContainer.children
+        if hasattr(child, "render")
+        for line in child.render(120)
+    )
+    stripped = _strip_ansi(rendered)
+
+    assert "[Context]" in stripped
+    assert "[Skills]" in stripped
+    assert "[Prompts]" in stripped
+    assert "[Extensions]" in stripped
+    assert "[Themes]" in stripped
+    assert "AGENTS.md" in stripped
+    assert "beads" in stripped
+    assert "/review" in stripped
+    assert "example" in stripped
+    assert "custom" in stripped
+    assert "shortcut warning" in stripped
+    assert "skill warning" in stripped
+
+
+@pytest.mark.asyncio
+async def test_show_extension_selector_and_confirm_use_real_overlay_flow(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[Any] = []
+
+    class FakeExtensionSelectorComponent:
+        def __init__(self, title: str, options: list[str], onSelect: Any, onCancel: Any, opts: Any) -> None:
+            self.title = title
+            self.options = options
+            self.onSelect = onSelect
+            self.onCancel = onCancel
+            self.opts = opts
+            captured.append(self)
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.ExtensionSelectorComponent",
+        FakeExtensionSelectorComponent,
+    )
+
+    ui = FakeUi()
+    mode = InteractiveMode(ui=ui)
+
+    select_task = asyncio.create_task(mode.showExtensionSelector("Pick one", ["A", "B"]))
+    await asyncio.sleep(0)
+    captured[-1].onSelect("B")
+    assert await select_task == "B"
+
+    confirm_task = asyncio.create_task(mode.showExtensionConfirm("Delete", "Really?"))
+    await asyncio.sleep(0)
+    captured[-1].onSelect("Yes")
+    assert await confirm_task is True
+
+
+def test_setup_autocomplete_provider_stacks_wrappers() -> None:
+    calls: list[str] = []
+
+    def wrap1(current):
+        class Provider:
+            async def getSuggestions(self, lines, cursorLine, cursorCol, options):
+                calls.append("getSuggestions:wrap1")
+                return await current.getSuggestions(lines, cursorLine, cursorCol, options)
+
+            def applyCompletion(self, lines, cursorLine, cursorCol, item, prefix):
+                calls.append("applyCompletion:wrap1")
+                return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix)
+
+            def shouldTriggerFileCompletion(self, lines, cursorLine, cursorCol):
+                calls.append("shouldTrigger:wrap1")
+                return current.shouldTriggerFileCompletion(lines, cursorLine, cursorCol)
+
+        return Provider()
+
+    def wrap2(current):
+        class Provider:
+            async def getSuggestions(self, lines, cursorLine, cursorCol, options):
+                calls.append("getSuggestions:wrap2")
+                return await current.getSuggestions(lines, cursorLine, cursorCol, options)
+
+            def applyCompletion(self, lines, cursorLine, cursorCol, item, prefix):
+                calls.append("applyCompletion:wrap2")
+                return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix)
+
+            def shouldTriggerFileCompletion(self, lines, cursorLine, cursorCol):
+                calls.append("shouldTrigger:wrap2")
+                return current.shouldTriggerFileCompletion(lines, cursorLine, cursorCol)
+
+        return Provider()
+
+    default_editor = FakeEditor()
+    custom_editor = FakeEditor()
+    mode = InteractiveMode(
+        defaultEditor=default_editor,
+        editor=custom_editor,
+        sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project"),
+        autocompleteProviderWrappers=[wrap1, wrap2],
+    )
+
+    mode.setupAutocompleteProvider()
+
+    assert len(default_editor.providers) == 1
+    assert default_editor.providers[0] is custom_editor.providers[0]
+    assert default_editor.providers[0].shouldTriggerFileCompletion(["foo"], 0, 3) is True
+    assert calls == ["shouldTrigger:wrap2", "shouldTrigger:wrap1"]
+
+
+@pytest.mark.asyncio
+async def test_warns_once_for_anthropic_subscription_auth() -> None:
+    warnings: list[str] = []
+    mode = InteractiveMode(
+        settingsManager=SimpleNamespace(getWarnings=lambda: {}),
+        session=SimpleNamespace(
+            modelRegistry=SimpleNamespace(
+                authStorage=SimpleNamespace(get=lambda _provider: {"type": "oauth"}),
+                getApiKeyForProvider=lambda _provider: None,
+            )
+        ),
+    )
+    mode.showWarning = warnings.append  # type: ignore[method-assign]
+
+    await mode.maybeWarnAboutAnthropicSubscriptionAuth(SimpleNamespace(provider="anthropic"))
+    await mode.maybeWarnAboutAnthropicSubscriptionAuth(SimpleNamespace(provider="anthropic"))
+
+    assert warnings == [ANTHROPIC_SUBSCRIPTION_AUTH_WARNING]
+
+
+def test_handle_ctrl_z_windows_reports_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    mode = InteractiveMode()
+    statuses: list[str] = []
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    monkeypatch.setattr(sys, "platform", "win32", raising=False)
+
+    mode.handleCtrlZ()
+
+    assert statuses == ["Suspend to background is not supported on Windows"]
+
+
+def test_handle_ctrl_z_suspends_and_restores_tui(monkeypatch: pytest.MonkeyPatch) -> None:
+    ui = FakeUi()
+    installed_handlers: dict[int, Any] = {}
+
+    class FakeTimer:
+        def __init__(self, _seconds: int, _fn: Any) -> None:
+            self.started = False
+            self.cancelled = False
+
+        def start(self) -> None:
+            self.started = True
+
+        def cancel(self) -> None:
+            self.cancelled = True
+
+    timers: list[FakeTimer] = []
+    previous_sigint = object()
+    previous_sigcont = object()
+
+    def fake_timer(seconds: int, fn: Any) -> FakeTimer:
+        timer = FakeTimer(seconds, fn)
+        timers.append(timer)
+        return timer
+
+    def fake_signal(signum: int, handler: Any) -> Any:
+        previous = installed_handlers.get(signum)
+        installed_handlers[signum] = handler
+        return previous
+
+    monkeypatch.setattr(sys, "platform", "linux", raising=False)
+    monkeypatch.setattr(threading, "Timer", fake_timer)
+    monkeypatch.setattr(
+        signal,
+        "getsignal",
+        lambda signum: previous_sigint if signum == signal.SIGINT else previous_sigcont,
+    )
+    monkeypatch.setattr(signal, "signal", fake_signal)
+    kill_calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(os, "kill", lambda pid, signum: kill_calls.append((pid, signum)))
+
+    mode = InteractiveMode(ui=ui)
+    mode.handleCtrlZ()
+
+    assert ui.stopped == 1
+    assert timers and timers[0].started is True
+    assert kill_calls == [(0, signal.SIGTSTP)]
+
+    installed_handlers[signal.SIGCONT](signal.SIGCONT, None)
+
+    assert timers[0].cancelled is True
+    assert ui.started == 1
+    assert ui.render_calls[-1] is True
+    assert installed_handlers[signal.SIGINT] is previous_sigint
+    assert installed_handlers[signal.SIGCONT] is previous_sigcont
+
+
+@pytest.mark.asyncio
+async def test_import_command_retries_with_selected_cwd() -> None:
+    calls: list[tuple[str, str | None]] = []
+    statuses: list[str] = []
+    stopped: list[bool] = []
+    cleared: list[bool] = []
+    rendered: list[bool] = []
+    issue = SessionCwdIssue(
+        sessionCwd="/missing/project",
+        fallbackCwd="/current/project",
+        sessionFile="/tmp/session.jsonl",
+    )
+
+    async def import_from_jsonl(path: str, cwd_override: str | None = None) -> dict[str, bool]:
+        calls.append((path, cwd_override))
+        if cwd_override is None:
+            raise MissingSessionCwdError(issue)
+        return {"cancelled": False}
+
+    mode = InteractiveMode(
+        runtimeHost=SimpleNamespace(importFromJsonl=import_from_jsonl),
+        statusContainer=SimpleNamespace(clear=lambda: cleared.append(True)),
+        loadingAnimation=SimpleNamespace(stop=lambda: stopped.append(True)),
+    )
+    mode.showExtensionConfirm = lambda _title, _message: True  # type: ignore[method-assign]
+    mode.promptForMissingSessionCwd = lambda _error: "/current/project"  # type: ignore[method-assign]
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.renderCurrentSessionState = lambda: rendered.append(True)  # type: ignore[method-assign]
+
+    await mode.handleImportCommand('/import "path/to/session.jsonl"')
+
+    assert calls == [("path/to/session.jsonl", None), ("path/to/session.jsonl", "/current/project")]
+    assert stopped == [True]
+    assert cleared == [True]
+    assert rendered == [True]
+    assert statuses == ["Session imported from: path/to/session.jsonl"]
+
+
+@pytest.mark.asyncio
+async def test_import_command_reports_missing_file_nonfatally() -> None:
+    errors: list[str] = []
+
+    async def import_from_jsonl(_path: str, _cwd_override: str | None = None) -> dict[str, bool]:
+        raise SessionImportFileNotFoundError("/tmp/missing-session.jsonl")
+
+    mode = InteractiveMode(
+        runtimeHost=SimpleNamespace(importFromJsonl=import_from_jsonl),
+        statusContainer=SimpleNamespace(clear=lambda: None),
+    )
+    mode.showExtensionConfirm = lambda _title, _message: True  # type: ignore[method-assign]
+    mode.showError = errors.append  # type: ignore[method-assign]
+
+    await mode.handleImportCommand("/import /tmp/missing-session.jsonl")
+
+    assert errors == ["Failed to import session: File not found: /tmp/missing-session.jsonl"]
+
+
+@pytest.mark.asyncio
+async def test_clone_command_and_compaction_end_rebuild_chat() -> None:
+    statuses: list[str] = []
+    fork_calls: list[tuple[str, dict[str, str]]] = []
+    rendered: list[bool] = []
+    editor = FakeEditor()
+
+    async def fork(entry_id: str, options: dict[str, str]) -> dict[str, bool]:
+        fork_calls.append((entry_id, options))
+        return {"cancelled": False}
+
+    mode = InteractiveMode(
+        sessionManager=SimpleNamespace(getLeafId=lambda: "leaf-123", getCwd=lambda: os.getcwd()),
+        runtimeHost=SimpleNamespace(fork=fork),
+        editor=editor,
+    )
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.renderCurrentSessionState = lambda: rendered.append(True)  # type: ignore[method-assign]
+
+    await mode.handleCloneCommand()
+
+    assert fork_calls == [("leaf-123", {"position": "at"})]
+    assert rendered == [True]
+    assert editor.text == ""
+    assert statuses == ["Cloned to new session"]
+
+    compaction_messages: list[Any] = []
+    flush_calls: list[dict[str, bool]] = []
+    footer_calls: list[bool] = []
+    mode.chatContainer = SimpleNamespace(clear=lambda: rendered.append(False))
+    mode.rebuildChatFromMessages = lambda: rendered.append(True)  # type: ignore[method-assign]
+    mode.addMessageToChat = compaction_messages.append  # type: ignore[method-assign]
+    mode.flushCompactionQueue = lambda options: flush_calls.append(options)  # type: ignore[method-assign]
+    mode.footer = SimpleNamespace(invalidate=lambda: footer_calls.append(True))
+    mode.statusContainer = SimpleNamespace(clear=lambda: None)
+
+    await mode.handleEvent(
+        {
+            "type": "compaction_end",
+            "reason": "manual",
+            "result": {"summary": "summary", "tokensBefore": 123},
+            "aborted": False,
+            "willRetry": False,
+        }
+    )
+
+    assert rendered[-2:] == [False, True]
+    assert compaction_messages and compaction_messages[0].role == "compactionSummary"
+    assert compaction_messages[0].tokensBefore == 123
+    assert compaction_messages[0].summary == "summary"
+    assert flush_calls == [{"willRetry": False}]
+    assert footer_calls == [True]
+
+
+@pytest.mark.asyncio
+async def test_run_seeds_initial_messages_and_starts_ui(monkeypatch: pytest.MonkeyPatch) -> None:
+    ui = FakeUi()
+    prompts: list[tuple[str, dict[str, Any] | None]] = []
+    warnings: list[str] = []
+
+    async def prompt(text: str, options: dict[str, Any] | None = None) -> None:
+        prompts.append((text, options))
+
+    async def fake_version_check(_version: str) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.check_for_new_pi_version",
+        fake_version_check,
+    )
+
+    mode = InteractiveMode(
+        ui=ui,
+        options={
+            "initialMessage": "first",
+            "initialImages": ["img-1"],
+            "initialMessages": ["second"],
+            "modelFallbackMessage": "fallback",
+        },
+    )
+    mode.session.prompt = prompt
+    mode.showWarning = warnings.append  # type: ignore[method-assign]
+    mode.checkForPackageUpdates = lambda: asyncio.sleep(0, result=[])  # type: ignore[method-assign]
+    mode.checkTmuxKeyboardSetup = lambda: asyncio.sleep(0, result=None)  # type: ignore[method-assign]
+
+    run_task = asyncio.create_task(mode.run())
+    await asyncio.sleep(0)
+    mode.requestShutdown()
+    exit_code = await run_task
+
+    assert exit_code == 0
+    assert ui.started == 1
+    assert prompts == [
+        ("first", {"images": ["img-1"]}),
+        ("second", None),
+    ]
+    assert warnings == ["fallback"]
+
+
+@pytest.mark.asyncio
+async def test_run_shows_version_notification_from_background_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    ui = FakeUi()
+
+    async def fake_version_check(_version: str) -> LatestPiRelease | None:
+        return LatestPiRelease(version="9.9.9", note="*New bits*")
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.check_for_new_pi_version",
+        fake_version_check,
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.get_update_instruction",
+        lambda _package_name: "Run: upgrade-pi",
+    )
+
+    mode = InteractiveMode(ui=ui)
+    mode.checkForPackageUpdates = lambda: asyncio.sleep(0, result=[])  # type: ignore[method-assign]
+    mode.checkTmuxKeyboardSetup = lambda: asyncio.sleep(0, result=None)  # type: ignore[method-assign]
+
+    run_task = asyncio.create_task(mode.run())
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    mode.requestShutdown()
+    assert await run_task == 0
+
+    rendered = "\n".join(
+        line
+        for child in mode.chatContainer.children
+        if hasattr(child, "render")
+        for line in child.render(120)
+    )
+    stripped = _strip_ansi(rendered)
+    assert "Update Available" in stripped
+    assert "New version 9.9.9 is available. Run: upgrade-pi" in stripped
+    assert "Changelog:" in stripped
+
+
+@pytest.mark.asyncio
+async def test_run_surfaces_package_updates_tmux_warning_and_models_json_error() -> None:
+    package_notifications: list[list[str]] = []
+    warnings: list[str] = []
+    errors: list[str] = []
+    mode = InteractiveMode(
+        ui=FakeUi(),
+        session=SimpleNamespace(
+            prompt=_noop_async,
+            state=SimpleNamespace(messages=[]),
+            promptTemplates=[],
+            scopedModels=[],
+            autoCompactionEnabled=False,
+            isStreaming=False,
+            isCompacting=False,
+            extensionRunner=SimpleNamespace(
+                get_registered_commands=lambda: [],
+                get_message_renderer=lambda _custom_type: None,
+            ),
+            resourceLoader=SimpleNamespace(getSkills=lambda: {"skills": []}, getThemes=lambda: {"themes": []}),
+            modelRegistry=SimpleNamespace(
+                authStorage=SimpleNamespace(get=lambda *_args, **_kwargs: None),
+                getApiKeyForProvider=_noop_async,
+                getAvailable=lambda: [],
+                isUsingOAuth=lambda _model: False,
+                getError=lambda: "invalid models.json",
+            ),
+            subscribe=lambda _listener: (lambda: None),
+            bindExtensions=_noop_async,
+        ),
+    )
+    mode.checkForPackageUpdates = lambda: asyncio.sleep(0, result=["pkg-a", "pkg-b"])  # type: ignore[method-assign]
+    mode.checkTmuxKeyboardSetup = lambda: asyncio.sleep(0, result="tmux warning")  # type: ignore[method-assign]
+    mode.showPackageUpdateNotification = package_notifications.append  # type: ignore[method-assign]
+    mode.showWarning = warnings.append  # type: ignore[method-assign]
+    mode.showError = errors.append  # type: ignore[method-assign]
+
+    run_task = asyncio.create_task(mode.run())
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    mode.requestShutdown()
+    assert await run_task == 0
+
+    assert package_notifications == [["pkg-a", "pkg-b"]]
+    assert warnings == ["tmux warning"]
+    assert errors == ["models.json error: invalid models.json"]
+
+
+def test_get_changelog_for_display_returns_new_entries_and_updates_last_seen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved_versions: list[str] = []
+    telemetry_reports: list[str] = []
+    mode = InteractiveMode(
+        settingsManager=SimpleNamespace(
+            getLastChangelogVersion=lambda: "1.0.0",
+            setLastChangelogVersion=lambda version: saved_versions.append(version),
+            getEnableInstallTelemetry=lambda: False,
+        ),
+        session=SimpleNamespace(state=SimpleNamespace(messages=[])),
+    )
+    mode.reportInstallTelemetry = lambda version: telemetry_reports.append(version)  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.get_changelog_path",
+        lambda: "/tmp/CHANGELOG.md",
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.parse_changelog",
+        lambda _path: [
+            ChangelogEntry(major=1, minor=1, patch=0, content="## 1.1.0\n- Added"),
+            ChangelogEntry(major=1, minor=0, patch=0, content="## 1.0.0\n- Old"),
+        ],
+    )
+
+    assert mode.getChangelogForDisplay() == "## 1.1.0\n- Added"
+    assert saved_versions == [mode.version]
+    assert telemetry_reports == [mode.version]
+
+
+def test_get_changelog_for_display_skips_resumed_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[str] = []
+    mode = InteractiveMode(
+        settingsManager=SimpleNamespace(getLastChangelogVersion=lambda: "1.0.0"),
+        session=SimpleNamespace(state=SimpleNamespace(messages=[{"role": "user"}])),
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.parse_changelog",
+        lambda _path: called.append("parse") or [],
+    )
+
+    assert mode.getChangelogForDisplay() is None
+    assert called == []
+
+
+def test_show_startup_notices_condenses_changelog() -> None:
+    mode = InteractiveMode(
+        ui=FakeUi(),
+        chatContainer=Container(),
+        settingsManager=SimpleNamespace(getCollapseChangelog=lambda: True),
+    )
+    mode.changelogMarkdown = "## 1.2.3\n- Added"
+
+    mode.showStartupNoticesIfNeeded()
+
+    rendered = "\n".join(
+        line
+        for child in mode.chatContainer.children
+        if isinstance(child, Text)
+        for line in child.render(120)
+    )
+    stripped = _strip_ansi(rendered)
+    assert "Updated to v1.2.3." in stripped
+    assert "/changelog" in stripped
+
+
+def test_handle_changelog_command_renders_full_changelog(monkeypatch: pytest.MonkeyPatch) -> None:
+    mode = InteractiveMode(ui=FakeUi(), chatContainer=Container())
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.get_changelog_path",
+        lambda: "/tmp/CHANGELOG.md",
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.parse_changelog",
+        lambda _path: [
+            ChangelogEntry(major=1, minor=1, patch=0, content="## 1.1.0\n- Added"),
+            ChangelogEntry(major=1, minor=0, patch=0, content="## 1.0.0\n- Old"),
+        ],
+    )
+
+    mode.handleChangelogCommand()
+
+    markdown_texts = [
+        child.text for child in mode.chatContainer.children if child.__class__.__name__ == "Markdown"
+    ]
+    assert markdown_texts == ["## 1.0.0\n- Old\n\n## 1.1.0\n- Added"]
+
+
+@pytest.mark.asyncio
+async def test_check_for_package_updates_returns_display_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    constructed: list[dict[str, Any]] = []
+
+    class FakePackageManager:
+        def __init__(self, options: dict[str, Any]) -> None:
+            constructed.append(dict(options))
+
+        async def checkForAvailableUpdates(self) -> list[dict[str, str]]:
+            return [
+                {"displayName": "pkg-one"},
+                {"displayName": "pkg-two"},
+            ]
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.DefaultPackageManager",
+        FakePackageManager,
+    )
+
+    mode = InteractiveMode(sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project"))
+    assert await mode.checkForPackageUpdates() == ["pkg-one", "pkg-two"]
+    assert constructed and constructed[0]["cwd"] == "/tmp/project"
+
+
+@pytest.mark.asyncio
+async def test_check_tmux_keyboard_setup_warns_for_xterm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TMUX", "1")
+    responses = {
+        "extended-keys": "always",
+        "extended-keys-format": "xterm",
+    }
+
+    class FakeProcess:
+        def __init__(self, option: str) -> None:
+            self.option = option
+            self.returncode = 0
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return responses[self.option].encode("utf-8"), b""
+
+        async def wait(self) -> int:
+            return self.returncode
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    async def fake_create_subprocess_exec(*args: Any, **_kwargs: Any) -> FakeProcess:
+        return FakeProcess(str(args[-1]))
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    mode = InteractiveMode()
+    warning = await mode.checkTmuxKeyboardSetup()
+    assert warning is not None
+    assert "extended-keys-format is xterm" in warning
+
+
+@pytest.mark.asyncio
+async def test_handle_submitted_text_routes_commands_and_prompts() -> None:
+    calls: list[Any] = []
+    editor = FakeEditor()
+
+    async def prompt(text: str, options: dict[str, Any] | None = None) -> None:
+        calls.append(("prompt", text, options))
+
+    async def handle_theme(theme: str) -> None:
+        calls.append(("theme-command", theme))
+
+    async def handle_import(text: str) -> None:
+        calls.append(("import", text))
+
+    async def handle_export(text: str) -> None:
+        calls.append(("export", text))
+
+    async def handle_clone() -> None:
+        calls.append("clone")
+
+    async def handle_models() -> None:
+        calls.append("models")
+
+    async def handle_new() -> dict[str, bool]:
+        calls.append("new")
+        return {"cancelled": False}
+
+    async def handle_quit() -> int:
+        calls.append("quit")
+        return 0
+
+    async def handle_bash(command: str, exclude: bool = False) -> None:
+        calls.append(("bash", command, exclude))
+
+    async def handle_share() -> None:
+        calls.append("share")
+
+    async def handle_copy() -> None:
+        calls.append("copy")
+
+    async def handle_login(mode: str) -> None:
+        calls.append(("auth", mode))
+
+    async def handle_reload() -> None:
+        calls.append("reload")
+
+    async def handle_compact(custom_instructions: str | None = None) -> None:
+        calls.append(("compact", custom_instructions))
+
+    mode = InteractiveMode(
+        editor=editor,
+        defaultEditor=editor,
+        session=SimpleNamespace(
+            prompt=prompt,
+            isStreaming=False,
+            state=SimpleNamespace(messages=[]),
+        ),
+    )
+    mode.showSessionSelector = lambda: calls.append("resume-selector")  # type: ignore[method-assign]
+    mode.showModelSelector = lambda search=None: calls.append(("model-selector", search))  # type: ignore[method-assign]
+    mode.showThemeSelector = lambda: calls.append("theme-selector")  # type: ignore[method-assign]
+    mode.showSettingsSelector = lambda: calls.append("settings-selector")  # type: ignore[method-assign]
+    mode.handleChangelogCommand = lambda: calls.append("changelog")  # type: ignore[method-assign]
+    mode.handleHotkeysCommand = lambda: calls.append("hotkeys")  # type: ignore[method-assign]
+    mode.handleSessionCommand = lambda: calls.append("session-info")  # type: ignore[method-assign]
+    mode.handleNameCommand = lambda text: calls.append(("name", text))  # type: ignore[method-assign]
+    mode.showUserMessageSelector = lambda: calls.append("fork-selector")  # type: ignore[method-assign]
+    mode.showTreeSelector = lambda initialSelectedId=None: calls.append(("tree-selector", initialSelectedId))  # type: ignore[method-assign]
+    mode.showModelsSelector = handle_models  # type: ignore[method-assign]
+    mode.handleThemeCommand = handle_theme  # type: ignore[method-assign]
+    mode.handleExportCommand = handle_export  # type: ignore[method-assign]
+    mode.handleImportCommand = handle_import  # type: ignore[method-assign]
+    mode.handleCloneCommand = handle_clone  # type: ignore[method-assign]
+    mode.handleShareCommand = handle_share  # type: ignore[method-assign]
+    mode.handleCopyCommand = handle_copy  # type: ignore[method-assign]
+    mode.showOAuthSelector = handle_login  # type: ignore[method-assign]
+    mode.handleNewSession = handle_new  # type: ignore[method-assign]
+    mode.handleCompactCommand = handle_compact  # type: ignore[method-assign]
+    mode.handleReloadCommand = handle_reload  # type: ignore[method-assign]
+    mode.shutdown = handle_quit  # type: ignore[method-assign]
+    mode.handleBashCommand = handle_bash  # type: ignore[method-assign]
+    mode.onInputCallback = lambda text: calls.append(("input-callback", text))
+
+    await mode.handleSubmittedText("/resume")
+    await mode.handleSubmittedText("/changelog")
+    await mode.handleSubmittedText("/model sonnet")
+    await mode.handleSubmittedText("/scoped-models")
+    await mode.handleSubmittedText("/models")
+    await mode.handleSubmittedText("/settings")
+    await mode.handleSubmittedText('/export "session.html"')
+    await mode.handleSubmittedText("/theme")
+    await mode.handleSubmittedText("/theme light")
+    await mode.handleSubmittedText('/import "session.jsonl"')
+    await mode.handleSubmittedText("/clone")
+    await mode.handleSubmittedText("/share")
+    await mode.handleSubmittedText("/copy")
+    await mode.handleSubmittedText("/name renamed")
+    await mode.handleSubmittedText("/session")
+    await mode.handleSubmittedText("/hotkeys")
+    await mode.handleSubmittedText("/fork")
+    await mode.handleSubmittedText("/tree")
+    await mode.handleSubmittedText("/login")
+    await mode.handleSubmittedText("/logout")
+    await mode.handleSubmittedText("/new")
+    await mode.handleSubmittedText("/compact focus on tests")
+    await mode.handleSubmittedText("/reload")
+    await mode.handleSubmittedText("/quit")
+    await mode.handleSubmittedText("! ls -la")
+    await mode.handleSubmittedText("!! pwd")
+    await mode.handleSubmittedText("hello")
+
+    assert calls == [
+        "resume-selector",
+        "changelog",
+        ("model-selector", "sonnet"),
+        "models",
+        "models",
+        "settings-selector",
+        ("export", '/export "session.html"'),
+        "theme-selector",
+        ("theme-command", "light"),
+        ("import", '/import "session.jsonl"'),
+        "clone",
+        "share",
+        "copy",
+        ("name", "/name renamed"),
+        "session-info",
+        "hotkeys",
+        "fork-selector",
+        ("tree-selector", None),
+        ("auth", "login"),
+        ("auth", "logout"),
+        "new",
+        ("compact", "focus on tests"),
+        "reload",
+        "quit",
+        ("bash", "ls -la", False),
+        ("bash", "pwd", True),
+        ("input-callback", "hello"),
+        ("prompt", "hello", None),
+    ]
+    assert editor.history == ["! ls -la", "!! pwd", "hello"]
+    assert editor.text == ""
+
+
+def test_create_base_autocomplete_provider_includes_restored_builtin_commands() -> None:
+    mode = InteractiveMode(
+        session=SimpleNamespace(getSlashCommands=lambda: [], state=SimpleNamespace(messages=[])),
+        sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project"),
+    )
+    provider = mode.createBaseAutocompleteProvider()
+    command_names = {command.name for command in provider.commands}
+    assert {
+        "settings",
+        "model",
+        "scoped-models",
+        "export",
+        "share",
+        "copy",
+        "name",
+        "session",
+        "hotkeys",
+        "login",
+        "logout",
+        "compact",
+        "reload",
+        "quit",
+        "models",
+        "theme",
+    }.issubset(command_names)
+
+
+@pytest.mark.asyncio
+async def test_handle_model_command_prefers_exact_match_before_selector() -> None:
+    statuses: list[str] = []
+    selected: list[str] = []
+    shown: list[str | None] = []
+    model = _model("openai", "gpt-4o-mini")
+
+    async def set_model(next_model: Model) -> None:
+        selected.append(next_model.id)
+
+    mode = InteractiveMode(
+        session=SimpleNamespace(
+            scopedModels=[],
+            modelRegistry=SimpleNamespace(refresh=lambda: None, getAvailable=lambda: [model]),
+            setModel=set_model,
+            state=SimpleNamespace(thinkingLevel="off"),
+        ),
+        footer=SimpleNamespace(invalidate=lambda: None),
+        ui=FakeUi(),
+    )
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.showModelSelector = lambda search=None: shown.append(search)  # type: ignore[method-assign]
+    mode.updateAvailableProviderCount = lambda: None  # type: ignore[method-assign]
+    mode.updateEditorBorderColor = lambda: None  # type: ignore[method-assign]
+    mode.maybeWarnAboutAnthropicSubscriptionAuth = lambda _model=None: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    await mode.handleModelCommand("openai/gpt-4o-mini")
+    await mode.handleModelCommand("missing")
+
+    assert selected == ["gpt-4o-mini"]
+    assert statuses == ["Model: gpt-4o-mini"]
+    assert shown == ["missing"]
+
+
+def test_setup_key_handlers_registers_session_fork_action() -> None:
+    editor = FakeEditor()
+    calls: list[str] = []
+    mode = InteractiveMode(defaultEditor=editor, editor=editor)
+    mode.showUserMessageSelector = lambda: calls.append("fork")  # type: ignore[method-assign]
+
+    mode.setupKeyHandlers()
+    editor.actions["app.session.fork"]()
+
+    assert calls == ["fork"]
+
+
+def test_setup_key_handlers_registers_session_tree_action() -> None:
+    editor = FakeEditor()
+    calls: list[str] = []
+    mode = InteractiveMode(defaultEditor=editor, editor=editor)
+    mode.showTreeSelector = lambda initialSelectedId=None: calls.append(str(initialSelectedId))  # type: ignore[method-assign]
+
+    mode.setupKeyHandlers()
+    editor.actions["app.session.tree"]()
+
+    assert calls == ["None"]
+
+
+def test_setup_key_handlers_registers_paste_image_handler() -> None:
+    editor = FakeEditor()
+    mode = InteractiveMode(defaultEditor=editor, editor=editor, ui=FakeUi())
+
+    mode.setupKeyHandlers()
+
+    assert editor.onPasteImage is not None
+
+
+@pytest.mark.asyncio
+async def test_command_context_navigate_tree_updates_chat_and_editor() -> None:
+    renders: list[bool] = []
+    statuses: list[str] = []
+    flushes: list[dict[str, bool]] = []
+    editor = FakeEditor()
+
+    async def navigate_tree(_target_id: str, _options: dict[str, Any] | None = None) -> dict[str, Any]:
+        return {"cancelled": False, "editorText": "restored draft"}
+
+    mode = InteractiveMode(
+        editor=editor,
+        defaultEditor=editor,
+        session=SimpleNamespace(navigateTree=navigate_tree),
+    )
+    mode.renderCurrentSessionState = lambda: renders.append(True)  # type: ignore[method-assign]
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.flushCompactionQueue = lambda options: flushes.append(options)  # type: ignore[method-assign]
+
+    actions = mode._build_command_context_actions()
+    result = await actions["navigateTree"]("entry-1", {"summarize": False})
+
+    assert result["cancelled"] is False
+    assert renders == [True]
+    assert editor.text == "restored draft"
+    assert statuses == ["Navigated to selected point"]
+    assert flushes == [{"willRetry": False}]
+
+
+@pytest.mark.asyncio
+async def test_handle_tree_select_prompts_for_summary_and_passes_custom_instructions() -> None:
+    calls: list[tuple[str, Any]] = []
+    statuses: list[str] = []
+    flushes: list[dict[str, bool]] = []
+    editor = FakeEditor()
+
+    async def navigate_tree(_target_id: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
+        calls.append(("navigate", dict(options or {})))
+        return {"cancelled": False, "editorText": "restored draft"}
+
+    mode = InteractiveMode(
+        editor=editor,
+        defaultEditor=editor,
+        session=SimpleNamespace(
+            navigateTree=navigate_tree,
+            abortBranchSummary=lambda: calls.append(("abort", None)),
+        ),
+        statusContainer=SimpleNamespace(
+            children=[],
+            clear=lambda: calls.append(("clear-status", None)),
+            addChild=lambda child: calls.append(("loader", child)),
+        ),
+        settingsManager=SimpleNamespace(getBranchSummarySkipPrompt=lambda: False),
+    )
+    mode.showExtensionSelector = lambda title, options, opts=None: asyncio.sleep(  # type: ignore[method-assign]
+        0,
+        result="Summarize with custom prompt",
+    )
+    mode.showExtensionEditor = lambda title, prefill=None: asyncio.sleep(0, result="focus on files")  # type: ignore[method-assign]
+    mode.renderCurrentSessionState = lambda: calls.append(("render", None))  # type: ignore[method-assign]
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.flushCompactionQueue = lambda options: flushes.append(options)  # type: ignore[method-assign]
+
+    await mode._handle_tree_select("entry-2", "entry-1", lambda: calls.append(("done", None)))
+
+    assert ("done", None) in calls
+    assert any(name == "loader" for name, _value in calls)
+    assert ("render", None) in calls
+    assert calls[-1] == ("clear-status", None)
+    assert editor.text == "restored draft"
+    assert statuses == ["Navigated to selected point"]
+    assert flushes == [{"willRetry": False}]
+    assert calls.count(("navigate", {"summarize": True, "customInstructions": "focus on files"})) == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_clipboard_image_paste_writes_temp_file_and_inserts_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ui = FakeUi()
+    editor = FakeEditor()
+    mode = InteractiveMode(defaultEditor=editor, editor=editor, ui=ui)
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.read_clipboard_image",
+        lambda: asyncio.sleep(0, result=SimpleNamespace(bytes=b"\x89PNG\r\n\x1a\n", mimeType="image/png")),
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.tempfile.gettempdir",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.uuid4",
+        lambda: "fixed-id",
+    )
+
+    await mode.handleClipboardImagePaste()
+
+    expected_path = tmp_path / "pi-clipboard-fixed-id.png"
+    assert expected_path.read_bytes() == b"\x89PNG\r\n\x1a\n"
+    assert editor.inserted == [str(expected_path)]
+    assert ui.render_calls == [None]
+
+
+@pytest.mark.asyncio
+async def test_handle_tree_select_reopens_tree_when_summary_prompt_cancelled() -> None:
+    reopened: list[str | None] = []
+    mode = InteractiveMode(
+        session=SimpleNamespace(navigateTree=lambda *_args, **_kwargs: asyncio.sleep(0)),
+        settingsManager=SimpleNamespace(getBranchSummarySkipPrompt=lambda: False),
+    )
+    mode.showExtensionSelector = lambda title, options, opts=None: asyncio.sleep(0, result=None)  # type: ignore[method-assign]
+    mode.showTreeSelector = lambda initialSelectedId=None: reopened.append(initialSelectedId)  # type: ignore[method-assign]
+
+    await mode._handle_tree_select("entry-7", "entry-1", lambda: None)
+
+    assert reopened == ["entry-7"]
+
+
+def test_show_settings_selector_builds_live_settings_callbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeSettingsSelectorComponent:
+        def __init__(self, config: Any, callbacks: Any) -> None:
+            captured["config"] = config
+            captured["callbacks"] = callbacks
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.SettingsSelectorComponent",
+        FakeSettingsSelectorComponent,
+    )
+
+    settings_calls: list[tuple[str, Any]] = []
+    tool_calls: list[tuple[str, Any]] = []
+    ui = FakeUi()
+    mode = InteractiveMode(
+        ui=ui,
+        settingsManager=SimpleNamespace(
+            getShowImages=lambda: True,
+            setShowImages=lambda value: settings_calls.append(("showImages", value)),
+            getImageWidthCells=lambda: 48,
+            setImageWidthCells=lambda value: settings_calls.append(("imageWidthCells", value)),
+            getImageAutoResize=lambda: True,
+            setImageAutoResize=lambda value: settings_calls.append(("imageAutoResize", value)),
+            getBlockImages=lambda: False,
+            setBlockImages=lambda value: settings_calls.append(("blockImages", value)),
+            getEnableSkillCommands=lambda: True,
+            setEnableSkillCommands=lambda value: settings_calls.append(("enableSkillCommands", value)),
+            getTransport=lambda: "sse",
+            setTransport=lambda value: settings_calls.append(("transport", value)),
+            getHttpIdleTimeoutMs=lambda: 300_000,
+            setHttpIdleTimeoutMs=lambda value: settings_calls.append(("httpIdleTimeoutMs", value)),
+            getTheme=lambda: "dark",
+            getCollapseChangelog=lambda: True,
+            setCollapseChangelog=lambda value: settings_calls.append(("collapseChangelog", value)),
+            getEnableInstallTelemetry=lambda: True,
+            setEnableInstallTelemetry=lambda value: settings_calls.append(("installTelemetry", value)),
+            getDoubleEscapeAction=lambda: "tree",
+            setDoubleEscapeAction=lambda value: settings_calls.append(("doubleEscapeAction", value)),
+            getTreeFilterMode=lambda: "default",
+            setTreeFilterMode=lambda value: settings_calls.append(("treeFilterMode", value)),
+            getShowHardwareCursor=lambda: False,
+            setShowHardwareCursor=lambda value: settings_calls.append(("showHardwareCursor", value)),
+            getEditorPaddingX=lambda: 1,
+            setEditorPaddingX=lambda value: settings_calls.append(("editorPaddingX", value)),
+            getAutocompleteMaxVisible=lambda: 5,
+            setAutocompleteMaxVisible=lambda value: settings_calls.append(("autocompleteMaxVisible", value)),
+            getQuietStartup=lambda: False,
+            setQuietStartup=lambda value: settings_calls.append(("quietStartup", value)),
+            getClearOnShrink=lambda: False,
+            setClearOnShrink=lambda value: settings_calls.append(("clearOnShrink", value)),
+            getShowTerminalProgress=lambda: False,
+            setShowTerminalProgress=lambda value: settings_calls.append(("showTerminalProgress", value)),
+            getWarnings=lambda: {"anthropicExtraUsage": True},
+            setWarnings=lambda value: settings_calls.append(("warnings", value)),
+            setCompactionEnabled=lambda value: settings_calls.append(("autoCompact", value)),
+            setHideThinkingBlock=lambda value: settings_calls.append(("hideThinkingBlock", value)),
+        ),
+        session=SimpleNamespace(
+            autoCompactionEnabled=False,
+            steeringMode="one-at-a-time",
+            followUpMode="one-at-a-time",
+            state=SimpleNamespace(thinkingLevel="off"),
+            getAvailableThinkingLevels=lambda: ["off", "high"],
+            setSteeringMode=lambda value: settings_calls.append(("steeringMode", value)),
+            setFollowUpMode=lambda value: settings_calls.append(("followUpMode", value)),
+            setThinkingLevel=lambda value: settings_calls.append(("thinkingLevel", value)),
+        ),
+        footer=SimpleNamespace(setAutoCompactEnabled=lambda value: settings_calls.append(("footerAutoCompact", value))),
+        chatContainer=SimpleNamespace(
+            children=[
+                SimpleNamespace(
+                    setShowImages=lambda value: tool_calls.append(("showImages", value)),
+                    setImageWidthCells=lambda value: tool_calls.append(("imageWidthCells", value)),
+                    setHideThinkingBlock=lambda value: tool_calls.append(("hideThinkingBlock", value)),
+                )
+            ]
+        ),
+        defaultEditor=FakeEditor(),
+        editor=FakeEditor(),
+    )
+    mode.setupAutocompleteProvider = lambda: settings_calls.append(("autocomplete", True))  # type: ignore[method-assign]
+    mode.renderCurrentSessionState = lambda: settings_calls.append(("rebuild", True))  # type: ignore[method-assign]
+    mode.showStatus = lambda message: settings_calls.append(("status", message))  # type: ignore[method-assign]
+    mode.updateEditorBorderColor = lambda: settings_calls.append(("border", True))  # type: ignore[method-assign]
+
+    mode.showSettingsSelector()
+
+    config = captured["config"]
+    callbacks = captured["callbacks"]
+    assert config.currentTheme == "dark"
+    assert config.availableThinkingLevels == ["off", "high"]
+
+    callbacks.onShowImagesChange(False)
+    callbacks.onImageWidthCellsChange(64)
+    callbacks.onEnableSkillCommandsChange(False)
+    callbacks.onHideThinkingBlockChange(True)
+
+    assert ("showImages", False) in settings_calls
+    assert ("imageWidthCells", 64) in settings_calls
+    assert ("enableSkillCommands", False) in settings_calls
+    assert ("hideThinkingBlock", True) in settings_calls
+    assert ("showImages", False) in tool_calls
+    assert ("imageWidthCells", 64) in tool_calls
+    assert ("hideThinkingBlock", True) in tool_calls
+    assert ("autocomplete", True) in settings_calls
+    assert ("rebuild", True) in settings_calls
+
+
+@pytest.mark.asyncio
+async def test_show_models_selector_updates_session_scope_and_persists(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+    all_models = [_model("openai", "gpt-4o-mini"), _model("anthropic", "claude-sonnet-4-5")]
+
+    class FakeScopedModelsSelectorComponent:
+        def __init__(self, config: Any, callbacks: Any) -> None:
+            captured["config"] = config
+            captured["callbacks"] = callbacks
+
+    async def fake_resolve_model_scope(patterns: list[str], _registry: Any) -> list[Any]:
+        resolved: list[Any] = []
+        for pattern in patterns:
+            provider, model_id = pattern.split("/", 1)
+            model = next(model for model in all_models if model.provider == provider and model.id == model_id)
+            resolved.append(SimpleNamespace(model=model, thinkingLevel="high"))
+        return resolved
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.ScopedModelsSelectorComponent",
+        FakeScopedModelsSelectorComponent,
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.resolveModelScope",
+        fake_resolve_model_scope,
+    )
+
+    scoped_updates: list[list[dict[str, Any]]] = []
+    persisted: list[Any] = []
+    statuses: list[str] = []
+
+    mode = InteractiveMode(
+        ui=FakeUi(),
+        session=SimpleNamespace(
+            scopedModels=[],
+            modelRegistry=SimpleNamespace(refresh=lambda: None, getAvailable=lambda: list(all_models)),
+            setScopedModels=lambda scoped: scoped_updates.append(scoped),
+        ),
+        settingsManager=SimpleNamespace(
+            getEnabledModels=lambda: ["openai/gpt-4o-mini"],
+            setEnabledModels=lambda value: persisted.append(value),
+        ),
+    )
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.updateAvailableProviderCount = lambda: None  # type: ignore[method-assign]
+
+    await mode.showModelsSelector()
+
+    config = captured["config"]
+    callbacks = captured["callbacks"]
+    assert config.enabledModelIds == ["openai/gpt-4o-mini"]
+
+    callbacks.onChange(["anthropic/claude-sonnet-4-5"])
+    await asyncio.sleep(0)
+    callbacks.onPersist(["anthropic/claude-sonnet-4-5"])
+
+    assert scoped_updates == [[{"model": all_models[1], "thinkingLevel": "high"}]]
+    assert persisted == [["anthropic/claude-sonnet-4-5"]]
+    assert statuses == ["Model selection saved to settings"]

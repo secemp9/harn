@@ -1,0 +1,55 @@
+"""Lazy registration for built-in image generation providers."""
+
+from __future__ import annotations
+
+import importlib
+import time
+from types import ModuleType
+
+from harnify_ai.images_api_registry import ImagesApiProvider, register_images_api_provider
+from harnify_ai.types import AssistantImages, ImagesContext, ImagesModel, ImagesOptions
+
+_openrouter_images_provider_module: ModuleType | None = None
+
+
+def _create_lazy_load_error_images(model: ImagesModel, error: BaseException) -> AssistantImages:
+    return AssistantImages(
+        api=model.api,
+        provider=model.provider,
+        model=model.id,
+        output=[],
+        stopReason="error",
+        errorMessage=str(error),
+        timestamp=int(time.time() * 1000),
+    )
+
+
+def _load_openrouter_images_provider_module() -> ModuleType:
+    global _openrouter_images_provider_module
+    if _openrouter_images_provider_module is None:
+        _openrouter_images_provider_module = importlib.import_module("harnify_ai.providers.images.openrouter")
+    return _openrouter_images_provider_module
+
+
+async def generate_images_openrouter(
+    model: ImagesModel,
+    context: ImagesContext,
+    options: ImagesOptions | None = None,
+) -> AssistantImages:
+    try:
+        module = _load_openrouter_images_provider_module()
+        return await module.generate_images_openrouter(model, context, options)
+    except BaseException as error:  # noqa: BLE001
+        return _create_lazy_load_error_images(model, error)
+
+
+def register_built_in_images_api_providers() -> None:
+    register_images_api_provider(
+        ImagesApiProvider(api="openrouter-images", generateImages=generate_images_openrouter)
+    )
+
+
+register_built_in_images_api_providers()
+
+generateImagesOpenRouter = generate_images_openrouter
+registerBuiltInImagesApiProviders = register_built_in_images_api_providers

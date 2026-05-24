@@ -1,0 +1,104 @@
+"""List available models with optional fuzzy search."""
+
+from __future__ import annotations
+
+import sys
+from typing import TextIO
+
+from harnify_tui.fuzzy import fuzzy_filter
+
+from harnify_coding_agent.core.auth_guidance import format_no_models_available_message
+
+
+def format_token_count(count: int) -> str:
+    if count >= 1_000_000:
+        millions = count / 1_000_000
+        return f"{millions:.1f}M" if millions % 1 else f"{int(millions)}M"
+    if count >= 1_000:
+        thousands = count / 1_000
+        return f"{thousands:.1f}K" if thousands % 1 else f"{int(thousands)}K"
+    return str(count)
+
+
+async def list_models(
+    model_registry: object,
+    search_pattern: str | None = None,
+    *,
+    stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
+) -> None:
+    out = stream or sys.stdout
+    err = error_stream or sys.stderr
+
+    load_error = getattr(model_registry, "getError", lambda: None)()
+    if load_error:
+        err.write(f"Warning: errors loading models.json:\n{load_error}\n")
+
+    models = list(model_registry.getAvailable())
+    if not models:
+        out.write(format_no_models_available_message() + "\n")
+        return
+
+    filtered_models = (
+        fuzzy_filter(models, search_pattern, lambda model: f"{model.provider} {model.id}") if search_pattern else models
+    )
+    if not filtered_models:
+        out.write(f'No models matching "{search_pattern}"\n')
+        return
+
+    filtered_models = sorted(filtered_models, key=lambda model: (model.provider, model.id))
+    rows = [
+        {
+            "provider": model.provider,
+            "model": model.id,
+            "context": format_token_count(model.contextWindow),
+            "maxOut": format_token_count(model.maxTokens),
+            "thinking": "yes" if model.reasoning else "no",
+            "images": "yes" if "image" in model.input else "no",
+        }
+        for model in filtered_models
+    ]
+    headers = {
+        "provider": "provider",
+        "model": "model",
+        "context": "context",
+        "maxOut": "max-out",
+        "thinking": "thinking",
+        "images": "images",
+    }
+    widths = {
+        key: max(len(headers[key]), *(len(row[key]) for row in rows))
+        for key in ("provider", "model", "context", "maxOut", "thinking", "images")
+    }
+
+    header_line = "  ".join(
+        [
+            headers["provider"].ljust(widths["provider"]),
+            headers["model"].ljust(widths["model"]),
+            headers["context"].ljust(widths["context"]),
+            headers["maxOut"].ljust(widths["maxOut"]),
+            headers["thinking"].ljust(widths["thinking"]),
+            headers["images"].ljust(widths["images"]),
+        ]
+    )
+    out.write(header_line + "\n")
+    for row in rows:
+        out.write(
+            "  ".join(
+                [
+                    row["provider"].ljust(widths["provider"]),
+                    row["model"].ljust(widths["model"]),
+                    row["context"].ljust(widths["context"]),
+                    row["maxOut"].ljust(widths["maxOut"]),
+                    row["thinking"].ljust(widths["thinking"]),
+                    row["images"].ljust(widths["images"]),
+                ]
+            )
+            + "\n"
+        )
+
+
+formatTokenCount = format_token_count
+listModels = list_models
+
+__all__ = ["formatTokenCount", "format_token_count", "listModels", "list_models"]

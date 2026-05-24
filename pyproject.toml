@@ -1,0 +1,23 @@
+[project]
+name = "harnify"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = [
+    "packages/harnify_ai",
+    "packages/harnify_agent",
+    "packages/harnify_coding_agent",
+    "packages/harnify_tui",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
