@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import re
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -32,22 +34,35 @@ async def generate_images_openrouter(
         if not api_key:
             raise ValueError(f"No API key available for provider: {model.provider}")
 
-        client = _create_client(model, api_key, options.headers if options else None)
+        client = _create_client(
+            model,
+            api_key,
+            options.headers if options else None,
+            options.maxRetries if options else None,
+        )
         params = _build_params(model, context)
         if options and options.onPayload is not None:
-            next_params = await options.onPayload(params, model)
+            next_params = await _maybe_await(options.onPayload(params, model))
             if next_params is not None:
                 params = next_params
 
-        raw_response = await client.chat.completions.with_raw_response.create(
-            **params,
-            timeout=options.timeoutMs if options and options.timeoutMs is not None else None,
+        raw_response = await _await_with_signal(
+            client.chat.completions.with_raw_response.create(
+                **params,
+                timeout=(options.timeoutMs / 1000) if options and options.timeoutMs is not None else None,
+            ),
+            options.signal if options else None,
         )
         response = raw_response.parse()
         if options and options.onResponse is not None:
-            await options.onResponse(
-                {"status": raw_response.http_response.status_code, "headers": headers_to_record(raw_response.http_response.headers)},
-                model,
+            await _maybe_await(
+                options.onResponse(
+                    {
+                        "status": raw_response.http_response.status_code,
+                        "headers": headers_to_record(raw_response.http_response.headers),
+                    },
+                    model,
+                )
             )
 
         output.responseId = getattr(response, "id", None)
@@ -65,24 +80,75 @@ async def generate_images_openrouter(
                 image_url = image.image_url if isinstance(getattr(image, "image_url", None), str) else getattr(image.image_url, "url", None)
                 if not image_url or not image_url.startswith("data:"):
                     continue
-                prefix, data = image_url.split(",", 1)
-                mime_type = prefix.removeprefix("data:").split(";")[0]
+                matches = re.match(r"^data:([^;]+);base64,(.+)$", image_url)
+                if matches is None:
+                    continue
                 output.output.append(ImageContent(data=data, mimeType=mime_type))
 
         return output
-    except BaseException as error:  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001
         output.stopReason = "aborted" if _signal_aborted(options.signal if options else None) else "error"
         output.errorMessage = str(error)
         return output
 
 
-def _create_client(model: ImagesModel, api_key: str, option_headers: dict[str, str] | None = None) -> AsyncOpenAI:
+async def _maybe_await(value: Any) -> Any:
+    if hasattr(value, "__await__"):
+        return await value
+    return value
+
+
+async def _await_with_signal(request: Any, signal: Any) -> Any:
+    if _signal_aborted(signal):
+        raise RuntimeError("Request aborted")
+
+    wait = getattr(signal, "wait", None)
+    if not callable(wait):
+        return await request
+
+    abort_waiter = wait()
+    if not hasattr(abort_waiter, "__await__"):
+        return await request
+
+    request_task = asyncio.create_task(request)
+    abort_task = asyncio.create_task(abort_waiter)
+
+    try:
+        done, pending = await asyncio.wait({request_task, abort_task}, return_when=asyncio.FIRST_COMPLETED)
+        if request_task in done:
+            return await request_task
+
+        request_task.cancel()
+        try:
+            await request_task
+        except BaseException:
+            pass
+        raise RuntimeError("Request aborted")
+    finally:
+        abort_task.cancel()
+        try:
+            await abort_task
+        except BaseException:
+            pass
+
+
+def _create_client(
+    model: ImagesModel,
+    api_key: str,
+    option_headers: dict[str, str] | None = None,
+    max_retries: int | None = None,
+) -> AsyncOpenAI:
     headers = {}
     if model.headers:
         headers.update(model.headers)
     if option_headers:
         headers.update(option_headers)
-    return AsyncOpenAI(api_key=api_key, base_url=model.baseUrl, default_headers=headers)
+    return AsyncOpenAI(
+        api_key=api_key,
+        base_url=model.baseUrl,
+        default_headers=headers,
+        max_retries=max_retries if max_retries is not None else 2,
+    )
 
 
 def _build_params(model: ImagesModel, context: ImagesContext) -> dict[str, Any]:
