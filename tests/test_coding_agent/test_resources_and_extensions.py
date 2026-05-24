@@ -144,7 +144,7 @@ async def test_extensions_and_resource_loader_compose_session_start_resources(tm
             "async def default(api):\n"
             "    async def execute(tool_call_id, params, signal, on_update, ctx):\n"
             "        return AgentToolResult(\n"
-            "            content=[TextContent(text=ctx['cwd'])],\n"
+            "            content=[TextContent(text=ctx.cwd)],\n"
             "            details={'seen': params['value']},\n"
             "        )\n"
             "    api.registerTool(\n"
