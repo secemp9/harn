@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from harnify_coding_agent.config import get_agent_dir
 from harnify_coding_agent.core.event_bus import EventBusController, create_event_bus
 from harnify_coding_agent.core.exec import exec_command
 from harnify_coding_agent.core.extensions.types import (
@@ -133,7 +134,7 @@ class _ExtensionAPI:
         self.runtime.assertActive()
         resolved_options: ExecOptions = dict(options or {})
         resolved_cwd = str(resolved_options.get("cwd") or self.cwd)
-        return await _exec_command(command, args, resolved_cwd, resolved_options)
+        return await exec_command(command, args, resolved_cwd, resolved_options)
 
     def getActiveTools(self) -> list[str]:
         self.runtime.assertActive()
@@ -265,7 +266,7 @@ async def load_extensions(
     extensions: list[Extension] = []
     errors: list[dict[str, str]] = []
     resolved_cwd = resolve_path(cwd)
-    resolved_event_bus = event_bus or _default_event_bus()
+    resolved_event_bus = event_bus if event_bus is not None else _default_event_bus()
     runtime = create_extension_runtime()
 
     for ext_path in paths:
@@ -305,7 +306,7 @@ async def discover_and_load_extensions(
     event_bus: Any | None = None,
 ) -> LoadExtensionsResult:
     resolved_cwd = resolve_path(cwd)
-    resolved_agent_dir = resolve_path(agent_dir or _default_agent_dir())
+    resolved_agent_dir = resolve_path(get_agent_dir() if agent_dir is None else agent_dir)
     all_paths: list[str] = []
     seen: set[str] = set()
 
@@ -321,7 +322,7 @@ async def discover_and_load_extensions(
     add_paths(discover_extensions_in_dir(os.path.join(resolved_agent_dir, "extensions")))
 
     for raw_path in configured_paths:
-        resolved = resolve_path(raw_path, resolved_cwd, trim=True, normalize_unicode_spaces=True)
+        resolved = resolve_path(raw_path, resolved_cwd, normalize_unicode_spaces=True)
         if os.path.isdir(resolved):
             entries = resolve_extension_entries(resolved)
             if entries:
@@ -371,7 +372,7 @@ async def _load_extension(
     event_bus: Any,
     runtime: ExtensionRuntime,
 ) -> tuple[Extension | None, str | None]:
-    resolved_path = resolve_path(path, cwd, trim=True, normalize_unicode_spaces=True)
+    resolved_path = resolve_path(path, cwd, normalize_unicode_spaces=True)
     try:
         factory = _load_extension_module(resolved_path)
         if factory is None:
@@ -407,24 +408,6 @@ def _create_extension(path: str, resolved_path: str) -> Extension:
     base_dir = None if path.startswith("<") else os.path.dirname(resolved_path)
     source_info = create_synthetic_source_info(path, {"source": source or "temporary", "baseDir": base_dir})
     return _LoadedExtension(path=path, resolvedPath=resolved_path, sourceInfo=source_info)
-
-
-async def _exec_command(
-    command: str,
-    args: list[str],
-    cwd: str,
-    options: ExecOptions,
-) -> ExecResult:
-    result = await exec_command(command, args, cwd, options)
-    return ExecResult(
-        stdout=result.stdout,
-        stderr=result.stderr,
-        exitCode=result.code,
-    )
-
-
-def _default_agent_dir() -> str:
-    return str(Path.home() / ".harnify" / "agent")
 
 
 createExtensionRuntime = create_extension_runtime
