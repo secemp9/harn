@@ -239,7 +239,7 @@ async def test_agent_session_refreshes_extension_and_custom_tools_on_bind(tmp_pa
         execute=sdk_execute,
     )
 
-    session = _create_session(
+    session = await _create_loaded_session(
         tmp_path,
         extension_factories=[
             lambda pi: pi.on(
@@ -249,12 +249,10 @@ async def test_agent_session_refreshes_extension_and_custom_tools_on_bind(tmp_pa
         ],
         custom_tools=[custom_tool],
     )
-    await session._resourceLoader.reload()
 
     assert "dynamic_tool" not in [tool.name for tool in session.getAllTools()]
 
     try:
-        await session.reload()
         await session.bindExtensions({})
 
         all_tools = session.getAllTools()
@@ -364,10 +362,8 @@ async def test_agent_session_reload_preserves_extension_flag_values_and_command_
             {"description": "Run review", "handler": lambda _args, _ctx: None},
         )
 
-    session = _create_session(tmp_path, extension_factories=[extension_factory])
-    await session._resourceLoader.reload()
+    session = await _create_loaded_session(tmp_path, extension_factories=[extension_factory])
     try:
-        await session.reload()
         await session.bindExtensions({})
         session.extensionRunner.set_flag_value("plan", True)
 
@@ -434,15 +430,13 @@ async def test_agent_session_prefers_sdk_tool_over_extension_tool_with_same_name
     def extension_factory(pi: object) -> None:
         pi.on("session_start", lambda _event: pi.register_tool(ExtensionTool()))  # type: ignore[attr-defined]
 
-    session = _create_session(
+    session = await _create_loaded_session(
         tmp_path,
         extension_factories=[extension_factory],
         custom_tools=[custom_tool],
     )
-    await session._resourceLoader.reload()
 
     try:
-        await session.reload()
         await session.bindExtensions({})
 
         shared_tools = [tool for tool in session.getAllTools() if tool.name == "shared_tool"]
@@ -530,11 +524,9 @@ async def test_agent_session_compact_allows_non_stream_simple_hook_without_api_k
 
         pi.on("session_before_compact", on_before_compact)  # type: ignore[attr-defined]
 
-    session = _create_session(tmp_path, provider="faux", extension_factories=[extension_factory])
+    session = await _create_loaded_session(tmp_path, provider="faux", extension_factories=[extension_factory])
     session.agent.streamFn = lambda *_args, **_kwargs: None
     session._modelRegistry.getApiKeyAndHeaders = fake_get_api_key_and_headers  # type: ignore[method-assign]
-    await session._resourceLoader.reload()
-    await session.reload()
     await session.bindExtensions({})
 
     try:
@@ -764,12 +756,10 @@ async def test_agent_session_auto_compaction_uses_threshold_hook_path(tmp_path: 
 
         pi.on("session_before_compact", on_before_compact)  # type: ignore[attr-defined]
 
-    session = _create_session(tmp_path, provider="faux", extension_factories=[extension_factory])
+    session = await _create_loaded_session(tmp_path, provider="faux", extension_factories=[extension_factory])
     session.agent.state.model = model
     events: list[object] = []
     session.subscribe(events.append)
-    await session._resourceLoader.reload()
-    await session.reload()
     session.settingsManager.settings["compaction"] = {"enabled": True, "reserveTokens": 1_000, "keepRecentTokens": 0}
     await session.bindExtensions({})
 
