@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from harnify_ai.providers import cloudflare as cloudflare_provider
 from harnify_ai.providers.cloudflare import is_cloudflare_provider, resolve_cloudflare_base_url
 from harnify_ai.providers.github_copilot_headers import (
     build_copilot_dynamic_headers,
@@ -51,6 +52,17 @@ def test_cloudflare_helpers_raise_for_missing_placeholders(monkeypatch: pytest.M
 
     with pytest.raises(RuntimeError, match="CLOUDFLARE_ACCOUNT_ID"):
         resolve_cloudflare_base_url(model)
+
+
+def test_cloudflare_module_exports_expected_names() -> None:
+    assert cloudflare_provider.__all__ == [
+        "CLOUDFLARE_WORKERS_AI_BASE_URL",
+        "CLOUDFLARE_AI_GATEWAY_COMPAT_BASE_URL",
+        "CLOUDFLARE_AI_GATEWAY_OPENAI_BASE_URL",
+        "CLOUDFLARE_AI_GATEWAY_ANTHROPIC_BASE_URL",
+        "isCloudflareProvider",
+        "resolveCloudflareBaseUrl",
+    ]
 
 
 def test_copilot_header_helpers_detect_initiator_and_vision() -> None:
