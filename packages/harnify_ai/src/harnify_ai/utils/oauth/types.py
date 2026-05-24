@@ -15,7 +15,7 @@ class OAuthCredentials(SchemaModel):
 
     refresh: str
     access: str
-    expires: int
+    expires: int | float
 
 
 OAuthProviderId = str
@@ -36,8 +36,8 @@ class OAuthAuthInfo(SchemaModel):
 class OAuthDeviceCodeInfo(SchemaModel):
     userCode: str
     verificationUri: str
-    intervalSeconds: int | None = None
-    expiresInSeconds: int | None = None
+    intervalSeconds: int | float | None = None
+    expiresInSeconds: int | float | None = None
 
 
 class OAuthSelectOption(SchemaModel):
@@ -77,3 +77,18 @@ class OAuthProviderInfo(SchemaModel):
     id: OAuthProviderId
     name: str
     available: bool
+
+
+__all__ = [
+    "OAuthAuthInfo",
+    "OAuthCredentials",
+    "OAuthDeviceCodeInfo",
+    "OAuthLoginCallbacks",
+    "OAuthPrompt",
+    "OAuthProvider",
+    "OAuthProviderId",
+    "OAuthProviderInfo",
+    "OAuthProviderInterface",
+    "OAuthSelectOption",
+    "OAuthSelectPrompt",
+]
