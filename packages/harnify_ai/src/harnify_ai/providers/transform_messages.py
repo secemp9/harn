@@ -151,7 +151,7 @@ def transform_messages(
                     toolName=tool_call.name,
                     content=[TextContent(text="No result provided")],
                     isError=True,
-                    timestamp=int(time.time() * 1000),
+                    timestamp=time.time_ns() // 1_000_000,
                 )
             )
         pending_tool_calls = []
@@ -189,5 +189,4 @@ transformMessages = transform_messages
 
 __all__ = [
     "transformMessages",
-    "transform_messages",
 ]
