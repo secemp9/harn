@@ -107,6 +107,62 @@ def _create_session(
     )
 
 
+async def _create_loaded_session(
+    tmp_path: Path,
+    *,
+    extension_factories: list[object] | None = None,
+    custom_tools: list[object] | None = None,
+    provider: str = "anthropic",
+) -> AgentSession:
+    cwd = str(tmp_path)
+    agent_dir = str(tmp_path / "agent")
+    os.makedirs(agent_dir, exist_ok=True)
+    settings_manager = SettingsManager.create(cwd, agent_dir)
+    auth_storage = AuthStorage.inMemory()
+    auth_storage.setRuntimeApiKey(provider, "test-key")
+    model_registry = ModelRegistry.inMemory(auth_storage)
+    model = next((model for model in model_registry.getAll() if model.provider == provider), None)
+    if model is None:
+        model = model_registry.getAll()[0]
+    resource_loader = DefaultResourceLoader(
+        {
+            "cwd": cwd,
+            "agentDir": agent_dir,
+            "settingsManager": settings_manager,
+            "extensionFactories": list(extension_factories or []),
+            "noSkills": True,
+            "noPromptTemplates": True,
+            "noThemes": True,
+        }
+    )
+    await resource_loader.reload()
+
+    session_manager = SessionManager.inMemory(cwd)
+    agent = Agent(
+        {
+            "getApiKey": lambda _provider: "test-key",
+            "initialState": {
+                "model": model,
+                "systemPrompt": "initial",
+                "tools": [],
+                "thinkingLevel": "high",
+                "messages": [],
+            },
+        }
+    )
+    return AgentSession(
+        {
+            "agent": agent,
+            "sessionManager": session_manager,
+            "settingsManager": settings_manager,
+            "cwd": cwd,
+            "modelRegistry": model_registry,
+            "resourceLoader": resource_loader,
+            "customTools": list(custom_tools or []),
+        }
+    )
+
+
 def test_parse_skill_block_round_trip() -> None:
     parsed = parseSkillBlock(
         '<skill name="db" location="/tmp/skill/SKILL.md">\nbody\n</skill>\n\nplease apply it'
