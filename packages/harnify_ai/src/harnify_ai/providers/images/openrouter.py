@@ -83,7 +83,7 @@ async def generate_images_openrouter(
                 matches = re.match(r"^data:([^;]+);base64,(.+)$", image_url)
                 if matches is None:
                     continue
-                output.output.append(ImageContent(data=data, mimeType=mime_type))
+                output.output.append(ImageContent(mimeType=matches[1], data=matches[2]))
 
         return output
     except Exception as error:  # noqa: BLE001
