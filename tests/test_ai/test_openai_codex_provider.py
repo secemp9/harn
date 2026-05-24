@@ -383,6 +383,37 @@ async def test_stream_openai_codex_responses_uses_env_api_key_fallback(monkeypat
     assert result.content[0].text == "Hello"
 
 
+@pytest.mark.asyncio
+async def test_stream_openai_codex_responses_short_circuits_preaborted_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signal = asyncio.Event()
+    signal.set()
+    send_calls = 0
+
+    async def fake_send(self, request: httpx.Request, *, stream: bool = False, **kwargs) -> httpx.Response:
+        nonlocal send_calls
+        send_calls += 1
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_payload("completed"),
+            request=request,
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "send", fake_send)
+
+    result = await stream_openai_codex_responses(
+        _codex_model(),
+        _context(),
+        {"apiKey": _mock_token(), "transport": "sse", "signal": signal},
+    ).result()
+
+    assert send_calls == 0
+    assert result.stopReason == "aborted"
+    assert result.errorMessage == "Request was aborted"
+
+
 def test_parse_retry_after_delay_ms_supports_milliseconds_header() -> None:
     response = httpx.Response(
         429,
