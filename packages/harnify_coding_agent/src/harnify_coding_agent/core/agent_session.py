@@ -1740,7 +1740,7 @@ class AgentSession:
                 "getModel": lambda: self.model,
                 "isIdle": lambda: not self.isStreaming,
                 "getSignal": lambda: self.agent.signal,
-                "abort": lambda: (self._extensionAbortHandler or self.agent.abort)(),
+                "abort": lambda: self._extensionAbortHandler() if self._extensionAbortHandler else self._spawn_background(self.abort()),
                 "hasPendingMessages": lambda: self.pendingMessageCount > 0,
                 "shutdown": lambda: self._extensionShutdownHandler() if self._extensionShutdownHandler else None,
                 "getContextUsage": self.getContextUsage,
