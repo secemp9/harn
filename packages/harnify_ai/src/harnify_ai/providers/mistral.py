@@ -115,17 +115,11 @@ async def _await_with_abort(request_factory: Any, signal: Any) -> Any:
             return await request_task
 
         request_task.cancel()
-        try:
-            await request_task
-        except BaseException:
-            pass
+        await asyncio.gather(request_task, return_exceptions=True)
         raise RuntimeError("Request was aborted")
     finally:
         abort_task.cancel()
-        try:
-            await abort_task
-        except BaseException:
-            pass
+        await asyncio.gather(abort_task, return_exceptions=True)
 
 
 def _coalesce_attr(obj: Any, *names: str) -> Any:
@@ -183,17 +177,11 @@ async def _iterate_with_abort(iterable: AsyncIterable[Any], signal: Any) -> Asyn
                         item = await next_task
                     else:
                         next_task.cancel()
-                        try:
-                            await next_task
-                        except BaseException:
-                            pass
+                        await asyncio.gather(next_task, return_exceptions=True)
                         raise RuntimeError("Request was aborted")
                 finally:
                     abort_task.cancel()
-                    try:
-                        await abort_task
-                    except BaseException:
-                        pass
+                    await asyncio.gather(abort_task, return_exceptions=True)
 
         if item is _STREAM_END:
             return
@@ -771,7 +759,8 @@ def uses_prompt_mode_reasoning(model: Model) -> bool:
 def map_reasoning_effort(model: Model, level: str | None) -> MistralReasoningEffort:
     if level is None:
         return "high"
-    return (model.thinkingLevelMap or {}).get(level, "high")  # type: ignore[return-value]
+    mapped = (model.thinkingLevelMap or {}).get(level)
+    return "high" if mapped is None else mapped  # type: ignore[return-value]
 
 
 def map_tool_choice(choice: Any) -> Any:
@@ -819,46 +808,7 @@ mapToolChoice = map_tool_choice
 mapChatStopReason = map_chat_stop_reason
 
 __all__ = [
-    "MISTRAL_TOOL_CALL_ID_LENGTH",
-    "MAX_MISTRAL_ERROR_BODY_CHARS",
     "MistralOptions",
-    "buildChatPayload",
-    "buildRequestOptions",
-    "buildToolResultText",
-    "build_chat_payload",
-    "build_request_kwargs",
-    "build_tool_result_text",
-    "consumeChatStream",
-    "consume_chat_stream",
-    "createMistralToolCallIdNormalizer",
-    "createOutput",
-    "create_client",
-    "create_mistral_tool_call_id_normalizer",
-    "create_output",
-    "deriveMistralToolCallId",
-    "derive_mistral_tool_call_id",
-    "formatMistralError",
-    "format_mistral_error",
-    "mapChatStopReason",
-    "mapReasoningEffort",
-    "mapToolChoice",
-    "map_chat_stop_reason",
-    "map_reasoning_effort",
-    "map_tool_choice",
     "streamMistral",
     "streamSimpleMistral",
-    "stream_mistral",
-    "stream_simple_mistral",
-    "stripSymbolKeys",
-    "strip_symbol_keys",
-    "toChatMessages",
-    "toFunctionTools",
-    "to_chat_messages",
-    "to_function_tools",
-    "truncateErrorText",
-    "truncate_error_text",
-    "usesPromptModeReasoning",
-    "usesReasoningEffort",
-    "uses_prompt_mode_reasoning",
-    "uses_reasoning_effort",
 ]
