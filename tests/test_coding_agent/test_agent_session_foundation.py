@@ -14,6 +14,7 @@ from harnify_coding_agent.core.agent_session import AgentSession, parseSkillBloc
 from harnify_coding_agent.core.auth_storage import AuthStorage
 from harnify_coding_agent.core.compaction import estimate_context_tokens as estimate_compaction_context_tokens
 from harnify_coding_agent.core.compaction.branch_summarization import BranchSummaryResult
+from harnify_coding_agent.core.extensions.types import ToolDefinition
 from harnify_coding_agent.core.model_registry import ModelRegistry
 from harnify_coding_agent.core.resource_loader import DefaultResourceLoader
 from harnify_coding_agent.core.session_manager import SessionManager
@@ -245,7 +246,17 @@ async def test_agent_session_refreshes_extension_and_custom_tools_on_bind(tmp_pa
         extension_factories=[
             lambda pi: pi.on(
                 "session_start",
-                lambda _event: pi.register_tool(ExtensionTool()),
+                lambda _event: pi.registerTool(
+                    ToolDefinition(
+                        name="dynamic_tool",
+                        label="Dynamic Tool",
+                        description="Tool registered from session_start",
+                        promptSnippet="Run dynamic test behavior",
+                        promptGuidelines=["Use dynamic_tool when the user asks for dynamic behavior tests."],
+                        parameters={},
+                        execute=ExtensionTool().execute,
+                    )
+                ),
             )
         ],
         custom_tools=[custom_tool],
@@ -527,7 +538,18 @@ async def test_agent_session_prefers_sdk_tool_over_extension_tool_with_same_name
     )
 
     def extension_factory(pi: object) -> None:
-        pi.on("session_start", lambda _event: pi.register_tool(ExtensionTool()))  # type: ignore[attr-defined]
+        pi.on(  # type: ignore[attr-defined]
+            "session_start",
+            lambda _event: pi.registerTool(
+                ToolDefinition(
+                    name="shared_tool",
+                    label="Extension Shared Tool",
+                    description="Extension implementation",
+                    parameters={},
+                    execute=ExtensionTool().execute,
+                )
+            ),
+        )
 
     session = await _create_loaded_session(
         tmp_path,
