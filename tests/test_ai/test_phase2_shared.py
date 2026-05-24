@@ -8,6 +8,8 @@ from harnify_ai.models import get_model
 from harnify_ai.providers.openai_prompt_cache import clamp_openai_prompt_cache_key
 import harnify_ai.providers.simple_options as simple_options_provider
 import harnify_ai.providers.transform_messages as transform_messages_provider
+import harnify_ai.stream as stream_module
+from harnify_ai.api_registry import clear_api_providers
 from harnify_ai.providers.simple_options import adjust_max_tokens_for_thinking, build_base_options, clamp_reasoning
 from harnify_ai.providers.transform_messages import (
     transform_messages,
@@ -224,3 +226,25 @@ def test_transform_messages_synthesizes_missing_tool_results_and_skips_errored_a
 
 def test_transform_messages_module_exports_expected_names() -> None:
     assert transform_messages_provider.__all__ == ["transformMessages"]
+
+
+def test_stream_module_exports_expected_names() -> None:
+    assert stream_module.__all__ == [
+        "getEnvApiKey",
+        "stream",
+        "complete",
+        "streamSimple",
+        "completeSimple",
+    ]
+
+
+def test_stream_module_raises_ts_message_for_unregistered_api() -> None:
+    model = get_model("openai", "gpt-5")
+    assert model is not None
+
+    clear_api_providers()
+    try:
+        with pytest.raises(RuntimeError, match="No API provider registered for api: openai-responses"):
+            stream_module.stream(model, {"messages": []})  # type: ignore[arg-type]
+    finally:
+        register_builtins.reset_api_providers()
