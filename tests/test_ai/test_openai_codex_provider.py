@@ -357,21 +357,12 @@ async def test_stream_openai_codex_responses_maps_incomplete_to_length(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_stream_openai_codex_responses_uses_env_api_key_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_stream_openai_codex_responses_does_not_use_openai_env_fallback_for_openai_codex_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     token = _mock_token()
-    captured: dict[str, object] = {}
-
-    async def fake_send(self, request: httpx.Request, *, stream: bool = False, **kwargs) -> httpx.Response:
-        captured["authorization"] = request.headers.get("authorization")
-        return httpx.Response(
-            200,
-            headers={"content-type": "text/event-stream"},
-            text=_sse_payload("completed"),
-            request=request,
-        )
 
     monkeypatch.setenv("OPENAI_API_KEY", token)
-    monkeypatch.setattr(httpx.AsyncClient, "send", fake_send)
 
     result = await stream_openai_codex_responses(
         _codex_model(),
@@ -379,8 +370,8 @@ async def test_stream_openai_codex_responses_uses_env_api_key_fallback(monkeypat
         {"transport": "sse"},
     ).result()
 
-    assert captured["authorization"] == f"Bearer {token}"
-    assert result.content[0].text == "Hello"
+    assert result.stopReason == "error"
+    assert result.errorMessage == "No API key for provider: openai-codex"
 
 
 @pytest.mark.asyncio
