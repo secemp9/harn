@@ -250,6 +250,63 @@ async def test_extension_runner_emits_events_and_invalidates_context() -> None:
     assert any("input:boom" == message for message in errors)
 
 
+@pytest.mark.asyncio
+async def test_extension_runner_before_agent_start_ctx_uses_latest_system_prompt() -> None:
+    seen_prompts: list[str] = []
+
+    async def factory(api: Any) -> None:
+        def first_handler(event: dict[str, Any], _ctx: Any) -> dict[str, Any]:
+            return {"systemPrompt": event["systemPrompt"] + "::one"}
+
+        def second_handler(_event: dict[str, Any], ctx: Any) -> dict[str, Any]:
+            prompt = ctx.getSystemPrompt()
+            seen_prompts.append(prompt)
+            return {"systemPrompt": prompt + "::two"}
+
+        api.on("before_agent_start", first_handler)
+        api.on("before_agent_start", second_handler)
+
+    extension = await load_extension_from_factory(factory, "/tmp/project", extension_path="<inline:before-agent>")
+    runner = ExtensionRunner(extensions=[extension], contextFactory=lambda: {"cwd": "runner-cwd"})
+    runner.bind_core(
+        {
+            "sendMessage": lambda message, options=None: None,
+            "sendUserMessage": lambda content, options=None: None,
+            "appendEntry": lambda custom_type, data=None: None,
+            "setSessionName": lambda name: None,
+            "getSessionName": lambda: "demo",
+            "setLabel": lambda entry_id, label: None,
+            "getActiveTools": lambda: [],
+            "getAllTools": lambda: [],
+            "setActiveTools": lambda names: None,
+            "refreshTools": lambda: None,
+            "getCommands": lambda: [],
+            "setModel": _set_model_true,
+            "getThinkingLevel": lambda: "off",
+            "setThinkingLevel": lambda level: None,
+        },
+        {
+            "getModel": lambda: None,
+            "isIdle": lambda: True,
+            "getSignal": lambda: None,
+            "abort": lambda: None,
+            "hasPendingMessages": lambda: False,
+            "shutdown": lambda: None,
+            "getContextUsage": lambda: None,
+            "compact": lambda options=None: None,
+            "getSystemPrompt": lambda: "stale-base",
+        },
+    )
+
+    try:
+        result = await runner.emit_before_agent_start("prompt", None, "system", {"cwd": "/tmp"})
+
+        assert seen_prompts == ["system::one"]
+        assert result == {"messages": None, "systemPrompt": "system::one::two"}
+    finally:
+        runner.invalidate("done")
+
+
 def test_extension_runner_resolves_commands_and_shortcuts_conflicts() -> None:
     extension_one = _extension_with_command_and_shortcut("<ext:one>", "demo", "ctrl+x")
     extension_two = _extension_with_command_and_shortcut("<ext:two>", "demo", "ctrl+x")
