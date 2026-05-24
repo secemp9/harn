@@ -1039,22 +1039,30 @@ class DefaultPackageManager:
         if parsed.type != "local":
             return source
         base_dir = self._get_base_dir_for_scope(scope)
-        resolved = self._resolve_path_from_base(parsed.path, self.cwd)
+        resolved = self._resolve_path(parsed.path)
         relative = os.path.relpath(resolved, base_dir)
         return relative or "."
 
     def _package_sources_match(self, existing: PackageSource, source: str, scope: SourceScope) -> bool:
-        left = self._source_match_key(self._get_source_string(existing), scope, stored=True)
-        right = self._source_match_key(source, scope, stored=False)
+        left = self._get_source_match_key_for_settings(self._get_source_string(existing), scope)
+        right = self._get_source_match_key_for_input(source)
         return left == right
 
-    def _source_match_key(self, source: str, scope: SourceScope, *, stored: bool) -> str:
+    def _get_source_match_key_for_input(self, source: str) -> str:
         parsed = self._parse_source(source)
         if parsed.type == "git":
             return f"git:{parsed.host}/{parsed.path}"
         if parsed.type == "npm":
             return f"npm:{parsed.name}"
-        base_dir = self._get_base_dir_for_scope(scope) if stored else self.cwd
+        return f"local:{self._resolve_path(parsed.path)}"
+
+    def _get_source_match_key_for_settings(self, source: str, scope: SourceScope) -> str:
+        parsed = self._parse_source(source)
+        if parsed.type == "git":
+            return f"git:{parsed.host}/{parsed.path}"
+        if parsed.type == "npm":
+            return f"npm:{parsed.name}"
+        base_dir = self._get_base_dir_for_scope(scope)
         return f"local:{self._resolve_path_from_base(parsed.path, base_dir)}"
 
     def _dedupe_packages(
@@ -1077,7 +1085,10 @@ class DefaultPackageManager:
         return self.cwd
 
     def _resolve_path_from_base(self, value: str, base_dir: str) -> str:
-        return resolve_path(value, base_dir, trim=True, normalize_unicode_spaces=True)
+        return resolve_path(value, base_dir, home_dir=_get_home_dir(), trim=True)
+
+    def _resolve_path(self, value: str) -> str:
+        return resolve_path(value, self.cwd, home_dir=_get_home_dir(), trim=True)
 
     def _parse_source(self, source: str) -> GitSource | _NpmSource | _LocalSource:
         trimmed = source.strip()
@@ -1085,6 +1096,9 @@ class DefaultPackageManager:
             spec = trimmed[len("npm:") :].strip()
             name, version = self._parse_npm_spec(spec)
             return _NpmSource(type="npm", spec=spec, name=name, pinned=version is not None)
+
+        if is_local_path(source):
+            return _LocalSource(type="local", path=source)
 
         git_parsed = parse_git_url(trimmed)
         if git_parsed is not None:
@@ -1112,35 +1126,34 @@ class DefaultPackageManager:
         command_parts = [command, *args]
         package_manager_command = command
         if "--" in command_parts:
-            separator_index = command_parts.index("--")
+            separator_index = len(command_parts) - 1 - command_parts[::-1].index("--")
             if separator_index + 1 < len(command_parts):
                 package_manager_command = command_parts[separator_index + 1]
-        return os.path.basename(package_manager_command).removesuffix(".cmd").removesuffix(".exe")
+        return re.sub(r"\.(cmd|exe)$", "", os.path.basename(package_manager_command), flags=re.IGNORECASE)
 
-    async def _run_npm_command_capture(self, args: list[str], *, cwd: str | None = None) -> str:
+    async def _run_npm_command_capture(
+        self,
+        args: list[str],
+        *,
+        cwd: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> str:
         command, base_args = self._get_npm_command()
-        return await self._run_command_capture(command, [*base_args, *args], cwd=cwd)
+        return await self._run_command_capture(command, [*base_args, *args], cwd=cwd, timeout_ms=timeout_ms)
+
+    async def _run_npm_command(self, args: list[str], *, cwd: str | None = None) -> None:
+        command, base_args = self._get_npm_command()
+        await self._run_command(command, [*base_args, *args], cwd=cwd)
 
     def _run_npm_command_sync(self, args: list[str]) -> str:
         command, base_args = self._get_npm_command()
-        try:
-            completed = subprocess.run(
-                [command, *base_args, *args],
-                check=False,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            )
-        except OSError as error:
-            raise RuntimeError(f"Failed to run {shlex.join([command, *base_args, *args])}: {error}") from error
+        return self._run_command_sync(command, [*base_args, *args])
 
-        if completed.returncode != 0:
-            stderr = (completed.stderr or "").strip()
-            stdout = (completed.stdout or "").strip()
-            details = stderr or stdout or f"exit status {completed.returncode}"
-            raise RuntimeError(f"Command failed: {shlex.join([command, *base_args, *args])}: {details}")
-        return completed.stdout or ""
+    def _get_git_dependency_install_args(self) -> list[str]:
+        configured = self.settingsManager.getNpmCommand()
+        if configured and len(configured) > 0:
+            return ["install"]
+        return ["install", "--omit=dev"]
 
     def _get_npm_install_args(self, specs: list[str], install_root: str) -> list[str]:
         package_manager_name = self._get_package_manager_name()
@@ -1152,11 +1165,12 @@ class DefaultPackageManager:
 
     def _ensure_npm_project(self, install_root: str) -> None:
         os.makedirs(install_root, exist_ok=True)
+        mark_path_ignored_by_cloud_sync(install_root)
         self._ensure_git_ignore(install_root)
         package_json_path = os.path.join(install_root, "package.json")
         if not os.path.exists(package_json_path):
             Path(package_json_path).write_text(
-                json.dumps({"name": "harnify-extensions", "private": True}, indent=2),
+                json.dumps({"name": "pi-extensions", "private": True}, indent=2),
                 encoding="utf-8",
             )
 
@@ -1171,7 +1185,17 @@ class DefaultPackageManager:
         return os.path.join(self._get_npm_install_root(scope, scope == "temporary"), "node_modules", source.name)
 
     def _get_global_npm_root(self) -> str:
-        return self._run_npm_command_sync(["root", "-g"]).strip()
+        command, args = self._get_npm_command()
+        command_key = "\0".join([command, *args])
+        if self.globalNpmRoot and self.globalNpmRootCommandKey == command_key:
+            return self.globalNpmRoot
+        if self._get_package_manager_name() == "bun":
+            bin_dir = self._run_npm_command_sync(["pm", "bin", "-g"]).strip()
+            self.globalNpmRoot = os.path.join(os.path.dirname(bin_dir), "install", "global", "node_modules")
+        else:
+            self.globalNpmRoot = self._run_npm_command_sync(["root", "-g"]).strip()
+        self.globalNpmRootCommandKey = command_key
+        return self.globalNpmRoot
 
     def _get_pnpm_global_package_path(self, package_name: str) -> str | None:
         if self._get_package_manager_name() != "pnpm":
@@ -1192,7 +1216,7 @@ class DefaultPackageManager:
                 self._get_global_npm_root(),
                 source.name,
             )
-        except RuntimeError:
+        except Exception:
             return None
 
     def _get_npm_install_path(self, source: _NpmSource, scope: SourceScope) -> str:
@@ -1210,7 +1234,7 @@ class DefaultPackageManager:
             return f"git:{parsed.host}/{parsed.path}"
         if scope is not None:
             return f"local:{self._resolve_path_from_base(parsed.path, self._get_base_dir_for_scope(scope))}"
-        return f"local:{self._resolve_path_from_base(parsed.path, self.cwd)}"
+        return f"local:{self._resolve_path(parsed.path)}"
 
     def _build_no_matching_package_message(self, source: str, configured_packages: list[PackageSource]) -> str:
         suggestion = self._find_suggested_configured_source(source, configured_packages)
