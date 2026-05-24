@@ -429,7 +429,7 @@ async def process_stream(
     options: StreamOptions | dict[str, Any] | None = None,
 ) -> None:
     await process_responses_stream(
-        map_codex_events(parse_sse(response)),
+        map_codex_events(parse_sse(response, _option(options, "signal"))),
         output,
         stream,
         model,
