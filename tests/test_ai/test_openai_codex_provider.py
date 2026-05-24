@@ -506,6 +506,63 @@ async def test_stream_simple_openai_codex_responses_preserves_xhigh_reasoning(mo
 
 
 @pytest.mark.asyncio
+async def test_parse_sse_aborts_waiting_for_next_chunk() -> None:
+    signal = asyncio.Event()
+    stream = _BlockingByteStream()
+    response = httpx.Response(
+        200,
+        headers={"content-type": "text/event-stream"},
+        stream=stream,
+        request=httpx.Request("POST", "https://chatgpt.com/backend-api/codex/responses"),
+    )
+
+    async def consume() -> None:
+        async for _event in parse_sse(response, signal):
+            pass
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(stream.entered.wait(), timeout=1)
+    signal.set()
+
+    with pytest.raises(RuntimeError, match="Request was aborted"):
+        await asyncio.wait_for(task, timeout=1)
+
+    assert stream.closed is True
+    assert stream.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_stream_openai_codex_responses_clears_partial_json_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_send(self, request: httpx.Request, *, stream: bool = False, **kwargs) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_payload("completed"),
+            request=request,
+        )
+
+    async def fake_process_stream(*args, **kwargs) -> None:
+        output = args[1]
+        output.content = [{"type": "reasoning", "partialJson": '{"a":1}'}]
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(httpx.AsyncClient, "send", fake_send)
+    monkeypatch.setattr(codex_provider, "process_stream", fake_process_stream)
+
+    result = await stream_openai_codex_responses(
+        _codex_model(),
+        _context(),
+        {"apiKey": _mock_token(), "transport": "sse"},
+    ).result()
+
+    assert result.stopReason == "error"
+    assert result.errorMessage == "boom"
+    assert result.content == [{"type": "reasoning"}]
+
+
+@pytest.mark.asyncio
 async def test_stream_openai_codex_responses_uses_websocket_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     sent_bodies: list[dict[str, object]] = []
     socket = _MockWebSocket([_websocket_events("resp_ws_1", "msg_ws_1", "Hello")], sent_bodies)
