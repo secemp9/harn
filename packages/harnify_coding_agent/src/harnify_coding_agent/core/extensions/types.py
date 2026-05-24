@@ -29,8 +29,6 @@ from harnify_coding_agent.core.footer_data_provider import ReadonlyFooterDataPro
 from harnify_coding_agent.core.keybindings import KeybindingsManager
 from harnify_coding_agent.core.model_registry import ModelRegistry
 from harnify_coding_agent.core.session_manager import (
-    BranchSummaryEntry,
-    CompactionEntry,
     ReadonlySessionManager,
     SessionEntry,
     SessionManager,
@@ -363,7 +361,7 @@ class SessionBeforeCompactEvent(TypedDict, total=False):
 
 class SessionCompactEvent(TypedDict):
     type: Literal["session_compact"]
-    compactionEntry: CompactionEntry
+    compactionEntry: SessionEntry
     fromExtension: bool
 
 
@@ -394,7 +392,7 @@ class SessionTreeEvent(TypedDict, total=False):
     type: Literal["session_tree"]
     newLeafId: str | None
     oldLeafId: str | None
-    summaryEntry: BranchSummaryEntry
+    summaryEntry: SessionEntry
     fromExtension: bool | None
 
 
