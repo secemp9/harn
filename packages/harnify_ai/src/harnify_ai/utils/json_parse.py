@@ -12,14 +12,14 @@ TJson = TypeVar("TJson")
 _VALID_JSON_ESCAPES = frozenset({'"', "\\", "/", "b", "f", "n", "r", "t", "u"})
 
 
-def is_control_character(char: str) -> bool:
+def _is_control_character(char: str) -> bool:
     if not char:
         return False
     code_point = ord(char)
     return 0x00 <= code_point <= 0x1F
 
 
-def escape_control_character(char: str) -> str:
+def _escape_control_character(char: str) -> str:
     if char == "\b":
         return "\\b"
     if char == "\f":
@@ -77,7 +77,7 @@ def repair_json(json_string: str) -> str:
             index += 1
             continue
 
-        repaired.append(escape_control_character(char) if is_control_character(char) else char)
+        repaired.append(_escape_control_character(char) if _is_control_character(char) else char)
         index += 1
 
     return "".join(repaired)
@@ -123,3 +123,12 @@ def parse_streaming_json(partial_json: str | None) -> TJson:
 repairJson = repair_json
 parseJsonWithRepair = parse_json_with_repair
 parseStreamingJson = parse_streaming_json
+
+__all__ = [
+    "parseJsonWithRepair",
+    "parseStreamingJson",
+    "parse_json_with_repair",
+    "parse_streaming_json",
+    "repairJson",
+    "repair_json",
+]
