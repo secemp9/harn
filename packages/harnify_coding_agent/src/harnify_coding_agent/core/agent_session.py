@@ -372,19 +372,56 @@ class AgentSession:
     def dispose(self) -> None:
         self.abortRetry()
         self._extensionRunner.invalidate(_STALE_CONTEXT_MESSAGE)
-        if self._unsubscribeAgent is not None:
-            self._unsubscribeAgent()
-            self._unsubscribeAgent = None
+        self._disconnect_from_agent()
         if self._extensionErrorUnsubscriber is not None:
             self._extensionErrorUnsubscriber()
             self._extensionErrorUnsubscriber = None
         self._eventListeners = []
         cleanup_session_resources(self.sessionId)
 
+    def _disconnect_from_agent(self) -> None:
+        if self._unsubscribeAgent is not None:
+            self._unsubscribeAgent()
+            self._unsubscribeAgent = None
+
+    def _reconnect_to_agent(self) -> None:
+        if self._unsubscribeAgent is not None:
+            return
+        self._unsubscribeAgent = self.agent.subscribe(self._handle_agent_event)
+
     async def abort(self) -> None:
         self.abortRetry()
         self.agent.abort()
         await self.agent.waitForIdle()
+
+    async def _get_required_request_auth(self, model: Model[Any]) -> dict[str, Any]:
+        result = await self._modelRegistry.getApiKeyAndHeaders(model)
+        if not result.get("ok"):
+            error = str(result.get("error") or "")
+            if error.startswith("No API key found"):
+                raise RuntimeError(format_no_api_key_found_message(model.provider))
+            raise RuntimeError(error)
+
+        api_key = result.get("apiKey")
+        if isinstance(api_key, str) and api_key:
+            return {"apiKey": api_key, "headers": result.get("headers")}
+
+        if self._modelRegistry.isUsingOAuth(model):
+            raise RuntimeError(
+                f'Authentication failed for "{model.provider}". '
+                "Credentials may have expired or network is unavailable. "
+                f"Run '/login {model.provider}' to re-authenticate."
+            )
+        raise RuntimeError(format_no_api_key_found_message(model.provider))
+
+    async def _get_compaction_request_auth(self, model: Model[Any]) -> dict[str, Any]:
+        if self.agent.streamFn == stream_simple:
+            return await self._get_required_request_auth(model)
+
+        result = await self._modelRegistry.getApiKeyAndHeaders(model)
+        if not result.get("ok"):
+            return {}
+        return {"apiKey": result.get("apiKey"), "headers": result.get("headers")}
 
     async def prompt(
         self,
