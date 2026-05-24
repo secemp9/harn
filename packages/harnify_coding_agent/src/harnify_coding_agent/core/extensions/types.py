@@ -109,11 +109,11 @@ type ExtensionHandler[TEvent, TResult] = Callable[
     Awaitable[TResult | None] | TResult | None,
 ]
 type SendMessageHandler = Callable[
-    [Any, dict[str, Any] | None],
+    [_CustomMessagePayload, _SendMessageOptions | None],
     None,
 ]
 type SendUserMessageHandler = Callable[
-    [str | list[TextContent | ImageContent], dict[str, Any] | None],
+    [str | list[TextContent | ImageContent], _SendUserMessageOptions | None],
     None,
 ]
 type AppendEntryHandler = Callable[[str, Any], None]
@@ -197,12 +197,12 @@ class ToolDefinition[TArgs, TDetails]:
     name: str
     label: str
     description: str
-    parameters: Any
+    parameters: TSchema
     execute: Callable[
-        [str, TArgs, Any | None, AgentToolUpdateCallback | None, ExtensionContext],
+        [str, TArgs, AbortSignal | None, AgentToolUpdateCallback | None, "ExtensionContext"],
         Awaitable[AgentToolResult],
     ]
-    prepareArguments: Callable[[Any], Any] | None = None
+    prepareArguments: Callable[[Any], Static] | None = None
     executionMode: ToolExecutionMode | None = None
     promptSnippet: str | None = None
     promptGuidelines: list[str] = field(default_factory=list)
@@ -259,16 +259,16 @@ class ExtensionShortcut:
 class ProviderModelConfig(TypedDict, total=False):
     id: str
     name: str
-    api: Api
-    baseUrl: str
+    api: NotRequired[Api]
+    baseUrl: NotRequired[str]
     reasoning: bool
-    thinkingLevelMap: dict[str, str | None]
+    thinkingLevelMap: NotRequired[dict[str, str | None]]
     input: list[Literal["text", "image"]]
     cost: dict[str, float]
     contextWindow: int
     maxTokens: int
-    headers: dict[str, str]
-    compat: dict[str, Any]
+    headers: NotRequired[dict[str, str]]
+    compat: NotRequired[dict[str, Any]]
 
 
 class OAuthProviderConfig(TypedDict, total=False):
@@ -280,15 +280,15 @@ class OAuthProviderConfig(TypedDict, total=False):
 
 
 class ProviderConfig(TypedDict, total=False):
-    name: str
-    baseUrl: str
-    apiKey: str
-    api: Api
-    streamSimple: Callable[[Model[Any], Context, SimpleStreamOptions | None], AssistantMessageEventStream]
-    headers: dict[str, str]
-    authHeader: bool
-    models: list[ProviderModelConfig]
-    oauth: OAuthProviderConfig
+    name: NotRequired[str]
+    baseUrl: NotRequired[str]
+    apiKey: NotRequired[str]
+    api: NotRequired[Api]
+    streamSimple: NotRequired[Callable[[Model[Api], Context, SimpleStreamOptions | None], AssistantMessageEventStream]]
+    headers: NotRequired[dict[str, str]]
+    authHeader: NotRequired[bool]
+    models: NotRequired[list[ProviderModelConfig]]
+    oauth: NotRequired[OAuthProviderConfig]
 
 
 @dataclass(slots=True)
