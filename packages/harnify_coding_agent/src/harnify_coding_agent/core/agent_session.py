@@ -915,10 +915,12 @@ class AgentSession:
             await self._extend_resources_from_extensions("reload")
 
     def createReplacedSessionContext(self) -> Any:
-        context = copy(self._extensionRunner.create_command_context())
-        setattr(context, "sendMessage", self.sendMessage)
-        setattr(context, "sendUserMessage", self.sendUserMessage)
-        return context
+        context = self._extensionRunner.create_command_context()
+        replaced_context = object.__new__(type(context))
+        replaced_context.__dict__.update(context.__dict__)
+        setattr(replaced_context, "sendMessage", self.sendMessage)
+        setattr(replaced_context, "sendUserMessage", self.sendUserMessage)
+        return replaced_context
 
     def hasExtensionHandlers(self, eventType: str) -> bool:
         return self._extensionRunner.has_handlers(eventType)
