@@ -135,6 +135,42 @@ async def test_process_responses_stream_ignores_summary_delta_without_summary_pa
 
 
 @pytest.mark.asyncio
+async def test_process_responses_stream_keeps_current_reasoning_item_when_unknown_item_is_added() -> None:
+    model = _responses_model()
+    output = AssistantMessage(
+        content=[],
+        api="openai-responses",
+        provider="openai",
+        model=model.id,
+        usage=_usage(),
+        stopReason="stop",
+        timestamp=1,
+    )
+    collector = _EventCollector()
+
+    await process_responses_stream(
+        _stream(
+            [
+                {"type": "response.output_item.added", "item": {"type": "reasoning", "id": "rs_1"}},
+                {"type": "response.output_item.added", "item": {"type": "image_generation_call", "id": "ig_1"}},
+                {"type": "response.reasoning_text.delta", "delta": "kept"},
+                {
+                    "type": "response.output_item.done",
+                    "item": {"type": "reasoning", "id": "rs_1", "content": [{"text": "kept"}]},
+                },
+                {"type": "response.completed", "response": {"status": "completed"}},
+            ]
+        ),
+        output,
+        collector,
+        model,
+    )
+
+    assert [event.type for event in collector.events] == ["thinking_start", "thinking_delta", "thinking_end"]
+    assert output.content[0].thinking == "kept"
+
+
+@pytest.mark.asyncio
 async def test_process_responses_stream_error_event_preserves_ts_format_when_message_missing() -> None:
     model = _responses_model()
     output = AssistantMessage(
