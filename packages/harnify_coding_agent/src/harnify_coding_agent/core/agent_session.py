@@ -1749,11 +1749,10 @@ class AgentSession:
         text: str,
         images: Sequence[ImageContent] | None = None,
     ) -> dict[str, Any]:
+        content: list[dict[str, Any]] = [TextContent(text=text).model_dump()]
         if images:
-            content: list[dict[str, Any]] = [TextContent(text=text).model_dump()]
             content.extend(image.model_dump() if hasattr(image, "model_dump") else image for image in images)
-            return {"role": "user", "content": content, "timestamp": int(time.time() * 1000)}
-        return {"role": "user", "content": text, "timestamp": int(time.time() * 1000)}
+        return {"role": "user", "content": content, "timestamp": int(time.time() * 1000)}
 
     def _extract_user_message_text(self, content: str | list[dict[str, Any]]) -> str:
         if isinstance(content, str):
@@ -1809,9 +1808,12 @@ class AgentSession:
         self.agent.afterToolCall = after_tool_call
 
     async def _run_agent_prompt(self, messages: AgentMessage | list[AgentMessage]) -> None:
-        await self.agent.prompt(messages)
-        while await self._handle_post_agent_run():
-            await self.agent.continue_()
+        try:
+            await self.agent.prompt(messages)
+            while await self._handle_post_agent_run():
+                await self.agent.continue_()
+        finally:
+            self._flush_pending_bash_messages()
 
     async def _handle_post_agent_run(self) -> bool:
         message = self._lastAssistantMessage
@@ -1908,6 +1910,14 @@ class AgentSession:
             if assistant_message is not None:
                 return assistant_message
         return None
+
+    def _flush_pending_bash_messages(self) -> None:
+        if not self._pendingBashMessages:
+            return
+        for bash_message in self._pendingBashMessages:
+            self.agent.state.messages.append(bash_message)
+            self.sessionManager.appendMessage(bash_message)
+        self._pendingBashMessages = []
 
     async def _check_compaction(
         self,
