@@ -69,7 +69,15 @@ def _create_lazy_stream(load_module: Callable[[], Awaitable[LazyProviderModule]]
                 outer.end(message)
                 return
 
-            _forward_stream(outer, module.stream(model, context, options))
+            try:
+                inner = module.stream(model, context, options)
+            except Exception as error:  # noqa: BLE001
+                message = _create_lazy_load_error_message(model, error)
+                outer.push(ErrorEvent(reason="error", error=message))
+                outer.end(message)
+                return
+
+            _forward_stream(outer, inner)
 
         asyncio.create_task(load_and_forward())
         return outer
@@ -90,7 +98,15 @@ def _create_lazy_simple_stream(load_module: Callable[[], Awaitable[LazyProviderM
                 outer.end(message)
                 return
 
-            _forward_stream(outer, module.streamSimple(model, context, options))
+            try:
+                inner = module.streamSimple(model, context, options)
+            except Exception as error:  # noqa: BLE001
+                message = _create_lazy_load_error_message(model, error)
+                outer.push(ErrorEvent(reason="error", error=message))
+                outer.end(message)
+                return
+
+            _forward_stream(outer, inner)
 
         asyncio.create_task(load_and_forward())
         return outer
