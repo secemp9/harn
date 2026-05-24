@@ -17,6 +17,9 @@ from harnify_coding_agent.utils.paths import normalize_path
 
 InstallMethod = Literal["pipx", "uv-tool", "pip", "source", "unknown"]
 
+isBunBinary = False
+isBunRuntime = False
+
 
 @dataclass(slots=True, frozen=True)
 class SelfUpdateCommandStep:
@@ -381,18 +384,14 @@ __all__ = [
     "APP_NAME",
     "APP_TITLE",
     "CONFIG_DIR_NAME",
-    "DEFAULT_SHARE_VIEWER_URL",
     "ENV_AGENT_DIR",
     "ENV_SESSION_DIR",
     "InstallMethod",
     "PACKAGE_NAME",
     "SelfUpdateCommand",
-    "SelfUpdateCommandStep",
     "VERSION",
     "detectInstallMethod",
-    "detect_install_method",
     "expandTildePath",
-    "expand_tilde_path",
     "getAgentDir",
     "getAuthPath",
     "getBinDir",
@@ -417,28 +416,6 @@ __all__ = [
     "getThemesDir",
     "getToolsDir",
     "getUpdateInstruction",
-    "get_agent_dir",
-    "get_auth_path",
-    "get_bin_dir",
-    "get_bundled_interactive_asset_path",
-    "get_changelog_path",
-    "get_custom_themes_dir",
-    "get_debug_log_path",
-    "get_docs_path",
-    "get_examples_path",
-    "get_export_template_dir",
-    "get_interactive_assets_dir",
-    "get_models_path",
-    "get_package_dir",
-    "get_package_json_path",
-    "get_prompts_dir",
-    "get_readme_path",
-    "get_self_update_command",
-    "get_self_update_unavailable_instruction",
-    "get_sessions_dir",
-    "get_settings_path",
-    "get_share_viewer_url",
-    "get_themes_dir",
-    "get_tools_dir",
-    "get_update_instruction",
+    "isBunBinary",
+    "isBunRuntime",
 ]
