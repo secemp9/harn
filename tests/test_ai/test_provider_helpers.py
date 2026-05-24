@@ -4,6 +4,7 @@ import pytest
 
 from harnify_ai.providers import cloudflare as cloudflare_provider
 from harnify_ai.providers.cloudflare import is_cloudflare_provider, resolve_cloudflare_base_url
+from harnify_ai.providers import github_copilot_headers as copilot_headers_provider
 from harnify_ai.providers.github_copilot_headers import (
     build_copilot_dynamic_headers,
     has_copilot_vision_input,
@@ -62,6 +63,14 @@ def test_cloudflare_module_exports_expected_names() -> None:
         "CLOUDFLARE_AI_GATEWAY_ANTHROPIC_BASE_URL",
         "isCloudflareProvider",
         "resolveCloudflareBaseUrl",
+    ]
+
+
+def test_github_copilot_headers_module_exports_expected_names() -> None:
+    assert copilot_headers_provider.__all__ == [
+        "inferCopilotInitiator",
+        "hasCopilotVisionInput",
+        "buildCopilotDynamicHeaders",
     ]
 
 
