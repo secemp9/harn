@@ -47,9 +47,9 @@ def test_http_proxy_helpers_reject_unsupported_proxy_protocols(monkeypatch: pyte
 
 
 def test_http_proxy_helpers_reject_invalid_proxy_urls(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HTTPS_PROXY", "not-a-valid-proxy")
+    monkeypatch.setenv("HTTPS_PROXY", "https://")
 
-    with pytest.raises(RuntimeError, match='Invalid proxy URL "https://not-a-valid-proxy": Invalid URL'):
+    with pytest.raises(RuntimeError, match='Invalid proxy URL "https://": Invalid URL'):
         node_http_proxy.resolve_http_proxy_url_for_target("https://outside.example/path")
 
 
