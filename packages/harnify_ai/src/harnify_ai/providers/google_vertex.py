@@ -130,7 +130,7 @@ def stream_google_vertex(
                 if next_params is not None:
                     params = next_params
 
-            google_stream = client.aio.models.generate_content_stream(**params)
+            google_stream = client.aio.models.generate_content_stream(**_prepare_sdk_params(params))
             stream.push(StartEvent(partial=output))
 
             current_block: TextContent | ThinkingContent | None = None
@@ -431,8 +431,9 @@ def build_params(
     options: StreamOptions | Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     signal = _option(options, "signal")
-    if _is_aborted(signal):
-        raise RuntimeError("Request was aborted")
+    if signal is not None:
+        if _is_aborted(signal):
+            raise RuntimeError("Request aborted")
 
     contents = convert_messages(model, context)
 
@@ -469,11 +470,22 @@ def build_params(
     elif model.reasoning and thinking is not None and not _nested_option(thinking, "enabled", True):
         config["thinkingConfig"] = get_disabled_thinking_config(model)
 
+    if signal is not None:
+        config["abortSignal"] = signal
+
     return {
         "model": model.id,
         "contents": contents,
         "config": config,
     }
+
+
+def _prepare_sdk_params(params: Mapping[str, Any]) -> dict[str, Any]:
+    sdk_params = dict(params)
+    config = sdk_params.get("config")
+    if isinstance(config, Mapping) and "abortSignal" in config:
+        sdk_params["config"] = {key: value for key, value in config.items() if key != "abortSignal"}
+    return sdk_params
 
 
 def get_disabled_thinking_config(model: Model) -> dict[str, Any]:
