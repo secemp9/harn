@@ -13,15 +13,17 @@ def _base64url_encode(data: bytes) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class PKCECodes:
+class _PKCECodes:
     verifier: str
     challenge: str
 
 
-async def generate_pkce() -> PKCECodes:
+async def generate_pkce() -> _PKCECodes:
     verifier = _base64url_encode(secrets.token_bytes(32))
     challenge = _base64url_encode(hashlib.sha256(verifier.encode("utf-8")).digest())
-    return PKCECodes(verifier=verifier, challenge=challenge)
+    return _PKCECodes(verifier=verifier, challenge=challenge)
 
 
 generatePKCE = generate_pkce
+
+__all__ = ["generatePKCE", "generate_pkce"]
