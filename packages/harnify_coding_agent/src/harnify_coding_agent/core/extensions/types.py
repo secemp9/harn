@@ -542,40 +542,46 @@ type InputEventResult = InputEventContinueResult | InputEventTransformResult | I
 class ToolCallEventBase(TypedDict):
     type: Literal["tool_call"]
     toolCallId: str
-    toolName: str
-    input: dict[str, Any]
 
 
 class BashToolCallEvent(ToolCallEventBase):
     toolName: Literal["bash"]
+    input: BashToolInput
 
 
 class ReadToolCallEvent(ToolCallEventBase):
     toolName: Literal["read"]
+    input: ReadToolInput
 
 
 class EditToolCallEvent(ToolCallEventBase):
     toolName: Literal["edit"]
+    input: EditToolInput
 
 
 class WriteToolCallEvent(ToolCallEventBase):
     toolName: Literal["write"]
+    input: WriteToolInput
 
 
 class GrepToolCallEvent(ToolCallEventBase):
     toolName: Literal["grep"]
+    input: GrepToolInput
 
 
 class FindToolCallEvent(ToolCallEventBase):
     toolName: Literal["find"]
+    input: FindToolInput
 
 
 class LsToolCallEvent(ToolCallEventBase):
     toolName: Literal["ls"]
+    input: LsToolInput
 
 
 class CustomToolCallEvent(ToolCallEventBase):
     toolName: str
+    input: dict[str, Any]
 
 
 type ToolCallEvent = (
@@ -593,43 +599,49 @@ type ToolCallEvent = (
 class ToolResultEventBase(TypedDict):
     type: Literal["tool_result"]
     toolCallId: str
-    toolName: str
     input: dict[str, Any]
     content: list[TextContent | ImageContent]
-    details: Any
     isError: bool
 
 
 class BashToolResultEvent(ToolResultEventBase):
     toolName: Literal["bash"]
+    details: BashToolDetails | None
 
 
 class ReadToolResultEvent(ToolResultEventBase):
     toolName: Literal["read"]
+    details: ReadToolDetails | None
 
 
 class EditToolResultEvent(ToolResultEventBase):
     toolName: Literal["edit"]
+    details: EditToolDetails | None
 
 
 class WriteToolResultEvent(ToolResultEventBase):
     toolName: Literal["write"]
+    details: None
 
 
 class GrepToolResultEvent(ToolResultEventBase):
     toolName: Literal["grep"]
+    details: GrepToolDetails | None
 
 
 class FindToolResultEvent(ToolResultEventBase):
     toolName: Literal["find"]
+    details: FindToolDetails | None
 
 
 class LsToolResultEvent(ToolResultEventBase):
     toolName: Literal["ls"]
+    details: LsToolDetails | None
 
 
 class CustomToolResultEvent(ToolResultEventBase):
     toolName: str
+    details: Any
 
 
 type ToolResultEvent = (
@@ -683,8 +695,8 @@ class ToolCallEventResult(TypedDict, total=False):
 
 
 class UserBashEventResult(TypedDict, total=False):
-    operations: Any
-    result: Any
+    operations: BashOperations
+    result: BashResult
 
 
 class ToolResultEventResult(TypedDict, total=False):
