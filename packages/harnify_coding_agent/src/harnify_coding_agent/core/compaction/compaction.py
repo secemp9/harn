@@ -15,13 +15,13 @@ from harnify_ai.stream import complete_simple
 from harnify_ai.types import AssistantMessage, Model, SimpleStreamOptions, Usage, UserMessage
 
 from harnify_coding_agent.core.compaction.utils import (
-    SUMMARIZATION_SYSTEM_PROMPT,
+    SUMMARIZATION_SYSTEM_PROMPT as _SUMMARIZATION_SYSTEM_PROMPT,
     FileOperations,
     compute_file_lists,
     create_file_ops,
     extract_file_ops_from_message,
     format_file_operations,
-    serialize_conversation,
+    serialize_conversation as _serialize_conversation,
 )
 from harnify_coding_agent.core.messages import (
     convert_to_llm,
@@ -43,7 +43,7 @@ class CompactionResult:
     summary: str
     firstKeptEntryId: str
     tokensBefore: int
-    details: CompactionDetails | dict[str, list[str]] | None = None
+    details: Any | None = None
 
 
 @dataclass(slots=True)
@@ -86,7 +86,7 @@ DEFAULT_COMPACTION_SETTINGS = CompactionSettings(
     keepRecentTokens=20000,
 )
 
-SUMMARIZATION_PROMPT = """The messages above are a conversation to summarize.
+_SUMMARIZATION_PROMPT = """The messages above are a conversation to summarize.
 Create a structured context checkpoint summary that another LLM will use to continue the work.
 
 Use this EXACT format:
@@ -120,7 +120,7 @@ Use this EXACT format:
 
 Keep each section concise. Preserve exact file paths, function names, and error messages."""
 
-UPDATE_SUMMARIZATION_PROMPT = """The messages above are NEW conversation messages to incorporate
+_UPDATE_SUMMARIZATION_PROMPT = """The messages above are NEW conversation messages to incorporate
 into the existing summary provided in <previous-summary> tags.
 
 Update the existing structured summary with new information. RULES:
@@ -160,7 +160,7 @@ Use this EXACT format:
 
 Keep each section concise. Preserve exact file paths, function names, and error messages."""
 
-TURN_PREFIX_SUMMARIZATION_PROMPT = """This is the PREFIX of a turn that was too large to keep.
+_TURN_PREFIX_SUMMARIZATION_PROMPT = """This is the PREFIX of a turn that was too large to keep.
 The SUFFIX (recent work) is retained.
 
 Summarize the prefix to provide context for the retained suffix:
