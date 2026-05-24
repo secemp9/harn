@@ -216,6 +216,7 @@ async def test_extension_api_exec_uses_shared_exec_result_and_per_call_cwd(monke
 
     async def factory(api: Any) -> None:
         seen_results.append(await api.exec("demo", ["--flag"], {"cwd": "/override"}))
+        seen_results.append(await api.exec("demo", ["--empty"], {"cwd": ""}))
 
     await load_extension_from_factory(
         factory,
@@ -225,10 +226,22 @@ async def test_extension_api_exec_uses_shared_exec_result_and_per_call_cwd(monke
         extension_path="<inline:exec>",
     )
 
-    assert exec_calls == [("demo", ["--flag"], "/override", {"cwd": "/override"})]
-    assert seen_results == [exec_result]
+    assert exec_calls == [
+        ("demo", ["--flag"], "/override", {"cwd": "/override"}),
+        ("demo", ["--empty"], "", {"cwd": ""}),
+    ]
+    assert seen_results == [exec_result, exec_result]
     assert seen_results[0].code == 7
     assert seen_results[0].killed is True
+
+
+def test_create_extension_runtime_preserves_explicit_empty_provider_extension_path() -> None:
+    runtime = create_extension_runtime()
+
+    runtime.registerProvider("demo", {"apiKey": "key"}, "")
+
+    assert len(runtime.pendingProviderRegistrations) == 1
+    assert runtime.pendingProviderRegistrations[0].extensionPath == ""
 
 
 @pytest.mark.asyncio
