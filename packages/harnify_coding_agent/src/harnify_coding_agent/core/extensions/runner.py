@@ -855,7 +855,9 @@ class ExtensionRunner:
         systemPromptOptions: Any,
     ) -> dict[str, Any] | None:
         current_system_prompt = systemPrompt
-        ctx = self.create_context()
+        extras = _normalize_extras(self.contextFactory() if callable(self.contextFactory) else self.contextFactory)
+        extras["getSystemPrompt"] = lambda: current_system_prompt
+        ctx = _ContextBase(self, extras)
         messages: list[Any] = []
         system_prompt_modified = False
         for extension in self.extensions:

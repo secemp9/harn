@@ -282,8 +282,8 @@ async def test_agent_session_dispose_invalidates_replaced_context_and_queue_help
     await session.bindExtensions({})
 
     ctx = session.createReplacedSessionContext()
-    session.steer("steer this")
-    session.followUp("follow up")
+    await session.steer("steer this")
+    await session.followUp("follow up")
     assert session.pendingMessageCount == 2
 
     session.setSessionName("Named")
@@ -293,6 +293,43 @@ async def test_agent_session_dispose_invalidates_replaced_context_and_queue_help
 
     with pytest.raises(RuntimeError, match="stale after session replacement or reload"):
         _ = ctx.cwd
+
+
+@pytest.mark.asyncio
+async def test_agent_session_extension_command_preserves_raw_argument_spacing(tmp_path: Path) -> None:
+    seen_args: list[str] = []
+
+    def extension_factory(pi: object) -> None:
+        pi.registerCommand(  # type: ignore[attr-defined]
+            "testcmd",
+            {
+                "description": "Test command",
+                "handler": lambda args, _ctx: seen_args.append(args),
+            },
+        )
+
+    session = await _create_loaded_session(tmp_path, extension_factories=[extension_factory])
+    try:
+        await session.prompt("/testcmd  spaced")
+
+        assert seen_args == [" spaced"]
+        assert session.messages == []
+    finally:
+        session.dispose()
+
+
+@pytest.mark.asyncio
+async def test_agent_session_set_thinking_level_off_without_model_keeps_default_setting(tmp_path: Path) -> None:
+    session = _create_session(tmp_path)
+    try:
+        session.settingsManager.setDefaultThinkingLevel("high")
+        session.agent.state.model = None
+
+        session.setThinkingLevel("off")
+
+        assert session.settingsManager.getDefaultThinkingLevel() == "high"
+    finally:
+        session.dispose()
 
 
 @pytest.mark.asyncio

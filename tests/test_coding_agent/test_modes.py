@@ -140,11 +140,11 @@ class _FakeSession:
         if self._listener is not None:
             self._listener({"type": "agent_end", "messages": list(self.messages)})
 
-    def steer(self, text: str, _images: Any = None) -> None:
+    async def steer(self, text: str, _images: Any = None) -> None:
         self.pendingMessageCount += 1
         self._last_steer = text
 
-    def followUp(self, text: str, _images: Any = None) -> None:
+    async def followUp(self, text: str, _images: Any = None) -> None:
         self.pendingMessageCount += 1
         self._last_follow_up = text
 

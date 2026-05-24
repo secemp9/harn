@@ -320,11 +320,11 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
             return None
 
         if command_type == "steer":
-            session.steer(str(command.get("message", "")), command.get("images"))
+            await session.steer(str(command.get("message", "")), command.get("images"))
             return success(request_id, "steer")
 
         if command_type == "follow_up":
-            session.followUp(str(command.get("message", "")), command.get("images"))
+            await session.followUp(str(command.get("message", "")), command.get("images"))
             return success(request_id, "follow_up")
 
         if command_type == "abort":
