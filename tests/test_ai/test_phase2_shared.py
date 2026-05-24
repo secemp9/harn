@@ -70,8 +70,8 @@ async def test_complete_simple_uses_lazy_registered_provider_module(monkeypatch:
     def fake_import_module(name: str):
         if name == "harnify_ai.providers.openai_responses":
             return SimpleNamespace(
-                stream_openai_responses=stream_openai_responses,
-                stream_simple_openai_responses=stream_openai_responses,
+                streamOpenAIResponses=stream_openai_responses,
+                streamSimpleOpenAIResponses=stream_openai_responses,
             )
         return original_import_module(name)
 
