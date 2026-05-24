@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -250,7 +251,9 @@ async def test_stream_google_vertex_strips_abort_signal_before_sdk_call() -> Non
     assert result.stopReason == "stop"
     assert captured_payload is not None
     assert captured_payload["config"]["abortSignal"] is signal
+    assert captured_payload["config"]["toolConfig"] is None
     assert "abortSignal" not in fake_client.aio.models.calls[0]["config"]
+    assert "toolConfig" not in fake_client.aio.models.calls[0]["config"]
 
 
 @pytest.mark.asyncio
