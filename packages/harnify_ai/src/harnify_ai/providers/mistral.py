@@ -150,6 +150,47 @@ def _empty_usage() -> Usage:
     )
 
 
+async def _iterate_with_abort(iterable: AsyncIterable[Any], signal: Any) -> AsyncIterable[Any]:
+    iterator = aiter(iterable)
+
+    while True:
+        if _is_aborted(signal):
+            raise RuntimeError("Request was aborted")
+
+        next_item = anext(iterator, _STREAM_END)
+        wait = getattr(signal, "wait", None)
+        if not callable(wait):
+            item = await next_item
+        else:
+            abort_waiter = wait()
+            if not hasattr(abort_waiter, "__await__"):
+                item = await next_item
+            else:
+                next_task = asyncio.create_task(next_item)
+                abort_task = asyncio.create_task(abort_waiter)
+                try:
+                    done, _ = await asyncio.wait({next_task, abort_task}, return_when=asyncio.FIRST_COMPLETED)
+                    if next_task in done:
+                        item = await next_task
+                    else:
+                        next_task.cancel()
+                        try:
+                            await next_task
+                        except BaseException:
+                            pass
+                        raise RuntimeError("Request was aborted")
+                finally:
+                    abort_task.cancel()
+                    try:
+                        await abort_task
+                    except BaseException:
+                        pass
+
+        if item is _STREAM_END:
+            return
+        yield item
+
+
 def _get_mistral_client_class():
     if _MistralClient is None:
         raise RuntimeError("The `mistralai` package is required for the Mistral provider.")
