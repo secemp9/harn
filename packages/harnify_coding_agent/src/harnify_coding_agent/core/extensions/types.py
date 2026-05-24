@@ -965,8 +965,51 @@ class ExtensionAPI(Protocol):
 type ExtensionFactory = Callable[[ExtensionAPI], Awaitable[None] | None]
 
 
-def is_tool_call_event_type(event_type: str) -> bool:
-    return event_type == "tool_call"
+def define_tool[TTool: ToolDefinition[Any, Any]](tool: TTool) -> TTool:
+    return tool
+
+
+def is_bash_tool_result(event: ToolResultEvent) -> bool:
+    return event["toolName"] == "bash"
+
+
+def is_read_tool_result(event: ToolResultEvent) -> bool:
+    return event["toolName"] == "read"
+
+
+def is_edit_tool_result(event: ToolResultEvent) -> bool:
+    return event["toolName"] == "edit"
+
+
+def is_write_tool_result(event: ToolResultEvent) -> bool:
+    return event["toolName"] == "write"
+
+
+def is_grep_tool_result(event: ToolResultEvent) -> bool:
+    return event["toolName"] == "grep"
+
+
+def is_find_tool_result(event: ToolResultEvent) -> bool:
+    return event["toolName"] == "find"
+
+
+def is_ls_tool_result(event: ToolResultEvent) -> bool:
+    return event["toolName"] == "ls"
+
+
+def is_tool_call_event_type(tool_name: str, event: ToolCallEvent) -> bool:
+    return event["toolName"] == tool_name
+
+
+defineTool = define_tool
+isBashToolResult = is_bash_tool_result
+isReadToolResult = is_read_tool_result
+isEditToolResult = is_edit_tool_result
+isWriteToolResult = is_write_tool_result
+isGrepToolResult = is_grep_tool_result
+isFindToolResult = is_find_tool_result
+isLsToolResult = is_ls_tool_result
+isToolCallEventType = is_tool_call_event_type
 
 
 __all__ = [
