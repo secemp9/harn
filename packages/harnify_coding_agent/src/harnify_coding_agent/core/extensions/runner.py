@@ -892,7 +892,7 @@ class ExtensionRunner:
                         handler_result = await handler_result
                     action = _result_flag(handler_result, "action")
                     if action == "handled":
-                        return dict(handler_result)
+                        return handler_result
                     if action == "transform":
                         current_text = _result_flag(handler_result, "text", current_text)
                         images_result = _result_flag(handler_result, "images", _MISSING)
