@@ -794,137 +794,78 @@ async def test_agent_session_auto_compaction_uses_threshold_hook_path(tmp_path: 
 
 
 @pytest.mark.asyncio
-async def test_agent_session_auto_compaction_recovers_overflow_and_retries(tmp_path: Path) -> None:
-    registration = register_faux_provider(
-        {
-            "models": [
-                {
-                    "id": "overflow-model",
-                    "reasoning": True,
-                    "contextWindow": 100,
-                    "maxTokens": 8_192,
-                }
-            ]
-        }
-    )
-    model = registration.get_model()
-    registration.set_responses(
-        [
-            _faux_message_for_model(
-                faux_assistant_message(
-                    "",
-                    stop_reason="error",
-                    error_message="maximum context length is 100 tokens",
-                ),
-                model,
-                usage=_usage(120, input_tokens=120, output_tokens=0),
-            ),
-            _faux_message_for_model(faux_assistant_message("## Goal\nRecovered context"), model),
-            lambda _context, _options, _state, _model: _faux_message_for_model(
-                faux_assistant_message("recovered"),
-                model,
-                usage=_usage(12, input_tokens=11),
-            ),
-        ]
-    )
-
-    session = _create_session(tmp_path, provider="faux")
-    session.agent.state.model = model
-    session.settingsManager.settings["compaction"] = {"enabled": True, "reserveTokens": 10, "keepRecentTokens": 0}
+async def test_agent_session_check_compaction_does_not_retry_overflow_more_than_once(tmp_path: Path) -> None:
+    session = _create_session(tmp_path)
     events: list[object] = []
     session.subscribe(events.append)
+    calls: list[tuple[str, bool]] = []
+
+    async def fake_run_auto_compaction(reason: str, will_retry: bool) -> bool:
+        calls.append((reason, will_retry))
+        return False
+
+    session._run_auto_compaction = fake_run_auto_compaction  # type: ignore[method-assign]
+    model = session.model
+    assert model is not None
+    overflow_message = _faux_message_for_model(
+        faux_assistant_message("", stop_reason="error", error_message="prompt is too long"),
+        model,
+        usage=_usage(0, input_tokens=0, output_tokens=0),
+    )
 
     try:
-        await session.prompt("overflow please")
-
-        overflow_end = next(
-            event
-            for event in events
-            if _event_type(event) == "compaction_end" and _event_field(event, "reason") == "overflow"
+        await session._check_compaction(overflow_message)  # type: ignore[attr-defined]
+        await session._check_compaction(  # type: ignore[attr-defined]
+            overflow_message.model_copy(update={"timestamp": overflow_message.timestamp + 1})
         )
 
-        assert session.getLastAssistantText() == "recovered"
-        assert _event_field(overflow_end, "aborted") is False
-        assert _event_field(overflow_end, "willRetry") is True
-        assert any(entry.get("type") == "compaction" for entry in session.sessionManager.getEntries())
-        assert all(
-            _event_field(message, "stopReason") != "error"
-            for message in session.agent.state.messages
-            if _event_field(message, "role") == "assistant"
+        assert calls == [("overflow", True)]
+        assert any(
+            _event_type(event) == "compaction_end"
+            and _event_field(event, "reason") == "overflow"
+            and "failed after one compact-and-retry attempt" in str(_event_field(event, "errorMessage"))
+            for event in events
         )
     finally:
         session.dispose()
-        registration.unregister()
 
 
 @pytest.mark.asyncio
-async def test_agent_session_overflow_recovery_stops_after_one_retry_attempt(tmp_path: Path) -> None:
-    registration = register_faux_provider(
-        {
-            "models": [
-                {
-                    "id": "overflow-model",
-                    "reasoning": True,
-                    "contextWindow": 100,
-                    "maxTokens": 8_192,
-                }
-            ]
-        }
-    )
-    model = registration.get_model()
-    overflow_error = _faux_message_for_model(
-        faux_assistant_message(
-            "",
-            stop_reason="error",
-            error_message="maximum context length is 100 tokens",
-        ),
+async def test_agent_session_check_compaction_ignores_stale_pre_compaction_assistant_usage(tmp_path: Path) -> None:
+    session = _create_session(tmp_path)
+    calls: list[tuple[str, bool]] = []
+
+    async def fake_run_auto_compaction(reason: str, will_retry: bool) -> bool:
+        calls.append((reason, will_retry))
+        return False
+
+    session._run_auto_compaction = fake_run_auto_compaction  # type: ignore[method-assign]
+    model = session.model
+    assert model is not None
+    stale_timestamp = int(time.time() * 1000) - 10_000
+    stale_assistant = _faux_message_for_model(
+        faux_assistant_message("large response before compaction", timestamp=stale_timestamp),
         model,
-        usage=_usage(120, input_tokens=120, output_tokens=0),
+        usage=_usage(610_000, input_tokens=610_000, output_tokens=0),
     )
-
-    async def delayed_overflow(_context: object, _options: object, _state: object, _model: object) -> object:
-        await asyncio.sleep(0.01)
-        return _faux_message_for_model(
-            faux_assistant_message(
-                "",
-                stop_reason="error",
-                error_message="maximum context length is 100 tokens",
-            ),
-            model,
-            usage=_usage(120, input_tokens=120, output_tokens=0),
-        )
-
-    registration.set_responses(
-        [
-            overflow_error,
-            _faux_message_for_model(faux_assistant_message("## Goal\nRecovered context"), model),
-            delayed_overflow,
-        ]
-    )
-
-    session = _create_session(tmp_path, provider="faux")
-    session.agent.state.model = model
-    session.settingsManager.settings["compaction"] = {"enabled": True, "reserveTokens": 10, "keepRecentTokens": 0}
-    events: list[object] = []
-    session.subscribe(events.append)
 
     try:
-        await session.prompt("overflow again")
+        session.sessionManager.appendMessage(
+            {"role": "user", "content": [{"type": "text", "text": "before compaction"}], "timestamp": stale_timestamp - 1000}
+        )
+        session.sessionManager.appendMessage(stale_assistant)
+        first_kept_entry_id = session.sessionManager.getEntries()[0]["id"]
+        session.sessionManager.appendCompaction("summary", first_kept_entry_id, stale_assistant.usage.totalTokens, None, False)
+        session.sessionManager.appendMessage(
+            {"role": "user", "content": [{"type": "text", "text": "after compaction"}], "timestamp": int(time.time() * 1000)}
+        )
+        session.agent.state.messages = session.sessionManager.buildSessionContext().messages
 
-        overflow_events = [
-            event
-            for event in events
-            if _event_type(event) == "compaction_end" and _event_field(event, "reason") == "overflow"
-        ]
+        await session._check_compaction(stale_assistant, False)  # type: ignore[attr-defined]
 
-        assert len([entry for entry in session.sessionManager.getEntries() if entry.get("type") == "compaction"]) == 1
-        assert len(overflow_events) == 2
-        assert _event_field(overflow_events[0], "willRetry") is True
-        assert _event_field(overflow_events[1], "willRetry") is False
-        assert "failed after one compact-and-retry attempt" in str(_event_field(overflow_events[1], "errorMessage"))
+        assert calls == []
     finally:
         session.dispose()
-        registration.unregister()
 
 
 @pytest.mark.asyncio
