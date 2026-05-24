@@ -4,25 +4,66 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict, TypeVar
 
 from harnify_agent.harness.messages import CustomMessage
 from harnify_agent.types import AgentMessage, AgentToolResult, AgentToolUpdateCallback, ThinkingLevel, ToolExecutionMode
-from harnify_ai.types import ImageContent, Model, TextContent
+from harnify_ai.types import (
+    Api,
+    AssistantMessageEvent,
+    AssistantMessageEventStream,
+    Context,
+    ImageContent,
+    Model,
+    SimpleStreamOptions,
+    TextContent,
+    ToolResultMessage,
+)
+from harnify_ai.utils.oauth.types import OAuthCredentials, OAuthLoginCallbacks
+from harnify_tui import AutocompleteItem, AutocompleteProvider, Component, EditorComponent, EditorTheme, KeyId, TUI
 
 from harnify_coding_agent.core.compaction import CompactionResult as SessionCompactionResult
-from harnify_coding_agent.core.session_manager import SessionEntry
+from harnify_coding_agent.core.event_bus import EventBus
+from harnify_coding_agent.core.exec import ExecOptions, ExecResult
+from harnify_coding_agent.core.footer_data_provider import ReadonlyFooterDataProvider
+from harnify_coding_agent.core.keybindings import KeybindingsManager
+from harnify_coding_agent.core.model_registry import ModelRegistry
+from harnify_coding_agent.core.session_manager import (
+    BranchSummaryEntry,
+    CompactionEntry,
+    ReadonlySessionManager,
+    SessionEntry,
+    SessionManager,
+)
 from harnify_coding_agent.core.slash_commands import SlashCommandInfo
 from harnify_coding_agent.core.source_info import SourceInfo
 from harnify_coding_agent.core.system_prompt import BuildSystemPromptOptions
+from harnify_coding_agent.modes.interactive.theme.theme import Theme
+
+if TYPE_CHECKING:
+    from harnify_coding_agent.core.bash_executor import BashResult
+    from harnify_coding_agent.core.tools.bash import BashOperations, BashToolDetails, BashToolInput
+    from harnify_coding_agent.core.tools.edit import EditToolDetails, EditToolInput
+    from harnify_coding_agent.core.tools.find import FindToolDetails, FindToolInput
+    from harnify_coding_agent.core.tools.grep import GrepToolDetails, GrepToolInput
+    from harnify_coding_agent.core.tools.ls import LsToolDetails, LsToolInput
+    from harnify_coding_agent.core.tools.read import ReadToolDetails, ReadToolInput
+    from harnify_coding_agent.core.tools.write import WriteToolInput
 
 TArgs = TypeVar("TArgs")
 TDetails = TypeVar("TDetails")
 TEvent = TypeVar("TEvent")
 TResult = TypeVar("TResult")
 
-type KeyId = str
-type ExtensionUIContext = Any
+type AppKeybinding = str
+type WidgetPlacement = Literal["aboveEditor", "belowEditor"]
+type ExtensionUIDialogOptions = dict[str, Any]
+type ExtensionWidgetOptions = dict[str, WidgetPlacement]
+type TerminalInputResult = dict[str, bool | str]
+type TerminalInputHandler = Callable[[str], TerminalInputResult | None]
+type WorkingIndicatorOptions = dict[str, Any]
+type AutocompleteProviderFactory = Callable[[AutocompleteProvider], AutocompleteProvider]
+type EditorFactory = Callable[[TUI, EditorTheme, KeybindingsManager], EditorComponent]
 type ExtensionErrorListener = Callable[["ExtensionError"], None]
 type NewSessionHandler = Callable[[dict[str, Any] | None], Awaitable[dict[str, bool]]]
 type ForkHandler = Callable[[str, dict[str, Any] | None], Awaitable[dict[str, bool]]]
@@ -32,7 +73,7 @@ type ReloadHandler = Callable[[], Awaitable[None]]
 type ShutdownHandler = Callable[[], None]
 type ModelSelectSource = Literal["set", "cycle", "restore"]
 type InputSource = Literal["interactive", "rpc", "extension"]
-type MessageRenderer[TDetails] = Callable[[TDetails, "MessageRenderOptions", Any], Any]
+type MessageRenderer[TDetails] = Callable[[CustomMessage[TDetails], "MessageRenderOptions", Theme], Component | None]
 type ExtensionHandler[TEvent, TResult] = Callable[
     [TEvent, "ExtensionContext"],
     Awaitable[TResult | None] | TResult | None,
@@ -59,10 +100,10 @@ type GetThinkingLevelHandler = Callable[[], ThinkingLevel]
 type SetThinkingLevelHandler = Callable[[ThinkingLevel], None]
 type RegisterProviderHandler = Callable[[str, "ProviderConfig", str | None], None]
 type UnregisterProviderHandler = Callable[[str, str | None], None]
-type ToolCallRenderer[TArgs] = Callable[[TArgs, Any, "ToolRenderContext"], Any]
+type ToolCallRenderer[TArgs] = Callable[[TArgs, Theme, "ToolRenderContext"], Component]
 type ToolResultRenderer = Callable[
-    [AgentToolResult | Mapping[str, Any], "ToolRenderResultOptions", Any, "ToolRenderContext"],
-    Any,
+    [AgentToolResult | Mapping[str, Any], "ToolRenderResultOptions", Theme, "ToolRenderContext"],
+    Component,
 ]
 type ToolRenderShell = Literal["default", "self"]
 
