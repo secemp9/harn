@@ -427,10 +427,10 @@ def prepare_compaction(
     boundary_start = 0
     if previous_compaction_index >= 0:
         previous_compaction = path_entries[previous_compaction_index]
-        previous_summary = str(previous_compaction.get("summary")) if previous_compaction.get("summary") else None
-        first_kept_entry_id = previous_compaction.get("firstKeptEntryId")
+        previous_summary = _entry_field(previous_compaction, "summary")
+        first_kept_entry_id = _entry_field(previous_compaction, "firstKeptEntryId")
         first_kept_entry_index = next(
-            (index for index, entry in enumerate(path_entries) if entry.get("id") == first_kept_entry_id),
+            (index for index, entry in enumerate(path_entries) if _entry_field(entry, "id") == first_kept_entry_id),
             -1,
         )
         boundary_start = first_kept_entry_index if first_kept_entry_index >= 0 else previous_compaction_index + 1
