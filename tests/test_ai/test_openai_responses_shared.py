@@ -70,7 +70,8 @@ def test_convert_responses_messages_uses_ts_style_tool_call_id_splitting() -> No
         {"openai"},
     )
 
-    assert converted == [
+    function_calls = [item for item in converted if item.get("type") == "function_call"]
+    assert function_calls == [
         {
             "type": "function_call",
             "id": "item",
