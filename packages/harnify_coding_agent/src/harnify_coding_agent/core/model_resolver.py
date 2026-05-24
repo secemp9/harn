@@ -12,6 +12,7 @@ from typing import Any, Literal
 from harnify_ai.models import models_are_equal
 from harnify_ai.types import Model
 
+from harnify_coding_agent.cli.args import isValidThinkingLevel
 from harnify_coding_agent.core.defaults import DEFAULT_THINKING_LEVEL
 
 type ResolvedThinkingLevel = Literal["off", "minimal", "low", "medium", "high", "xhigh"]
@@ -51,12 +52,6 @@ defaultModelPerProvider: dict[str, str] = {
     "xiaomi-token-plan-sgp": "mimo-v2.5-pro",
 }
 
-_VALID_THINKING_LEVELS: set[str] = {"off", "minimal", "low", "medium", "high", "xhigh"}
-
-
-def isValidThinkingLevel(value: str) -> bool:
-    return value in _VALID_THINKING_LEVELS
-
 
 @dataclass(slots=True)
 class ScopedModel:
@@ -92,7 +87,7 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-def isAlias(model_id: str) -> bool:
+def _isAlias(model_id: str) -> bool:
     if model_id.endswith("-latest"):
         return True
     return not bool(re.search(r"-\d{8}$", model_id))
@@ -131,7 +126,7 @@ def findExactModelReferenceMatch(modelReference: str, availableModels: list[Mode
     return id_matches[0] if len(id_matches) == 1 else None
 
 
-def tryMatchModel(modelPattern: str, availableModels: list[Model]) -> Model | None:
+def _tryMatchModel(modelPattern: str, availableModels: list[Model]) -> Model | None:
     exact_match = findExactModelReferenceMatch(modelPattern, availableModels)
     if exact_match is not None:
         return exact_match
@@ -145,19 +140,19 @@ def tryMatchModel(modelPattern: str, availableModels: list[Model]) -> Model | No
     if not matches:
         return None
 
-    aliases = sorted((model for model in matches if isAlias(model.id)), key=lambda item: item.id, reverse=True)
+    aliases = sorted((model for model in matches if _isAlias(model.id)), key=lambda item: item.id, reverse=True)
     if aliases:
         return aliases[0]
 
     dated_versions = sorted(
-        (model for model in matches if not isAlias(model.id)),
+        (model for model in matches if not _isAlias(model.id)),
         key=lambda item: item.id,
         reverse=True,
     )
     return dated_versions[0] if dated_versions else None
 
 
-def buildFallbackModel(provider: str, modelId: str, availableModels: list[Model]) -> Model | None:
+def _buildFallbackModel(provider: str, modelId: str, availableModels: list[Model]) -> Model | None:
     provider_models = [model for model in availableModels if model.provider == provider]
     if not provider_models:
         return None
@@ -172,7 +167,7 @@ def parseModelPattern(
     availableModels: list[Model],
     options: dict[str, Any] | None = None,
 ) -> ParsedModelResult:
-    exact_match = tryMatchModel(pattern, availableModels)
+    exact_match = _tryMatchModel(pattern, availableModels)
     if exact_match is not None:
         return ParsedModelResult(model=exact_match, thinkingLevel=None, warning=None)
 
