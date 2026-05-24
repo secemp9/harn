@@ -1572,6 +1572,9 @@ class AgentSession:
     def _apply_extension_bindings(self, runner: ExtensionRunner) -> None:
         runner.set_ui_context(self._extensionUIContext)
         runner.bind_command_context(self._extensionCommandContextActions)
+        if self._extensionErrorUnsubscriber is not None:
+            self._extensionErrorUnsubscriber()
+            self._extensionErrorUnsubscriber = None
         self._extensionErrorUnsubscriber = (
             runner.on_error(self._extensionErrorListener) if self._extensionErrorListener is not None else None
         )
