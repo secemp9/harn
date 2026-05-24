@@ -618,8 +618,8 @@ class AgentSession:
         return text
 
     def setSessionName(self, name: str | None) -> None:
-        self.sessionManager.appendSessionInfo((name or "").strip())
-        self._emit({"type": "session_info_changed", "name": (name or "").strip() or None})
+        self.sessionManager.appendSessionInfo(name or "")
+        self._emit({"type": "session_info_changed", "name": self.sessionManager.getSessionName()})
 
     def clearQueue(self) -> dict[str, list[str]]:
         steering = list(self._steeringMessages)
