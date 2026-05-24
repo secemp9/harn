@@ -5,7 +5,13 @@ from typing import Any
 
 import pytest
 
-from harnify_ai.providers.google import build_params, stream_google, stream_simple_google
+from harnify_ai.providers.google import (
+    build_params,
+    is_gemini3_flash_model,
+    is_gemini3_pro_model,
+    stream_google,
+    stream_simple_google,
+)
 from harnify_ai.types import Context, Model, ModelCost, SimpleStreamOptions, ThinkingBudgets
 
 
@@ -126,6 +132,51 @@ def test_build_params_maps_disabled_thinking_by_google_model_family(
     )
 
     assert params["config"]["thinkingConfig"] == expected
+
+
+def test_build_params_preserves_abort_signal_for_callback_surface() -> None:
+    signal = object()
+
+    params = build_params(
+        _make_model("gemini-3-flash-preview"),
+        _make_context(),
+        {"signal": signal},
+    )
+
+    assert params["config"]["abortSignal"] is signal
+
+
+def test_build_params_uses_request_aborted_message_for_preaborted_signal() -> None:
+    class _Signal:
+        aborted = True
+
+    with pytest.raises(RuntimeError, match="^Request aborted$"):
+        build_params(
+            _make_model("gemini-3-flash-preview"),
+            _make_context(),
+            {"signal": _Signal()},
+        )
+
+
+@pytest.mark.parametrize(
+    ("model_id", "expected_pro", "expected_flash"),
+    [
+        ("gemini-3-pro-preview", True, False),
+        ("gemini-3.1-pro-preview", True, False),
+        ("gemini-3-flash-preview", False, True),
+        ("gemini-30-pro-preview", False, False),
+        ("gemini-30-flash-preview", False, False),
+    ],
+)
+def test_google_model_family_matchers_follow_upstream_regex(
+    model_id: str,
+    expected_pro: bool,
+    expected_flash: bool,
+) -> None:
+    model = _make_model(model_id)
+
+    assert is_gemini3_pro_model(model) is expected_pro
+    assert is_gemini3_flash_model(model) is expected_flash
 
 
 @pytest.mark.asyncio
@@ -281,3 +332,37 @@ async def test_stream_google_maps_thinking_text_tool_calls_and_usage() -> None:
     assert result.usage.cacheRead == 2
     assert result.usage.totalTokens == 17
     assert fake_client.aio.closed is True
+
+
+@pytest.mark.asyncio
+async def test_stream_google_strips_abort_signal_before_sdk_call() -> None:
+    captured_payload: dict[str, Any] | None = None
+    fake_client = _FakeClient(
+        [
+            _FakeChunk(
+                candidates=[_FakeCandidate(finish_reason=_FakeFinishReason("STOP"))],
+                response_id="resp_abort_signal",
+            )
+        ]
+    )
+    signal = object()
+
+    def on_payload(payload: dict[str, Any], _model: Model) -> None:
+        nonlocal captured_payload
+        captured_payload = payload
+
+    result = await stream_google(
+        _make_model("gemini-3-flash-preview"),
+        _make_context(),
+        {
+            "apiKey": "test-key",
+            "client": fake_client,
+            "signal": signal,
+            "onPayload": on_payload,
+        },
+    ).result()
+
+    assert result.stopReason == "stop"
+    assert captured_payload is not None
+    assert captured_payload["config"]["abortSignal"] is signal
+    assert "abortSignal" not in fake_client.aio.models.calls[0]["config"]
