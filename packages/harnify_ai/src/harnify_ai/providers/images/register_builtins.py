@@ -5,14 +5,15 @@ from __future__ import annotations
 import importlib
 import time
 from types import ModuleType
+from typing import Any
 
 from harnify_ai.images_api_registry import ImagesApiProvider, register_images_api_provider
 from harnify_ai.types import AssistantImages, ImagesContext, ImagesModel, ImagesOptions
 
-_openrouter_images_provider_module: ModuleType | None = None
+_openrouter_images_provider_module: ModuleType | Exception | None = None
 
 
-def _create_lazy_load_error_images(model: ImagesModel, error: BaseException) -> AssistantImages:
+def _create_lazy_load_error_images(model: ImagesModel, error: Any) -> AssistantImages:
     return AssistantImages(
         api=model.api,
         provider=model.provider,
@@ -27,7 +28,13 @@ def _create_lazy_load_error_images(model: ImagesModel, error: BaseException) -> 
 def _load_openrouter_images_provider_module() -> ModuleType:
     global _openrouter_images_provider_module
     if _openrouter_images_provider_module is None:
-        _openrouter_images_provider_module = importlib.import_module("harnify_ai.providers.images.openrouter")
+        try:
+            _openrouter_images_provider_module = importlib.import_module("harnify_ai.providers.images.openrouter")
+        except Exception as error:  # noqa: BLE001
+            _openrouter_images_provider_module = error
+            raise
+    if isinstance(_openrouter_images_provider_module, Exception):
+        raise _openrouter_images_provider_module
     return _openrouter_images_provider_module
 
 
@@ -39,7 +46,7 @@ async def generate_images_openrouter(
     try:
         module = _load_openrouter_images_provider_module()
         return await module.generate_images_openrouter(model, context, options)
-    except BaseException as error:  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001
         return _create_lazy_load_error_images(model, error)
 
 
