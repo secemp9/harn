@@ -932,6 +932,7 @@ def stream_anthropic(
             stopReason="stop",
             timestamp=time.time_ns() // 1_000_000,
         )
+        raw_response: Any = None
 
         try:
             client = _option(options, "client")
@@ -953,8 +954,6 @@ def stream_anthropic(
                     _option(options, "headers"),
                     copilot_dynamic_headers,
                     cache_session_id,
-                    timeout_ms=_option(options, "timeoutMs"),
-                    max_retries=_option(options, "maxRetries"),
                 )
             else:
                 is_oauth = False
@@ -966,11 +965,18 @@ def stream_anthropic(
                 if next_params is not None:
                     params = next_params
 
+            raw_response = await _create_raw_response(client, params, options)
+            await _emit_response_metadata(raw_response, options, model)
             stream.push(StartEvent(partial=output))
             provider_indexes: dict[int, int] = {}
             tool_partial_json: dict[int, str] = {}
 
-            async for event in _iter_anthropic_stream_events(client, params, options, model):
+            if hasattr(raw_response, "http_response") or hasattr(raw_response, "iter_lines") or hasattr(raw_response, "aiter_lines"):
+                event_iter: AsyncIterator[dict[str, Any]] = iterate_anthropic_events(raw_response, _option(options, "signal"))
+            else:
+                event_iter = _iter_event_objects(raw_response, _option(options, "signal"))
+
+            async for event in event_iter:
                 event_type = event.get("type")
                 if event_type == "message_start":
                     message = event.get("message")
@@ -1010,9 +1016,6 @@ def stream_anthropic(
                         stream.push(ThinkingStartEvent(contentIndex=len(output.content) - 1, partial=output))
                     elif block_type == "tool_use":
                         initial_arguments = content_block.get("input")
-                        partial = ""
-                        if isinstance(initial_arguments, dict) and initial_arguments:
-                            partial = json.dumps(initial_arguments)
                         block = ToolCall(
                             id=str(content_block.get("id") or ""),
                             name=(
@@ -1024,7 +1027,7 @@ def stream_anthropic(
                         )
                         output.content.append(block)
                         provider_indexes[provider_index] = len(output.content) - 1
-                        tool_partial_json[provider_index] = partial
+                        tool_partial_json[provider_index] = ""
                         stream.push(ToolCallStartEvent(contentIndex=len(output.content) - 1, partial=output))
                     continue
 
@@ -1068,9 +1071,7 @@ def stream_anthropic(
                     elif isinstance(block, ThinkingContent):
                         stream.push(ThinkingEndEvent(contentIndex=content_index, content=block.thinking, partial=output))
                     elif isinstance(block, ToolCall):
-                        partial_json = tool_partial_json.get(provider_index, "")
-                        if partial_json:
-                            block.arguments = parse_streaming_json(partial_json)
+                        block.arguments = parse_streaming_json(tool_partial_json.get(provider_index, ""))
                         stream.push(ToolCallEndEvent(contentIndex=content_index, toolCall=block, partial=output))
                     continue
 
@@ -1092,6 +1093,7 @@ def stream_anthropic(
             output.errorMessage = _format_anthropic_error(error)
             stream.push(ErrorEvent(reason=output.stopReason, error=output))
         finally:
+            await _close_stream(raw_response)
             stream.end()
 
     asyncio.create_task(run())
