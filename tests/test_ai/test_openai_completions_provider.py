@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 
 import pytest
+import httpx
 
 from harnify_ai.models import get_model
 from harnify_ai.providers.openai_completions import (
@@ -50,10 +52,14 @@ def _usage() -> Usage:
 class _FakeCompletionStream:
     def __init__(self, chunks: list[dict[str, object]]) -> None:
         self._chunks = chunks
+        self.closed = False
 
     async def __aiter__(self) -> AsyncIterator[dict[str, object]]:
         for chunk in self._chunks:
             yield chunk
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 class _FakeCompletions:
@@ -74,6 +80,61 @@ class _FakeChat:
 class _FakeClient:
     def __init__(self, chunks: list[dict[str, object]]) -> None:
         self.chat = _FakeChat(chunks)
+
+
+class _BlockingCompletionStream:
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+        self.closed = False
+        self.cancelled = False
+
+    def __aiter__(self) -> _BlockingCompletionStream:
+        return self
+
+    async def __anext__(self) -> dict[str, object]:
+        self.entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        raise StopAsyncIteration
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class _RawResponse:
+    def __init__(self, parsed: object) -> None:
+        self.http_response = httpx.Response(
+            202,
+            headers={"x-request-id": "req-123"},
+            request=httpx.Request("POST", "https://api.example.test/v1/chat/completions"),
+        )
+        self._parsed = parsed
+
+    async def parse(self) -> object:
+        return self._parsed
+
+
+class _WithRawResponse:
+    def __init__(self, raw_response: _RawResponse) -> None:
+        self.raw_response = raw_response
+        self.calls: list[dict[str, object]] = []
+
+    async def create(self, **kwargs: object) -> _RawResponse:
+        self.calls.append(dict(kwargs))
+        return self.raw_response
+
+
+class _FakeClientWithOptions:
+    def __init__(self, raw_response: _RawResponse) -> None:
+        self.with_options_calls: list[dict[str, object]] = []
+        self.chat = type("Chat", (), {"completions": type("Completions", (), {"with_raw_response": _WithRawResponse(raw_response)})()})()
+
+    def with_options(self, **kwargs: object) -> _FakeClientWithOptions:
+        self.with_options_calls.append(dict(kwargs))
+        return self
 
 
 def test_build_params_omits_empty_tools_and_keeps_tool_history_stub() -> None:
@@ -123,6 +184,17 @@ def test_build_params_omits_empty_tools_and_keeps_tool_history_stub() -> None:
         ),
     )
     assert params_with_history["tools"] == []
+
+
+def test_build_params_preserves_openrouter_off_reasoning_value() -> None:
+    model = _openrouter_auto_model().model_copy(update={"reasoning": True, "thinkingLevelMap": {"off": ""}})
+
+    params = build_params(
+        model,
+        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+    )
+
+    assert params["reasoning"] == {"effort": ""}
 
 
 def test_create_client_cloudflare_gateway_uses_compat_base_url_and_affinity_headers(monkeypatch) -> None:
@@ -311,3 +383,93 @@ async def test_stream_openai_completions_surfaces_response_model_and_streamed_bl
     assert result.content[0].text == "hi"
     assert result.content[1].thinking == "think"
     assert result.content[2].arguments == {"city": "Paris"}
+
+
+@pytest.mark.asyncio
+async def test_stream_openai_completions_applies_request_timeout_retries_and_on_response() -> None:
+    raw_response = _RawResponse(
+        _FakeCompletionStream(
+            [
+                {
+                    "id": "chatcmpl-raw-1",
+                    "choices": [{"index": 0, "delta": {"content": "ok"}, "finish_reason": "stop"}],
+                }
+            ]
+        )
+    )
+    fake_client = _FakeClientWithOptions(raw_response)
+    captured: dict[str, object] = {}
+
+    async def on_response(metadata: dict[str, object], model: Model) -> None:
+        captured["metadata"] = metadata
+        captured["model"] = model
+
+    result = await stream_openai_completions(
+        _openai_model(),
+        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+        {"client": fake_client, "timeoutMs": 2500, "maxRetries": 7, "onResponse": on_response},
+    ).result()
+
+    assert fake_client.with_options_calls == [{"timeout": 2.5, "max_retries": 7}]
+    assert fake_client.chat.completions.with_raw_response.calls == [
+        {
+            "model": _openai_model().id,
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "store": False,
+            "prompt_cache_key": None,
+            "prompt_cache_retention": None,
+        }
+    ]
+    assert captured["metadata"] == {"status": 202, "headers": {"x-request-id": "req-123"}}
+    assert captured["model"].provider == "openai"
+    assert result.content[0].text == "ok"
+
+
+@pytest.mark.asyncio
+async def test_stream_openai_completions_short_circuits_preaborted_signal() -> None:
+    signal = asyncio.Event()
+    signal.set()
+    fake_client = _FakeClient(
+        [{"id": "chatcmpl-preabort", "choices": [{"index": 0, "delta": {"content": "nope"}, "finish_reason": "stop"}]}]
+    )
+
+    result = await stream_openai_completions(
+        _openai_model(),
+        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+        {"client": fake_client, "signal": signal},
+    ).result()
+
+    assert fake_client.chat.completions.params is None
+    assert result.stopReason == "aborted"
+    assert result.errorMessage == "Request was aborted"
+
+
+@pytest.mark.asyncio
+async def test_stream_openai_completions_aborts_while_waiting_for_stream_chunk() -> None:
+    signal = asyncio.Event()
+    blocking_stream = _BlockingCompletionStream()
+    fake_client = _FakeClient([])
+    fake_client.chat.completions = _FakeCompletions([])
+
+    async def create(**kwargs: object) -> _BlockingCompletionStream:
+        fake_client.chat.completions.params = dict(kwargs)
+        return blocking_stream
+
+    fake_client.chat.completions.create = create  # type: ignore[method-assign]
+
+    stream = stream_openai_completions(
+        _openai_model(),
+        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+        {"client": fake_client, "signal": signal},
+    )
+    await asyncio.wait_for(blocking_stream.entered.wait(), timeout=1)
+    signal.set()
+
+    result = await asyncio.wait_for(stream.result(), timeout=1)
+
+    assert result.stopReason == "aborted"
+    assert result.errorMessage == "Request was aborted"
+    assert blocking_stream.closed is True
+    assert blocking_stream.cancelled is True
