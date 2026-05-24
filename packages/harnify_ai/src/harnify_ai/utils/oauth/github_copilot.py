@@ -6,7 +6,7 @@ import asyncio
 import base64
 import json
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import httpx
 
@@ -90,7 +90,7 @@ async def _start_device_flow(domain: str) -> dict[str, Any]:
             "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": "GitHubCopilotChat/0.35.0",
         },
-        content=httpx.QueryParams({"client_id": CLIENT_ID, "scope": "read:user"}).encode(),
+        content=urlencode({"client_id": CLIENT_ID, "scope": "read:user"}).encode(),
     )
     if not isinstance(data, dict):
         raise RuntimeError("Invalid device code response")
@@ -122,7 +122,7 @@ async def _poll_for_github_access_token(domain: str, device: dict[str, Any], sig
                 "Content-Type": "application/x-www-form-urlencoded",
                 "User-Agent": "GitHubCopilotChat/0.35.0",
             },
-            content=httpx.QueryParams(
+            content=urlencode(
                 {
                     "client_id": CLIENT_ID,
                     "device_code": device["device_code"],
