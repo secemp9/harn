@@ -28,22 +28,27 @@ class AssistantMessageDiagnostic(_DiagnosticsModel):
 
 
 def format_thrown_value(value: Any) -> str:
-    if isinstance(value, BaseException):
-        return str(value) or value.__class__.__name__
+    if isinstance(value, Exception):
+        name = getattr(value, "name", value.__class__.__name__)
+        return str(value) or name
     if isinstance(value, str):
         return value
     return str(value)
 
 
 def extract_diagnostic_error(error: Any) -> DiagnosticErrorInfo:
-    if not isinstance(error, BaseException):
+    if not isinstance(error, Exception):
         return DiagnosticErrorInfo(name="ThrownValue", message=format_thrown_value(error))
 
     code = getattr(error, "code", None)
+    name = getattr(error, "name", None) or error.__class__.__name__ or None
+    stack = getattr(error, "stack", None)
+    if not isinstance(stack, str):
+        stack = "".join(traceback.format_exception(error)).rstrip() or None
     return DiagnosticErrorInfo(
-        name=error.__class__.__name__ or None,
-        message=str(error) or error.__class__.__name__,
-        stack="".join(traceback.format_exception(error)).rstrip() or None,
+        name=name,
+        message=str(error) or name,
+        stack=stack,
         code=code if isinstance(code, (str, int)) else None,
     )
 
@@ -71,3 +76,16 @@ formatThrownValue = format_thrown_value
 extractDiagnosticError = extract_diagnostic_error
 createAssistantMessageDiagnostic = create_assistant_message_diagnostic
 appendAssistantMessageDiagnostic = append_assistant_message_diagnostic
+
+__all__ = [
+    "AssistantMessageDiagnostic",
+    "DiagnosticErrorInfo",
+    "appendAssistantMessageDiagnostic",
+    "append_assistant_message_diagnostic",
+    "createAssistantMessageDiagnostic",
+    "create_assistant_message_diagnostic",
+    "extractDiagnosticError",
+    "extract_diagnostic_error",
+    "formatThrownValue",
+    "format_thrown_value",
+]
