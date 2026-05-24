@@ -48,7 +48,8 @@ def _get_base_url_from_token(token: str) -> str | None:
     match = re.search(r"proxy-ep=([^;]+)", token)
     if not match:
         return None
-    return f"https://{re.sub(r'^proxy\\.', 'api.', match.group(1))}"
+    api_host = re.sub(r"^proxy\.", "api.", match.group(1))
+    return f"https://{api_host}"
 
 
 def _signal_aborted(signal: Any) -> bool:
