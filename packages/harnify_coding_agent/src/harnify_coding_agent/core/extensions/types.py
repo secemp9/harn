@@ -139,12 +139,6 @@ class ToolInfo:
 class RegisteredTool:
     definition: ToolDefinition[Any, Any]
     sourceInfo: SourceInfo
-    name: str | None = None
-    sourcePath: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.name is None:
-            self.name = self.definition.name
 
 
 @dataclass(slots=True)
@@ -181,7 +175,7 @@ class ExtensionShortcut:
 class ProviderModelConfig(TypedDict, total=False):
     id: str
     name: str
-    api: str
+    api: Api
     baseUrl: str
     reasoning: bool
     thinkingLevelMap: dict[str, str | None]
@@ -195,36 +189,22 @@ class ProviderModelConfig(TypedDict, total=False):
 
 class OAuthProviderConfig(TypedDict, total=False):
     name: str
-    login: Callable[[Any], Awaitable[Any]]
-    refreshToken: Callable[[Any], Awaitable[Any]]
-    getApiKey: Callable[[Any], str]
-    modifyModels: Callable[[list[Model[Any]], Any], list[Model[Any]]]
+    login: Callable[[OAuthLoginCallbacks], Awaitable[OAuthCredentials]]
+    refreshToken: Callable[[OAuthCredentials], Awaitable[OAuthCredentials]]
+    getApiKey: Callable[[OAuthCredentials], str]
+    modifyModels: Callable[[list[Model[Any]], OAuthCredentials], list[Model[Any]]]
 
 
 class ProviderConfig(TypedDict, total=False):
     name: str
     baseUrl: str
     apiKey: str
-    api: str
-    streamSimple: Callable[[Model[Any], Any, Any | None], Any]
+    api: Api
+    streamSimple: Callable[[Model[Any], Context, SimpleStreamOptions | None], AssistantMessageEventStream]
     headers: dict[str, str]
     authHeader: bool
     models: list[ProviderModelConfig]
     oauth: OAuthProviderConfig
-
-
-class ExecOptions(TypedDict, total=False):
-    cwd: str
-    env: dict[str, str]
-    input: str
-    timeoutMs: int
-
-
-@dataclass(slots=True)
-class ExecResult:
-    stdout: str
-    stderr: str
-    exitCode: int | None
 
 
 @dataclass(slots=True)
