@@ -10,7 +10,6 @@ import os
 import re
 import time
 from collections.abc import Callable, Sequence
-from copy import copy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
