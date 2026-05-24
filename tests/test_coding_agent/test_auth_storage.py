@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
 import pytest
 from harnify_ai.utils.oauth import registerOAuthProvider, resetOAuthProviders
 from harnify_ai.utils.oauth.types import OAuthCredentials
-from harnify_coding_agent.core.auth_storage import AuthStorage, InMemoryAuthStorageBackend
+from harnify_coding_agent.core.auth_storage import AuthStorage, FileAuthStorageBackend, InMemoryAuthStorageBackend
 from harnify_coding_agent.core.resolve_config_value import clearConfigValueCache
 
 
@@ -175,6 +176,32 @@ def test_non_object_json_storage_uses_ts_style_object_coercion(tmp_path: Path) -
         "1": {"type": "api_key", "key": "array-key"},
         "anthropic": {"type": "api_key", "key": "new-anthropic"},
     }
+
+
+@pytest.mark.asyncio
+async def test_async_lock_compromise_raises_matching_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    auth_path = tmp_path / "auth.json"
+    backend = FileAuthStorageBackend(str(auth_path))
+    calls = 0
+    real_assert = backend._assert_lock_uncompromised
+
+    def compromised(expected_signature: tuple[int, int] | None) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("Auth storage lock was compromised")
+        real_assert(expected_signature)
+
+    monkeypatch.setattr(backend, "_assert_lock_uncompromised", compromised)
+
+    async def read_only(_current: str | None):
+        await asyncio.sleep(0)
+        from harnify_coding_agent.core.auth_storage import LockResult
+
+        return LockResult(result="ok")
+
+    with pytest.raises(RuntimeError, match="Auth storage lock was compromised"):
+        await backend.withLockAsync(read_only)
 
 
 @pytest.mark.asyncio
