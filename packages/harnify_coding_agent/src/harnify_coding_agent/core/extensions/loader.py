@@ -30,7 +30,7 @@ from harnify_coding_agent.core.extensions.types import (
     ToolInfo,
     _LoadedExtension,
 )
-from harnify_coding_agent.core.source_info import SourceInfo, create_synthetic_source_info
+from harnify_coding_agent.core.source_info import create_synthetic_source_info
 from harnify_coding_agent.utils.paths import resolve_path
 
 CONFIG_DIR_NAME = ".harnify"
@@ -176,10 +176,6 @@ def _not_initialized(*_args: Any, **_kwargs: Any) -> Any:
     raise RuntimeError("Extension runtime not initialized. Action methods cannot be called during extension loading.")
 
 
-async def _not_initialized_async(*_args: Any, **_kwargs: Any) -> Any:
-    raise RuntimeError("Extension runtime not initialized. Action methods cannot be called during extension loading.")
-
-
 async def _set_model_not_initialized(*_args: Any, **_kwargs: Any) -> Any:
     raise RuntimeError("Extension runtime not initialized")
 
@@ -198,7 +194,10 @@ def create_extension_runtime() -> ExtensionRuntime:
             message
             or (
                 "This extension ctx is stale after session replacement or reload. "
-                "Do not use a captured context after replacement."
+                "Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), "
+                "ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, "
+                "move post-replacement work into withSession and use the ctx passed to withSession. "
+                "For reload, do not use the old ctx after await ctx.reload()."
             )
         )
 
