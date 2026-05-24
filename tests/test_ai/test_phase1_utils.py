@@ -8,6 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 import harnify_ai.env_api_keys as env_api_keys
+import harnify_ai.utils.validation as validation_utils
 from harnify_ai.session_resources import cleanup_session_resources, register_session_resource_cleanup
 from harnify_ai.types import AssistantMessage, Tool, ToolCall, Usage, UsageCost
 from harnify_ai.utils.hash import short_hash
@@ -157,3 +158,58 @@ def test_validate_tool_arguments_supports_pydantic_models_and_raw_json_schema() 
 
     with pytest.raises(ValueError, match='Validation failed for tool "counter"'):
         validate_tool_arguments(raw_tool, ToolCall(id="5", name="counter", arguments={"count": "nope"}))
+
+
+def test_validate_tool_arguments_matches_ts_coercion_edges() -> None:
+    tool = Tool(
+        name="coerce",
+        description="Coercion tool",
+        parameters={
+            "type": "object",
+            "properties": {
+                "flag": {"type": "string"},
+                "count": {"type": ["integer", "string"]},
+            },
+            "required": ["flag", "count"],
+        },
+    )
+
+    arguments = validate_tool_arguments(
+        tool,
+        ToolCall(id="6", name="coerce", arguments={"flag": True, "count": 1.0}),
+    )
+
+    assert arguments["flag"] == "true"
+    assert isinstance(arguments["count"], float)
+    assert arguments["count"] == 1.0
+
+
+def test_validate_tool_arguments_formats_received_arguments_as_pretty_json() -> None:
+    tool = Tool(
+        name="counter",
+        description="Counter tool",
+        parameters={
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+            },
+            "required": ["count"],
+        },
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        validate_tool_arguments(tool, ToolCall(id="7", name="counter", arguments={"count": "nope"}))
+
+    message = str(exc_info.value)
+    assert 'Validation failed for tool "counter"' in message
+    assert 'Received arguments:\n{\n  "count": "nope"\n}' in message
+    assert "{'count': 'nope'}" not in message
+
+
+def test_validation_module_exports_expected_names() -> None:
+    assert validation_utils.__all__ == [
+        "validateToolArguments",
+        "validateToolCall",
+        "validate_tool_arguments",
+        "validate_tool_call",
+    ]
