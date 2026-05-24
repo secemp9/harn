@@ -406,6 +406,47 @@ def test_parse_retry_after_delay_ms_supports_http_date(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_parse_error_response_formats_usage_limit_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = 1_700_000_000
+    monkeypatch.setattr(codex_provider.time, "time", lambda: now)
+    response = httpx.Response(
+        429,
+        text=json.dumps(
+            {
+                "error": {
+                    "code": "usage_limit_reached",
+                    "plan_type": "PLUS",
+                    "resets_at": now + 180,
+                }
+            }
+        ),
+        request=httpx.Request("POST", "https://chatgpt.com/backend-api/codex/responses"),
+    )
+
+    info = await parse_error_response(response)
+
+    assert info == {
+        "message": "You have hit your ChatGPT usage limit (plus plan). Try again in ~3 min.",
+        "friendlyMessage": "You have hit your ChatGPT usage limit (plus plan). Try again in ~3 min.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_parse_sse_ignores_trailing_chunk_without_separator() -> None:
+    stream = _ListByteStream([b'data: {"type":"response.completed"}'])
+    response = httpx.Response(
+        200,
+        headers={"content-type": "text/event-stream"},
+        stream=stream,
+        request=httpx.Request("POST", "https://chatgpt.com/backend-api/codex/responses"),
+    )
+
+    events = [event async for event in parse_sse(response)]
+
+    assert events == []
+
+
+@pytest.mark.asyncio
 async def test_stream_simple_openai_codex_responses_preserves_xhigh_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
     captured_payload: dict[str, object] | None = None
 
