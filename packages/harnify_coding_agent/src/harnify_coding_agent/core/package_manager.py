@@ -283,7 +283,7 @@ def _add_ignore_rules(matcher: _IgnoreMatcher, dir_path: str, root_dir: str) -> 
 
 
 def _is_pattern(value: str) -> bool:
-    return value.startswith(("!", "+", "-")) or any(char in value for char in "*?[]")
+    return value.startswith(("!", "+", "-")) or "*" in value or "?" in value
 
 
 def _is_override_pattern(value: str) -> bool:
@@ -291,7 +291,7 @@ def _is_override_pattern(value: str) -> bool:
 
 
 def _has_glob_pattern(value: str) -> bool:
-    return any(char in value for char in "*?[]")
+    return "*" in value or "?" in value
 
 
 def _split_patterns(entries: list[str]) -> tuple[list[str], list[str]]:
@@ -304,7 +304,7 @@ def _split_patterns(entries: list[str]) -> tuple[list[str], list[str]]:
 
 def _match_pattern(pattern: str, *candidates: str) -> bool:
     normalized = _to_posix_path(pattern)
-    return any(fnmatch.fnmatchcase(candidate, normalized) for candidate in candidates)
+    return any(wc_glob.globmatch(candidate, normalized, flags=_GLOB_MATCH_FLAGS) for candidate in candidates)
 
 
 def _matches_any_pattern(file_path: str, patterns: list[str], base_dir: str) -> bool:
@@ -330,6 +330,8 @@ def _normalize_exact_pattern(pattern: str) -> str:
 
 
 def _matches_any_exact_pattern(file_path: str, patterns: list[str], base_dir: str) -> bool:
+    if not patterns:
+        return False
     rel = _to_posix_path(os.path.relpath(file_path, base_dir))
     full = _to_posix_path(file_path)
     if any(_normalize_exact_pattern(pattern) in {rel, full} for pattern in patterns):
@@ -389,12 +391,26 @@ def _read_pi_manifest(package_root: str) -> PiManifest | None:
     package_json_path = os.path.join(package_root, "package.json")
     if not os.path.exists(package_json_path):
         return None
+    return _read_pi_manifest_file(package_json_path)
+
+
+def _read_pi_manifest_file(package_json_path: str) -> PiManifest | None:
     try:
         payload = json.loads(Path(package_json_path).read_text(encoding="utf-8"))
     except Exception:
         return None
     manifest = payload.get("pi")
     return cast(PiManifest, manifest) if isinstance(manifest, dict) else None
+
+
+def _resolve_dir_entry(entry: os.DirEntry[str]) -> tuple[bool, bool]:
+    is_dir = entry.is_dir(follow_symlinks=False)
+    is_file = entry.is_file(follow_symlinks=False)
+    if entry.is_symlink():
+        stats = os.stat(entry.path)
+        is_dir = stat_module.S_ISDIR(stats.st_mode)
+        is_file = stat_module.S_ISREG(stats.st_mode)
+    return is_dir, is_file
 
 
 def _collect_files(
@@ -413,14 +429,13 @@ def _collect_files(
     files: list[str] = []
     try:
         for entry in os.scandir(dir_path):
-            if entry.name.startswith(".") and entry.name not in IGNORE_FILE_NAMES:
+            if entry.name.startswith("."):
                 continue
             if skip_node_modules and entry.name == "node_modules":
                 continue
             full_path = entry.path
             try:
-                is_dir = entry.is_dir(follow_symlinks=True)
-                is_file = entry.is_file(follow_symlinks=True)
+                is_dir, is_file = _resolve_dir_entry(entry)
             except OSError:
                 continue
             rel_path = _to_posix_path(os.path.relpath(full_path, root))
@@ -466,7 +481,7 @@ def _collect_skill_entries(
             continue
         full_path = entry.path
         try:
-            is_file = entry.is_file(follow_symlinks=True)
+            _is_dir, is_file = _resolve_dir_entry(entry)
         except OSError:
             continue
         rel_path = _to_posix_path(os.path.relpath(full_path, root))
@@ -478,8 +493,7 @@ def _collect_skill_entries(
             continue
         full_path = entry.path
         try:
-            is_dir = entry.is_dir(follow_symlinks=True)
-            is_file = entry.is_file(follow_symlinks=True)
+            is_dir, is_file = _resolve_dir_entry(entry)
         except OSError:
             continue
         rel_path = _to_posix_path(os.path.relpath(full_path, root))
@@ -498,6 +512,10 @@ def _collect_skill_entries(
     return entries
 
 
+def _collect_auto_skill_entries(dir_path: str, mode: Literal["pi", "agents"]) -> list[str]:
+    return _collect_skill_entries(dir_path, mode)
+
+
 def _collect_auto_prompt_entries(dir_path: str) -> list[str]:
     if not os.path.isdir(dir_path):
         return []
@@ -509,7 +527,7 @@ def _collect_auto_prompt_entries(dir_path: str) -> list[str]:
             if entry.name.startswith(".") or entry.name == "node_modules":
                 continue
             try:
-                is_file = entry.is_file(follow_symlinks=True)
+                _is_dir, is_file = _resolve_dir_entry(entry)
             except OSError:
                 continue
             rel_path = _to_posix_path(os.path.relpath(entry.path, dir_path))
@@ -531,7 +549,7 @@ def _collect_auto_theme_entries(dir_path: str) -> list[str]:
             if entry.name.startswith(".") or entry.name == "node_modules":
                 continue
             try:
-                is_file = entry.is_file(follow_symlinks=True)
+                _is_dir, is_file = _resolve_dir_entry(entry)
             except OSError:
                 continue
             rel_path = _to_posix_path(os.path.relpath(entry.path, dir_path))
