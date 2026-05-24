@@ -17,6 +17,7 @@ from typing import Any
 from harnify_agent.agent import AbortController, Agent
 from harnify_agent.types import AgentMessage, AgentState, AgentTool, ThinkingLevel
 from harnify_ai.models import clamp_thinking_level, get_supported_thinking_levels, models_are_equal
+from harnify_ai.providers.register_builtins import reset_api_providers
 from harnify_ai.session_resources import cleanup_session_resources
 from harnify_ai.stream import stream_simple
 from harnify_ai.types import AssistantMessage, ImageContent, Model, TextContent, validate_message
@@ -239,14 +240,19 @@ class AgentSession:
         self._retryAttempt = 0
         self._turnIndex = 0
         self._lastAssistantMessage: AssistantMessage | None = None
+        self._baseToolDefinitions: dict[str, Any] = {}
         self._toolRegistry: dict[str, AgentTool] = {}
         self._toolDefinitions: dict[str, _ToolDefinitionEntry] = {}
         self._baseSystemPrompt = ""
         self._baseSystemPromptOptions: BuildSystemPromptOptions = {"cwd": self._cwd}
-        self._extensionRunner = self._create_extension_runner()
 
         self._install_agent_tool_hooks()
-        self.refreshTools()
+        self._build_runtime(
+            {
+                "activeToolNames": self._initialActiveToolNames,
+                "includeAllExtensionTools": True,
+            }
+        )
 
     @property
     def extensionRunner(self) -> ExtensionRunner:
