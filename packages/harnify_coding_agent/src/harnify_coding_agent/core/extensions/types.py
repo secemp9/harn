@@ -856,6 +856,10 @@ class ExtensionRuntime:
     invalidate: Callable[[str | None], None] = lambda _message=None: None
     registerProvider: RegisterProviderHandler = lambda _name, _config, _extension_path=None: None
     unregisterProvider: UnregisterProviderHandler = lambda _name, _extension_path=None: None
+
+
+@dataclass(slots=True)
+class _LoadedExtensionRuntime(ExtensionRuntime):
     loadedModules: dict[str, Any] = field(default_factory=dict)
 
 
@@ -870,6 +874,10 @@ class Extension:
     commands: dict[str, RegisteredCommand] = field(default_factory=dict)
     flags: dict[str, ExtensionFlag] = field(default_factory=dict)
     shortcuts: dict[KeyId, ExtensionShortcut] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class _LoadedExtension(Extension):
     skillPaths: list[str] = field(default_factory=list)
     promptPaths: list[str] = field(default_factory=list)
     themePaths: list[str] = field(default_factory=list)
@@ -899,7 +907,7 @@ class ExtensionContext(Protocol):
     sessionManager: ReadonlySessionManager
     modelRegistry: ModelRegistry
     model: Model[Any] | None
-    signal: Any | None
+    signal: AbortSignal | None
 
     def isIdle(self) -> bool: ...
 
@@ -919,24 +927,24 @@ class ExtensionContext(Protocol):
 class ExtensionCommandContext(ExtensionContext, Protocol):
     async def waitForIdle(self) -> None: ...
 
-    async def newSession(self, options: dict[str, Any] | None = None) -> dict[str, bool]: ...
+    async def newSession(self, options: _NewSessionOptions | None = None) -> dict[str, bool]: ...
 
-    async def fork(self, entryId: str, options: dict[str, Any] | None = None) -> dict[str, bool]: ...
+    async def fork(self, entryId: str, options: _ForkOptions | None = None) -> dict[str, bool]: ...
 
-    async def navigateTree(self, targetId: str, options: dict[str, Any] | None = None) -> dict[str, bool]: ...
+    async def navigateTree(self, targetId: str, options: _NavigateTreeOptions | None = None) -> dict[str, bool]: ...
 
-    async def switchSession(self, sessionPath: str, options: dict[str, Any] | None = None) -> dict[str, bool]: ...
+    async def switchSession(self, sessionPath: str, options: _SwitchSessionOptions | None = None) -> dict[str, bool]: ...
 
     async def reload(self) -> None: ...
 
 
 class ReplacedSessionContext(ExtensionCommandContext, Protocol):
-    async def sendMessage(self, message: Any, options: dict[str, Any] | None = None) -> None: ...
+    async def sendMessage(self, message: _CustomMessagePayload, options: _SendMessageOptions | None = None) -> None: ...
 
     async def sendUserMessage(
         self,
         content: str | list[TextContent | ImageContent],
-        options: dict[str, Any] | None = None,
+        options: _SendUserMessageOptions | None = None,
     ) -> None: ...
 
 
@@ -960,7 +968,7 @@ class ExtensionActions(Protocol):
 class ExtensionContextActions(Protocol):
     getModel: Callable[[], Model[Any] | None]
     isIdle: Callable[[], bool]
-    getSignal: Callable[[], Any | None]
+    getSignal: Callable[[], AbortSignal | None]
     abort: Callable[[], None]
     hasPendingMessages: Callable[[], bool]
     shutdown: Callable[[], None]
@@ -971,16 +979,14 @@ class ExtensionContextActions(Protocol):
 
 class ExtensionCommandContextActions(Protocol):
     waitForIdle: Callable[[], Awaitable[None]]
-    newSession: Callable[[dict[str, Any] | None], Awaitable[dict[str, bool]]]
-    fork: Callable[[str, dict[str, Any] | None], Awaitable[dict[str, bool]]]
-    navigateTree: Callable[[str, dict[str, Any] | None], Awaitable[dict[str, bool]]]
-    switchSession: Callable[[str, dict[str, Any] | None], Awaitable[dict[str, bool]]]
+    newSession: Callable[[_NewSessionOptions | None], Awaitable[dict[str, bool]]]
+    fork: Callable[[str, _ForkOptions | None], Awaitable[dict[str, bool]]]
+    navigateTree: Callable[[str, _NavigateTreeOptions | None], Awaitable[dict[str, bool]]]
+    switchSession: Callable[[str, _SwitchSessionOptions | None], Awaitable[dict[str, bool]]]
     reload: Callable[[], Awaitable[None]]
 
 
 class ExtensionAPI(Protocol):
-    cwd: str
-    extension: Extension
     events: EventBus
 
     def on(self, event: str, handler: Callable[..., Any]) -> None: ...
@@ -1009,12 +1015,12 @@ class ExtensionAPI(Protocol):
 
     def getFlag(self, name: str) -> bool | str | None: ...
 
-    def sendMessage(self, message: Any, options: dict[str, Any] | None = None) -> None: ...
+    def sendMessage(self, message: _CustomMessagePayload, options: _SendMessageOptions | None = None) -> None: ...
 
     def sendUserMessage(
         self,
         content: str | list[TextContent | ImageContent],
-        options: dict[str, Any] | None = None,
+        options: _SendUserMessageOptions | None = None,
     ) -> None: ...
 
     def appendEntry(self, customType: str, data: Any = None) -> None: ...
