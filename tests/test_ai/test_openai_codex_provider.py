@@ -247,6 +247,37 @@ def test_build_request_body_and_headers_include_codex_specific_fields() -> None:
     assert headers["x-client-request-id"] == "session-1"
 
 
+def test_build_request_body_uses_nullish_defaults_like_upstream() -> None:
+    body = build_request_body(
+        _codex_model(),
+        _context(),
+        {"textVerbosity": None, "reasoningEffort": "xhigh", "reasoningSummary": None},
+    )
+
+    assert body["text"] == {"verbosity": "low"}
+    assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+
+
+def test_build_sse_headers_preserve_custom_headers_but_override_reserved_values() -> None:
+    headers = build_sse_headers(
+        {"authorization": "bad", "originator": "bad", "x-base": "1", "accept": "bad"},
+        {"authorization": "worse", "OpenAI-Beta": "bad", "User-Agent": "bad", "x-extra": "2"},
+        "acc_test",
+        _mock_token(),
+        "session-1",
+    )
+
+    assert headers["authorization"].startswith("Bearer ")
+    assert headers["chatgpt-account-id"] == "acc_test"
+    assert headers["originator"] == "pi"
+    assert headers["accept"] == "text/event-stream"
+    assert headers["content-type"] == "application/json"
+    assert headers["OpenAI-Beta"] == "responses=experimental"
+    assert headers["User-Agent"].startswith("pi (")
+    assert headers["x-base"] == "1"
+    assert headers["x-extra"] == "2"
+
+
 def test_extract_account_id_and_resolve_codex_url() -> None:
     token = _mock_token()
 
@@ -255,6 +286,11 @@ def test_extract_account_id_and_resolve_codex_url() -> None:
     assert resolve_codex_url("https://chatgpt.com/backend-api") == "https://chatgpt.com/backend-api/codex/responses"
     assert resolve_codex_url("https://chatgpt.com/backend-api/codex") == "https://chatgpt.com/backend-api/codex/responses"
     assert resolve_codex_url("https://chatgpt.com/backend-api/codex/responses") == "https://chatgpt.com/backend-api/codex/responses"
+
+
+def test_extract_account_id_raises_for_invalid_token() -> None:
+    with pytest.raises(RuntimeError, match="Failed to extract accountId from token"):
+        extract_account_id("not-a-jwt")
 
 
 @pytest.mark.asyncio
