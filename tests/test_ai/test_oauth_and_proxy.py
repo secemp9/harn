@@ -55,6 +55,15 @@ def test_http_proxy_helpers_reject_invalid_proxy_urls(monkeypatch: pytest.Monkey
         node_http_proxy.resolve_http_proxy_url_for_target("https://outside.example/path")
 
 
+def test_http_proxy_module_exports_expected_names() -> None:
+    assert node_http_proxy.__all__ == [
+        "NodeHttpProxyAgents",
+        "UNSUPPORTED_PROXY_PROTOCOL_MESSAGE",
+        "createHttpProxyAgentsForTarget",
+        "resolveHttpProxyUrlForTarget",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_device_code_flow_applies_slow_down_interval_increment(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = {"now": 100.0}
