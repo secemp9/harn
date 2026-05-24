@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, TypeVar
 
 from harnify_agent.harness.messages import CustomMessage
 from harnify_agent.types import AgentMessage, AgentToolResult, AgentToolUpdateCallback, ThinkingLevel, ToolExecutionMode
@@ -19,10 +19,21 @@ from harnify_ai.types import (
     TextContent,
     ToolResultMessage,
 )
+from harnify_ai.utils.typebox_helpers import Static, TSchema
 from harnify_ai.utils.oauth.types import OAuthCredentials, OAuthLoginCallbacks
-from harnify_tui import AutocompleteItem, AutocompleteProvider, Component, EditorComponent, EditorTheme, KeyId, TUI
+from harnify_tui import (
+    AbortSignal,
+    AutocompleteItem,
+    AutocompleteProvider,
+    Component,
+    EditorComponent,
+    EditorTheme,
+    KeyId,
+    OverlayHandle,
+    TUI,
+)
 
-from harnify_coding_agent.core.compaction import CompactionResult as SessionCompactionResult
+from harnify_coding_agent.core.compaction import CompactionPreparation, CompactionResult as SessionCompactionResult
 from harnify_coding_agent.core.event_bus import EventBus
 from harnify_coding_agent.core.exec import ExecOptions, ExecResult
 from harnify_coding_agent.core.footer_data_provider import ReadonlyFooterDataProvider
@@ -54,12 +65,33 @@ TEvent = TypeVar("TEvent")
 TResult = TypeVar("TResult")
 
 type AppKeybinding = str
+type BranchSummaryEntry = SessionEntry
+type CompactionEntry = SessionEntry
 type WidgetPlacement = Literal["aboveEditor", "belowEditor"]
-type ExtensionUIDialogOptions = dict[str, Any]
-type ExtensionWidgetOptions = dict[str, WidgetPlacement]
-type TerminalInputResult = dict[str, bool | str]
+
+
+class ExtensionUIDialogOptions(TypedDict, total=False):
+    signal: AbortSignal
+    timeout: int
+
+
+class ExtensionWidgetOptions(TypedDict, total=False):
+    placement: WidgetPlacement
+
+
+class TerminalInputResult(TypedDict, total=False):
+    consume: bool
+    data: str
+
+
 type TerminalInputHandler = Callable[[str], TerminalInputResult | None]
-type WorkingIndicatorOptions = dict[str, Any]
+
+
+class WorkingIndicatorOptions(TypedDict, total=False):
+    frames: list[str]
+    intervalMs: int
+
+
 type AutocompleteProviderFactory = Callable[[AutocompleteProvider], AutocompleteProvider]
 type EditorFactory = Callable[[TUI, EditorTheme, KeybindingsManager], EditorComponent]
 type ExtensionErrorListener = Callable[["ExtensionError"], None]
@@ -104,6 +136,60 @@ type ToolResultRenderer = Callable[
     Component,
 ]
 type ToolRenderShell = Literal["default", "self"]
+
+
+class _ThemeInfo(TypedDict):
+    name: str
+    path: str | None
+
+
+class _SetThemeResult(TypedDict):
+    success: bool
+    error: NotRequired[str]
+
+
+class _CustomUIOptions(TypedDict, total=False):
+    overlay: bool
+    overlayOptions: dict[str, Any] | Callable[[], dict[str, Any]]
+    onHandle: Callable[[OverlayHandle], None]
+
+
+class _CustomMessagePayload(TypedDict, total=False):
+    customType: str
+    content: str | list[TextContent | ImageContent]
+    display: Any
+    details: Any
+
+
+class _SendMessageOptions(TypedDict, total=False):
+    triggerTurn: bool
+    deliverAs: Literal["steer", "followUp", "nextTurn"]
+
+
+class _SendUserMessageOptions(TypedDict, total=False):
+    deliverAs: Literal["steer", "followUp"]
+
+
+class _NewSessionOptions(TypedDict, total=False):
+    parentSession: str
+    setup: Callable[[SessionManager], Awaitable[None]]
+    withSession: Callable[["ReplacedSessionContext"], Awaitable[None]]
+
+
+class _ForkOptions(TypedDict, total=False):
+    position: Literal["before", "at"]
+    withSession: Callable[["ReplacedSessionContext"], Awaitable[None]]
+
+
+class _NavigateTreeOptions(TypedDict, total=False):
+    summarize: bool
+    customInstructions: str
+    replaceInstructions: bool
+    label: str
+
+
+class _SwitchSessionOptions(TypedDict, total=False):
+    withSession: Callable[["ReplacedSessionContext"], Awaitable[None]]
 
 
 @dataclass(slots=True)
