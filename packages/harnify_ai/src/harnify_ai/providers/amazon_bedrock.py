@@ -353,7 +353,6 @@ def stream_bedrock(
             response_stream = response.get("stream") if isinstance(response, dict) else None
             block_indices: dict[int, int] = {}
             partial_json: dict[int, str] = {}
-            started = False
 
             async for item in iterate_stream_events(response_stream, signal):
                 if _is_aborted(signal):
@@ -363,9 +362,7 @@ def stream_bedrock(
                     message_start = item["messageStart"] or {}
                     if message_start.get("role") != "assistant":
                         raise RuntimeError("Unexpected assistant message start but got user message start instead")
-                    if not started:
-                        stream.push(StartEvent(partial=output))
-                        started = True
+                    stream.push(StartEvent(partial=output))
                     continue
 
                 if "contentBlockStart" in item:
@@ -412,11 +409,7 @@ def stream_bedrock(
             output.errorMessage = format_bedrock_error(error)
             stream.push(ErrorEvent(reason=output.stopReason, error=output))
         finally:
-            if response_stream is not None and hasattr(response_stream, "close"):
-                try:
-                    response_stream.close()
-                except Exception:  # noqa: BLE001
-                    pass
+            await _close_stream(response_stream)
             stream.end()
 
     asyncio.create_task(run())
@@ -596,7 +589,7 @@ def handle_content_block_delta(
     if delta.get("reasoningContent") is not None:
         reasoning_content = delta["reasoningContent"] or {}
         if block is None:
-            thinking_block = ThinkingContent(thinking="", thinkingSignature="", redacted=None)
+            thinking_block = ThinkingContent(thinking="", thinkingSignature="")
             output.content.append(thinking_block)
             content_index = len(output.content) - 1
             block_indices[content_block_index] = content_index
