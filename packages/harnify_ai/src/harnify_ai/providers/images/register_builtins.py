@@ -21,7 +21,7 @@ def _create_lazy_load_error_images(model: ImagesModel, error: Any) -> AssistantI
         output=[],
         stopReason="error",
         errorMessage=str(error),
-        timestamp=int(time.time() * 1000),
+        timestamp=time.time_ns() // 1_000_000,
     )
 
 
@@ -60,3 +60,5 @@ register_built_in_images_api_providers()
 
 generateImagesOpenRouter = generate_images_openrouter
 registerBuiltInImagesApiProviders = register_built_in_images_api_providers
+
+__all__ = ["generateImagesOpenRouter", "registerBuiltInImagesApiProviders"]
