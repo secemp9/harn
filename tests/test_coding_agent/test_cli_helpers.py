@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from harnify_ai.types import Model
+import harnify_coding_agent.cli.file_processor as file_processor_module
 from harnify_coding_agent.cli.args import parse_args, print_help
 from harnify_coding_agent.cli.file_processor import process_file_arguments
 from harnify_coding_agent.cli.initial_message import build_initial_message
@@ -131,7 +132,7 @@ async def test_process_file_arguments_handles_text_and_images(tmp_path: Path) ->
     image_path = tmp_path / "image.png"
     Image.new("RGB", (8, 8), (255, 0, 0)).save(image_path)
 
-    processed = await process_file_arguments([str(text_path), str(image_path)], cwd=str(tmp_path))
+    processed = await file_processor_module._process_file_arguments([str(text_path), str(image_path)], cwd=str(tmp_path))
 
     assert '<file name="' in processed.text
     assert "hello world" in processed.text
@@ -145,10 +146,18 @@ async def test_process_file_arguments_exits_for_missing_files(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit) as error:
-        await process_file_arguments(["missing.txt"], cwd=str(tmp_path))
+        await file_processor_module._process_file_arguments(["missing.txt"], cwd=str(tmp_path))
 
     assert error.value.code == 1
     assert "File not found" in capsys.readouterr().err
+
+
+def test_file_processor_module_exports_match_ts_surface() -> None:
+    assert file_processor_module.__all__ == [
+        "ProcessFileOptions",
+        "ProcessedFiles",
+        "processFileArguments",
+    ]
 
 
 @pytest.mark.asyncio

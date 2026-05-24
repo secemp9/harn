@@ -29,6 +29,13 @@ class ProcessFileOptions:
 async def process_file_arguments(
     file_args: list[str],
     options: ProcessFileOptions | None = None,
+) -> ProcessedFiles:
+    return await _process_file_arguments(file_args, options=options)
+
+
+async def _process_file_arguments(
+    file_args: list[str],
+    options: ProcessFileOptions | None = None,
     *,
     cwd: str | None = None,
 ) -> ProcessedFiles:
@@ -95,4 +102,4 @@ def _read_text(path: str) -> str:
 
 processFileArguments = process_file_arguments
 
-__all__ = ["ProcessFileOptions", "ProcessedFiles", "processFileArguments", "process_file_arguments"]
+__all__ = ["ProcessFileOptions", "ProcessedFiles", "processFileArguments"]
