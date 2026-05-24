@@ -524,8 +524,12 @@ def validate_assistant_message_event(value: Any) -> AssistantMessageEventValue:
     return ASSISTANT_MESSAGE_EVENT_ADAPTER.validate_python(value)
 
 
+from harnify_ai.utils.event_stream import AssistantMessageEventStream
+
+
 __all__ = [
     "ASSISTANT_CONTENT_ADAPTER",
+    "AssistantMessageEventStream",
     "ASSISTANT_MESSAGE_EVENT_ADAPTER",
     "Api",
     "AnthropicMessagesCompat",
