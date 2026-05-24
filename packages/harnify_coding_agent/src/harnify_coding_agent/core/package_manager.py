@@ -1283,9 +1283,7 @@ class DefaultPackageManager:
         if self._collect_package_resources(resolved, accumulator, package_filter, metadata):
             return
 
-        extension_entries = resolve_extension_entries(resolved) or discover_extensions_in_dir(resolved)
-        for entry in extension_entries:
-            self._add_resource(accumulator.extensions, entry, metadata, True)
+        self._add_resource(accumulator.extensions, resolved, metadata, True)
 
     async def _run_command_capture(
         self,
@@ -1294,39 +1292,34 @@ class DefaultPackageManager:
         *,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: float | None = None,
+        timeout_ms: int | None = None,
     ) -> str:
-        def run() -> subprocess.CompletedProcess[str]:
-            merged_env = None
-            if env is not None:
-                merged_env = dict(os.environ)
-                merged_env.update(env)
+        child = self._spawn_capture_command(command, args, cwd=cwd, env=env)
+        timeout_seconds = None if timeout_ms is None else timeout_ms / 1000
+        try:
+            stdout, stderr = await asyncio.to_thread(child.communicate, timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as error:
+            child.kill()
+            await asyncio.to_thread(child.communicate)
+            raise RuntimeError(f"{self._format_command_display(command, args)} timed out after {timeout_ms}ms") from error
+
+        if child.returncode == 0:
+            return (stdout or "").strip()
+
+        if child.returncode is None:
+            exit_status = "signal unknown"
+        elif child.returncode < 0:
             try:
-                completed = subprocess.run(
-                    [command, *args],
-                    check=False,
-                    cwd=cwd,
-                    env=merged_env,
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=timeout,
-                )
-            except OSError as error:
-                raise RuntimeError(f"Failed to run {shlex.join([command, *args])}: {error}") from error
-            except subprocess.TimeoutExpired as error:
-                raise RuntimeError(f"Command timed out: {shlex.join([command, *args])}") from error
+                signal_name = signal_module.Signals(-child.returncode).name
+            except ValueError:
+                signal_name = str(-child.returncode)
+            exit_status = f"signal {signal_name}"
+        else:
+            exit_status = f"code {child.returncode}"
 
-            if completed.returncode != 0:
-                stderr = (completed.stderr or "").strip()
-                stdout = (completed.stdout or "").strip()
-                details = stderr or stdout or f"exit status {completed.returncode}"
-                raise RuntimeError(f"Command failed: {shlex.join([command, *args])}: {details}")
-            return completed
-
-        completed = await asyncio.to_thread(run)
-        return completed.stdout or ""
+        raise RuntimeError(
+            f"{self._format_command_display(command, args)} failed with {exit_status}: {(stderr or stdout) or ''}"
+        )
 
     async def _run_git_remote_command(self, installed_path: str, args: list[str]) -> str:
         return await self._run_command_capture(
@@ -1334,28 +1327,29 @@ class DefaultPackageManager:
             args,
             cwd=installed_path,
             env={"GIT_TERMINAL_PROMPT": "0"},
-            timeout=NETWORK_TIMEOUT_SECONDS,
+            timeout_ms=NETWORK_TIMEOUT_MS,
         )
 
     async def _install_npm(self, source: _NpmSource, scope: SourceScope, temporary: bool) -> None:
         install_root = self._get_npm_install_root(scope, temporary)
         self._ensure_npm_project(install_root)
-        await self._run_npm_command_capture(self._get_npm_install_args([source.spec], install_root), cwd=self.cwd)
+        await self._run_npm_command(self._get_npm_install_args([source.spec], install_root))
 
     async def _uninstall_npm(self, source: _NpmSource, scope: SourceScope) -> None:
         install_root = self._get_npm_install_root(scope, False)
         if not os.path.exists(install_root):
             return
         if self._get_package_manager_name() == "bun":
-            await self._run_npm_command_capture(["uninstall", source.name, "--cwd", install_root], cwd=self.cwd)
+            await self._run_npm_command(["uninstall", source.name, "--cwd", install_root])
             return
-        await self._run_npm_command_capture(["uninstall", source.name, "--prefix", install_root], cwd=self.cwd)
+        await self._run_npm_command(["uninstall", source.name, "--prefix", install_root])
 
     async def _get_latest_npm_version(self, package_name: str) -> str:
         raw = (
             await self._run_npm_command_capture(
                 ["view", package_name, "version", "--json"],
                 cwd=self.cwd,
+                timeout_ms=NETWORK_TIMEOUT_MS,
             )
         ).strip()
         if not raw:
@@ -1393,7 +1387,7 @@ class DefaultPackageManager:
             return False
         try:
             latest_version = await self._get_latest_npm_version(source.name)
-        except RuntimeError:
+        except Exception:
             return False
         return latest_version != installed_version
 
@@ -1404,13 +1398,9 @@ class DefaultPackageManager:
             return True
         try:
             latest_version = await self._get_latest_npm_version(source.name)
-        except RuntimeError:
+        except Exception:
             return True
         return latest_version != installed_version
-
-    async def _update_npm(self, source: _NpmSource, scope: Literal["user", "project"]) -> None:
-        latest_source = _NpmSource(type="npm", spec=f"{source.name}@latest", name=source.name, pinned=False)
-        await self._install_npm(latest_source, scope, False)
 
     async def _git_has_available_update(self, installed_path: str) -> bool:
         if _is_offline_mode_enabled():
