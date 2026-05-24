@@ -11,6 +11,7 @@ import platform
 import re
 import secrets
 import time
+import uuid
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
@@ -583,9 +584,6 @@ async def parse_error_response(response: httpx.Response) -> dict[str, str]:
                 when = f" Try again in ~{mins} min." if mins is not None else ""
                 friendly_message = f"You have hit your ChatGPT usage limit{plan}.{when}".strip()
             message = str(error.get("message") or friendly_message or message)
-        elif payload.get("message") is not None:
-            message = str(payload["message"])
-
     result = {"message": message}
     if friendly_message is not None:
         result["friendlyMessage"] = friendly_message
@@ -922,7 +920,7 @@ def extract_account_id(token: str) -> str:
 
 
 def create_codex_request_id() -> str:
-    return f"codex_{secrets.token_hex(12)}"
+    return str(uuid.uuid4())
 
 
 def build_sse_headers(
