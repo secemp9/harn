@@ -12,7 +12,7 @@ from harnify_ai.providers.faux import faux_assistant_message, register_faux_prov
 from harnify_ai.types import Usage
 from harnify_coding_agent.core.agent_session import AgentSession, parseSkillBlock
 from harnify_coding_agent.core.auth_storage import AuthStorage
-from harnify_coding_agent.core.compaction import estimate_context_tokens as estimate_compaction_context_tokens
+from harnify_coding_agent.core.compaction import estimateContextTokens as estimate_compaction_context_tokens
 from harnify_coding_agent.core.compaction.branch_summarization import BranchSummaryResult
 from harnify_coding_agent.core.extensions.types import ToolDefinition
 from harnify_coding_agent.core.model_registry import ModelRegistry
