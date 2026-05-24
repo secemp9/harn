@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from harnify_ai.utils.oauth import registerOAuthProvider, resetOAuthProviders
 from harnify_ai.utils.oauth.types import OAuthCredentials
-from harnify_coding_agent.core.auth_storage import AuthStorage
+from harnify_coding_agent.core.auth_storage import AuthStorage, InMemoryAuthStorageBackend
 from harnify_coding_agent.core.resolve_config_value import clearConfigValueCache
 
 
@@ -103,3 +103,129 @@ async def test_expired_oauth_credentials_are_refreshed_and_persisted() -> None:
     stored = storage.get(provider_id)
     assert stored is not None
     assert stored["access"] == "refreshed-token"
+
+
+def test_reload_records_parse_errors_and_drain_errors_clears_buffer(tmp_path: Path) -> None:
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text('{"anthropic": {"type": "api_key", "key": "anthropic-key"}}', encoding="utf-8")
+
+    storage = AuthStorage.create(str(auth_path))
+    auth_path.write_text("{invalid-json", encoding="utf-8")
+
+    storage.reload()
+
+    assert storage.get("anthropic") == {"type": "api_key", "key": "anthropic-key"}
+
+    first_drain = storage.drainErrors()
+    assert first_drain
+    assert isinstance(first_drain[0], Exception)
+    assert storage.drainErrors() == []
+
+
+def test_set_and_remove_preserve_unrelated_external_edits(tmp_path: Path) -> None:
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text(
+        '{"anthropic": {"type": "api_key", "key": "old-anthropic"}, "openai": {"type": "api_key", "key": "openai-key"}}',
+        encoding="utf-8",
+    )
+    storage = AuthStorage.create(str(auth_path))
+
+    auth_path.write_text(
+        '{"anthropic": {"type": "api_key", "key": "old-anthropic"}, "openai": {"type": "api_key", "key": "openai-key"}, "google": {"type": "api_key", "key": "google-key"}}',
+        encoding="utf-8",
+    )
+    storage.set("anthropic", {"type": "api_key", "key": "new-anthropic"})
+
+    assert '"google": {"type": "api_key", "key": "google-key"}' in auth_path.read_text(encoding="utf-8")
+    assert '"anthropic": {\n    "type": "api_key",\n    "key": "new-anthropic"\n  }' in auth_path.read_text(
+        encoding="utf-8"
+    )
+
+    auth_path.write_text(
+        '{"anthropic": {"type": "api_key", "key": "new-anthropic"}, "openai": {"type": "api_key", "key": "openai-key"}, "google": {"type": "api_key", "key": "google-key"}}',
+        encoding="utf-8",
+    )
+    storage.remove("anthropic")
+
+    contents = auth_path.read_text(encoding="utf-8")
+    assert '"anthropic"' not in contents
+    assert '"openai": {"type": "api_key", "key": "openai-key"}' in contents
+    assert '"google": {"type": "api_key", "key": "google-key"}' in contents
+
+
+@pytest.mark.asyncio
+async def test_get_and_get_all_match_ts_reference_semantics() -> None:
+    storage = AuthStorage.inMemory({"anthropic": {"type": "api_key", "key": "stored-value"}})
+
+    credential = storage.get("anthropic")
+    assert credential is not None
+    credential["key"] = "mutated-via-get"
+    assert await storage.getApiKey("anthropic") == "mutated-via-get"
+
+    all_credentials = storage.getAll()
+    all_credentials["anthropic"]["key"] = "mutated-via-get-all"
+    assert await storage.getApiKey("anthropic") == "mutated-via-get-all"
+
+
+@pytest.mark.asyncio
+async def test_refresh_failure_returns_none_then_allows_later_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider_id = "retry-oauth-provider"
+
+    class FakeOAuthProvider:
+        id = provider_id
+        name = "Retry OAuth Provider"
+        usesCallbackServer = False
+
+        async def login(self, callbacks):  # pragma: no cover - not used in this test
+            raise RuntimeError("not used")
+
+        async def refreshToken(self, credentials: OAuthCredentials) -> OAuthCredentials:
+            return OAuthCredentials(refresh=credentials.refresh, access="refreshed-token", expires=9_999_999_999_999)
+
+        def getApiKey(self, credentials: OAuthCredentials) -> str:
+            return f"Bearer {credentials.access}"
+
+    registerOAuthProvider(FakeOAuthProvider())
+    backend = InMemoryAuthStorageBackend()
+    backend.value = (
+        '{\n'
+        f'  "{provider_id}": {{\n'
+        '    "type": "oauth",\n'
+        '    "refresh": "refresh-token",\n'
+        '    "access": "expired-token",\n'
+        '    "expires": 0\n'
+        "  }\n"
+        "}"
+    )
+    storage = AuthStorage.fromStorage(backend)
+    real_refresh = storage.refreshOAuthTokenWithLock
+    attempts = 0
+
+    async def flaky_refresh(provider: str) -> dict[str, object] | None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("lock compromised")
+        return await real_refresh(provider)
+
+    monkeypatch.setattr(storage, "refreshOAuthTokenWithLock", flaky_refresh)
+
+    assert await storage.getApiKey(provider_id) is None
+    assert await storage.getApiKey(provider_id) == "Bearer refreshed-token"
+
+
+@pytest.mark.asyncio
+async def test_public_exports_match_ts_surface() -> None:
+    from harnify_coding_agent.core import auth_storage
+
+    assert auth_storage.__all__ == [
+        "ApiKeyCredential",
+        "AuthCredential",
+        "AuthStatus",
+        "AuthStorage",
+        "AuthStorageBackend",
+        "AuthStorageData",
+        "FileAuthStorageBackend",
+        "InMemoryAuthStorageBackend",
+        "OAuthCredential",
+    ]
