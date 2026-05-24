@@ -1075,7 +1075,7 @@ async def _list_sessions_from_dir(
 
 
 def _iso_now() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _datetime_from_iso(value: str | None) -> datetime | None:
