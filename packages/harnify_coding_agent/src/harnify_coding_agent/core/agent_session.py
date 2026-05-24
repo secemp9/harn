@@ -342,6 +342,14 @@ class AgentSession:
     def pendingMessageCount(self) -> int:
         return len(self._steeringMessages) + len(self._followUpMessages)
 
+    @property
+    def isBashRunning(self) -> bool:
+        return self._bashAbortController is not None
+
+    @property
+    def hasPendingBashMessages(self) -> bool:
+        return len(self._pendingBashMessages) > 0
+
     def setScopedModels(self, scopedModels: list[dict[str, Any]]) -> None:
         self._scopedModels = list(scopedModels)
 
@@ -414,15 +422,16 @@ class AgentSession:
                         current_images = list(transformed_images)
 
             if resolved.expandPromptTemplates:
+                current_text = self._expand_skill_command(current_text)
                 current_text = expand_prompt_template(current_text, self.promptTemplates)
 
             if self.isStreaming:
                 if resolved.streamingBehavior == "followUp":
-                    self.followUp(current_text, current_images or None)
+                    self._queue_follow_up(current_text, current_images or None)
                     report_preflight(True)
                     return
                 if resolved.streamingBehavior == "steer":
-                    self.steer(current_text, current_images or None)
+                    self._queue_steer(current_text, current_images or None)
                     report_preflight(True)
                     return
                 raise RuntimeError(
@@ -430,19 +439,32 @@ class AgentSession:
                     "message."
                 )
 
+            self._flush_pending_bash_messages()
+
             if self.model is None:
                 raise RuntimeError(format_no_model_selected_message())
             if not self._modelRegistry.hasConfiguredAuth(self.model):
+                if self._modelRegistry.isUsingOAuth(self.model):
+                    raise RuntimeError(
+                        f'Authentication failed for "{self.model.provider}". '
+                        "Credentials may have expired or network is unavailable. "
+                        f"Run '/login {self.model.provider}' to re-authenticate."
+                    )
                 raise RuntimeError(format_no_api_key_found_message(self.model.provider))
 
             last_assistant = self._find_last_assistant_message()
             if last_assistant is not None and await self._check_compaction(last_assistant, False):
-                await self.agent.continue_()
-                while await self._handle_post_agent_run():
+                try:
                     await self.agent.continue_()
+                    while await self._handle_post_agent_run():
+                        await self.agent.continue_()
+                finally:
+                    self._flush_pending_bash_messages()
 
             messages: list[Any] = []
-            system_prompt = self._baseSystemPrompt
+            messages.append(self._build_user_message(current_text, current_images or None))
+            messages.extend(self._pendingNextTurnMessages)
+            self._pendingNextTurnMessages = []
             if self._extensionRunner.has_handlers("before_agent_start"):
                 before_result = await self._extensionRunner.emit_before_agent_start(
                     current_text,
@@ -451,26 +473,47 @@ class AgentSession:
                     self._baseSystemPromptOptions,
                 )
                 if before_result:
-                    system_prompt = _event_field(before_result, "systemPrompt", system_prompt) or system_prompt
                     extension_messages = _event_field(before_result, "messages") or []
-                    messages.extend(_message_dict(message) for message in extension_messages)
-
-            messages.append(self._build_user_message(current_text, current_images or None))
-            previous_system_prompt = self.agent.state.systemPrompt
-            self.agent.state.systemPrompt = system_prompt
+                    for message in extension_messages:
+                        normalized_message = _message_dict(message)
+                        messages.append(
+                            {
+                                "role": "custom",
+                                "customType": _message_field(normalized_message, "customType"),
+                                "content": _message_content(normalized_message),
+                                "display": bool(_message_field(normalized_message, "display")),
+                                "details": _message_field(normalized_message, "details"),
+                                "timestamp": int(time.time() * 1000),
+                            }
+                        )
+                    system_prompt = _event_field(before_result, "systemPrompt")
+                    if system_prompt:
+                        self.agent.state.systemPrompt = system_prompt
+                    else:
+                        self.agent.state.systemPrompt = self._baseSystemPrompt
+            else:
+                self.agent.state.systemPrompt = self._baseSystemPrompt
             report_preflight(True)
-            try:
-                await self._run_agent_prompt(messages)
-            finally:
-                self.agent.state.systemPrompt = previous_system_prompt
+            await self._run_agent_prompt(messages)
         except Exception:
             report_preflight(False)
             raise
 
     def steer(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
-        message = self._build_user_message(text, images)
-        self.agent.steer(message)
-        self._steeringMessages.append(text)
+        if text.startswith("/"):
+            self._throw_if_extension_command(text)
+        expanded_text = self._expand_skill_command(text)
+        expanded_text = expand_prompt_template(expanded_text, self.promptTemplates)
+        self._queue_steer(expanded_text, images)
+
+    def followUp(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
+        if text.startswith("/"):
+            self._throw_if_extension_command(text)
+        expanded_text = self._expand_skill_command(text)
+        expanded_text = expand_prompt_template(expanded_text, self.promptTemplates)
+        self._queue_follow_up(expanded_text, images)
+
+    def _emit_queue_update(self) -> None:
         self._emit(
             {
                 "type": "queue_update",
@@ -479,17 +522,56 @@ class AgentSession:
             }
         )
 
-    def followUp(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
-        message = self._build_user_message(text, images)
-        self.agent.followUp(message)
+    def _queue_steer(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
+        self._steeringMessages.append(text)
+        self._emit_queue_update()
+        self.agent.steer(self._build_user_message(text, images))
+
+    def _queue_follow_up(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
         self._followUpMessages.append(text)
-        self._emit(
-            {
-                "type": "queue_update",
-                "steering": list(self._steeringMessages),
-                "followUp": list(self._followUpMessages),
-            }
-        )
+        self._emit_queue_update()
+        self.agent.followUp(self._build_user_message(text, images))
+
+    def _throw_if_extension_command(self, text: str) -> None:
+        command_text = text[1:] if text.startswith("/") else text
+        command_name = command_text.split(" ", 1)[0]
+        if self._extensionRunner.get_command(command_name) is not None:
+            raise RuntimeError(
+                f'Extension command "/{command_name}" cannot be queued. '
+                "Use prompt() or execute the command when not streaming."
+            )
+
+    def _expand_skill_command(self, text: str) -> str:
+        if not text.startswith("/skill:"):
+            return text
+
+        command_text = text[7:]
+        skill_name, _, raw_args = command_text.partition(" ")
+        args = raw_args.strip()
+        for skill in (self._resourceLoader.getSkills() or {}).get("skills", []):
+            if _value(skill, "name") != skill_name:
+                continue
+            skill_file_path = str(_value(skill, "filePath", ""))
+            try:
+                with open(skill_file_path, encoding="utf-8") as handle:
+                    body = strip_frontmatter(handle.read()).strip()
+                skill_block = (
+                    f'<skill name="{_value(skill, "name")}" location="{skill_file_path}">\n'
+                    f'References are relative to {_value(skill, "baseDir")}.\n\n'
+                    f"{body}\n"
+                    "</skill>"
+                )
+                return f"{skill_block}\n\n{args}" if args else skill_block
+            except Exception as error:  # noqa: BLE001
+                self._extensionRunner.emit_error(
+                    {
+                        "extensionPath": skill_file_path,
+                        "event": "skill_expansion",
+                        "error": str(error),
+                    }
+                )
+                return text
+        return text
 
     def setSessionName(self, name: str | None) -> None:
         self.sessionManager.appendSessionInfo((name or "").strip())
