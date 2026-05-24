@@ -466,11 +466,11 @@ class AgentSession:
 
             if self.isStreaming:
                 if resolved.streamingBehavior == "followUp":
-                    self._queue_follow_up(current_text, current_images or None)
+                    await self._queue_follow_up(current_text, current_images or None)
                     report_preflight(True)
                     return
                 if resolved.streamingBehavior == "steer":
-                    self._queue_steer(current_text, current_images or None)
+                    await self._queue_steer(current_text, current_images or None)
                     report_preflight(True)
                     return
                 raise RuntimeError(
@@ -538,19 +538,19 @@ class AgentSession:
             report_preflight(False)
             raise
 
-    def steer(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
+    async def steer(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
         if text.startswith("/"):
             self._throw_if_extension_command(text)
         expanded_text = self._expand_skill_command(text)
         expanded_text = expand_prompt_template(expanded_text, self.promptTemplates)
-        self._queue_steer(expanded_text, images)
+        await self._queue_steer(expanded_text, images)
 
-    def followUp(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
+    async def followUp(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
         if text.startswith("/"):
             self._throw_if_extension_command(text)
         expanded_text = self._expand_skill_command(text)
         expanded_text = expand_prompt_template(expanded_text, self.promptTemplates)
-        self._queue_follow_up(expanded_text, images)
+        await self._queue_follow_up(expanded_text, images)
 
     def _emit_queue_update(self) -> None:
         self._emit(
@@ -561,12 +561,12 @@ class AgentSession:
             }
         )
 
-    def _queue_steer(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
+    async def _queue_steer(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
         self._steeringMessages.append(text)
         self._emit_queue_update()
         self.agent.steer(self._build_user_message(text, images))
 
-    def _queue_follow_up(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
+    async def _queue_follow_up(self, text: str, images: Sequence[ImageContent] | None = None) -> None:
         self._followUpMessages.append(text)
         self._emit_queue_update()
         self.agent.followUp(self._build_user_message(text, images))
@@ -658,7 +658,7 @@ class AgentSession:
         if clamped == previous_level:
             return
         self.sessionManager.appendThinkingLevelChange(clamped)
-        if model is None or self.supportsThinking() or clamped != "off":
+        if self.supportsThinking() or clamped != "off":
             self.settingsManager.setDefaultThinkingLevel(clamped)
         self._emit({"type": "thinking_level_changed", "level": clamped})
         if self._extensionRunner.has_handlers("thinking_level_select"):
@@ -1048,9 +1048,6 @@ class AgentSession:
             self._branchSummaryAbortController.abort()
 
     async def compact(self, customInstructions: str | None = None) -> SessionCompactionResult:
-        if self._compactionAbortController is not None:
-            raise RuntimeError("Compaction already in progress")
-
         self._disconnect_from_agent()
         await self.abort()
         self._compactionAbortController = AbortController()
@@ -1538,7 +1535,7 @@ class AgentSession:
             return False
 
         try:
-            result = resolved.handler(raw_args.lstrip(), self._extensionRunner.create_command_context())
+            result = resolved.handler(raw_args, self._extensionRunner.create_command_context())
             if inspect.isawaitable(result):
                 await result
         except Exception as error:  # noqa: BLE001
