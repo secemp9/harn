@@ -361,6 +361,23 @@ async def test_output_guard_redirects_stdout_but_preserves_raw_stdout(monkeypatc
         restoreStdout()
 
 
+def test_output_guard_exports_match_ts_surface() -> None:
+    from harnify_coding_agent.core import output_guard
+
+    assert output_guard.__all__ == [
+        "flushRawStdout",
+        "isStdoutTakenOver",
+        "restoreStdout",
+        "takeOverStdout",
+        "writeRawStdout",
+    ]
+    assert not hasattr(output_guard, "flush_raw_stdout")
+    assert not hasattr(output_guard, "is_stdout_taken_over")
+    assert not hasattr(output_guard, "restore_stdout")
+    assert not hasattr(output_guard, "take_over_stdout")
+    assert not hasattr(output_guard, "write_raw_stdout")
+
+
 def test_keybindings_manager_loads_migrated_config(tmp_path: Path) -> None:
     agent_dir = tmp_path / "agent"
     agent_dir.mkdir()
