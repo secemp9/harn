@@ -72,8 +72,28 @@ def test_cli_package_entrypoint_wraps_async_main(monkeypatch) -> None:
         return 17
 
     monkeypatch.setattr(cli_package, "_invoke_main", fake_invoke)
+    monkeypatch.setattr(cli_package, "_set_process_title", lambda title: seen.setdefault("title", title))
+    monkeypatch.setattr(cli_package, "_suppress_runtime_warnings", lambda: seen.setdefault("warnings", True))
+    monkeypatch.setattr(cli_package, "configure_http_dispatcher", lambda: seen.setdefault("dispatcher", True))
     monkeypatch.delenv("PI_CODING_AGENT", raising=False)
 
     assert cli_package.main(["--demo"]) == 17
     assert seen["argv"] == ["--demo"]
     assert seen["env"] == "true"
+    assert seen["title"] == "pi"
+    assert seen["warnings"] is True
+    assert seen["dispatcher"] is True
+
+
+def test_http_dispatcher_configuration_validates_and_records_timeout() -> None:
+    from harnify_coding_agent.core import http_dispatcher
+
+    http_dispatcher.configure_http_dispatcher(60_000)
+    assert http_dispatcher._get_configured_http_idle_timeout_ms() == 60_000
+
+    try:
+        http_dispatcher.configure_http_dispatcher(-1)
+    except ValueError as error:
+        assert str(error) == "Invalid HTTP idle timeout: -1"
+    else:  # pragma: no cover
+        raise AssertionError("configure_http_dispatcher should reject invalid values")
