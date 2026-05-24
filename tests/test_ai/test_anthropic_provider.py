@@ -324,7 +324,18 @@ async def test_stream_anthropic_applies_timeout_and_retry_via_with_options() -> 
     assert client.messages.payloads == [
         {
             "model": model.id,
-            "messages": [{"role": "user", "content": "Use the tool."}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Use the tool.",
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                }
+            ],
             "max_tokens": model.maxTokens,
             "stream": True,
         }
