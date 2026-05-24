@@ -302,8 +302,7 @@ def convert_content_blocks(
     has_text = False
     for block in content:
         if block.type == "text":
-            if block.text.strip():
-                has_text = True
+            has_text = True
             blocks.append({"type": "text", "text": sanitize_surrogates(block.text)})
             continue
 
@@ -335,9 +334,6 @@ def create_client(
     options_headers: Mapping[str, str] | None = None,
     dynamic_headers: Mapping[str, str] | None = None,
     session_id: str | None = None,
-    *,
-    timeout_ms: int | None = None,
-    max_retries: int | None = None,
 ) -> tuple[AsyncAnthropic, bool]:
     needs_interleaved_beta = interleaved_thinking and get_anthropic_compat(model).get("forceAdaptiveThinking") is not True
     beta_features: list[str] = []
@@ -361,8 +357,6 @@ def create_client(
                 model.headers,
                 options_headers,
             ),
-            timeout=(timeout_ms / 1000) if timeout_ms is not None else None,
-            max_retries=max_retries if max_retries is not None else 2,
         )
         return client, False
 
@@ -381,8 +375,6 @@ def create_client(
                 dynamic_headers,
                 options_headers,
             ),
-            timeout=(timeout_ms / 1000) if timeout_ms is not None else None,
-            max_retries=max_retries if max_retries is not None else 2,
         )
         return client, False
 
@@ -402,8 +394,6 @@ def create_client(
                 model.headers,
                 options_headers,
             ),
-            timeout=(timeout_ms / 1000) if timeout_ms is not None else None,
-            max_retries=max_retries if max_retries is not None else 2,
         )
         return client, True
 
@@ -426,8 +416,6 @@ def create_client(
             model.headers,
             options_headers,
         ),
-        timeout=(timeout_ms / 1000) if timeout_ms is not None else None,
-        max_retries=max_retries if max_retries is not None else 2,
     )
     return client, False
 
