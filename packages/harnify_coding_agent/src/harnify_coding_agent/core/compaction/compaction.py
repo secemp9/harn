@@ -483,9 +483,6 @@ async def compact(
     thinking_level: ThinkingLevel | None = None,
     stream_fn: StreamFn | None = None,
 ) -> CompactionResult:
-    if not preparation.firstKeptEntryId:
-        raise RuntimeError("First kept entry has no UUID - session may need migration")
-
     if preparation.isSplitTurn and preparation.turnPrefixMessages:
         history_result, turn_prefix_result = await asyncio.gather(
             generate_summary(
@@ -530,6 +527,8 @@ async def compact(
 
     file_lists = compute_file_lists(preparation.fileOps)
     summary += format_file_operations(file_lists["readFiles"], file_lists["modifiedFiles"])
+    if not preparation.firstKeptEntryId:
+        raise RuntimeError("First kept entry has no UUID - session may need migration")
     return CompactionResult(
         summary=summary,
         firstKeptEntryId=preparation.firstKeptEntryId,
