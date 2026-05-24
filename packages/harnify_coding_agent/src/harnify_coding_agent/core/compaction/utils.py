@@ -8,7 +8,7 @@ from typing import Any
 
 from harnify_ai.types import MessageValue
 
-TOOL_RESULT_MAX_CHARS = 2000
+_TOOL_RESULT_MAX_CHARS = 2000
 
 SUMMARIZATION_SYSTEM_PROMPT = (
     "You are a context summarization assistant. Your task is to read a conversation between a user "
@@ -116,7 +116,7 @@ def serialize_conversation(messages: list[MessageValue]) -> str:
         if role == "toolResult":
             content = _serialize_tool_result_content(_message_field(message, "content"))
             if content:
-                parts.append(f"[Tool result]: {_truncate_for_summary(content, TOOL_RESULT_MAX_CHARS)}")
+                parts.append(f"[Tool result]: {_truncate_for_summary(content, _TOOL_RESULT_MAX_CHARS)}")
 
     return "\n\n".join(parts)
 
@@ -183,15 +183,9 @@ serializeConversation = serialize_conversation
 __all__ = [
     "FileOperations",
     "SUMMARIZATION_SYSTEM_PROMPT",
-    "TOOL_RESULT_MAX_CHARS",
     "computeFileLists",
-    "compute_file_lists",
     "createFileOps",
-    "create_file_ops",
     "extractFileOpsFromMessage",
-    "extract_file_ops_from_message",
     "formatFileOperations",
-    "format_file_operations",
     "serializeConversation",
-    "serialize_conversation",
 ]
