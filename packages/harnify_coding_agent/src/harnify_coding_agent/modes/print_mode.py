@@ -9,10 +9,10 @@ from typing import Any
 from harnify_ai.types import ImageContent
 
 from harnify_coding_agent.core.output_guard import (
-    flush_raw_stdout,
-    restore_stdout,
-    take_over_stdout,
-    write_raw_stdout,
+    flushRawStdout,
+    restoreStdout,
+    takeOverStdout,
+    writeRawStdout,
 )
 from harnify_coding_agent.modes.rpc.jsonl import serialize_json_line
 
@@ -50,7 +50,7 @@ async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str
     session = runtime_host.session
     unsubscribe = None
     disposed = False
-    take_over_stdout()
+    takeOverStdout()
 
     async def dispose_runtime() -> None:
         nonlocal disposed, unsubscribe
@@ -88,13 +88,13 @@ async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str
         if callable(unsubscribe):
             unsubscribe()
         if resolved.mode == "json":
-            unsubscribe = session.subscribe(lambda event: write_raw_stdout(serialize_json_line(event)))
+            unsubscribe = session.subscribe(lambda event: writeRawStdout(serialize_json_line(event)))
 
     try:
         if resolved.mode == "json":
             header = session.sessionManager.getHeader()
             if header:
-                write_raw_stdout(serialize_json_line(header))
+                writeRawStdout(serialize_json_line(header))
 
         if hasattr(runtime_host, "setRebindSession"):
             runtime_host.setRebindSession(rebind_session)
@@ -120,7 +120,7 @@ async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str
                     return 1
                 for content in _message_content(last_message) or []:
                     if _content_type(content) == "text":
-                        write_raw_stdout(f"{_value(content, 'text', '')}\n")
+                        writeRawStdout(f"{_value(content, 'text', '')}\n")
 
         return 0
     except Exception as error:  # noqa: BLE001
@@ -128,8 +128,8 @@ async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str
         return 1
     finally:
         await dispose_runtime()
-        await flush_raw_stdout()
-        restore_stdout()
+        await flushRawStdout()
+        restoreStdout()
 
 runPrintMode = run_print_mode
 
