@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import math
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeAlias
+from typing import Any, Awaitable, Literal, Protocol, TypeAlias, TypedDict
 
 from harnify_ai.api_registry import ApiProvider, register_api_provider, unregister_api_providers
 from harnify_ai.types import (
@@ -58,14 +59,44 @@ DEFAULT_USAGE = Usage(
 )
 
 
+def _option(options: Any, name: str, default: Any = None) -> Any:
+    if options is None:
+        return default
+    if isinstance(options, dict):
+        value = options.get(name, default)
+    else:
+        value = getattr(options, name, default)
+    return default if value is None else value
+
+
 class FauxResponseFactory(Protocol):
-    async def __call__(
+    def __call__(
         self,
         context: Context,
         options: StreamOptions | None,
         state: dict[str, int],
         model: Model,
-    ) -> AssistantMessage: ...
+    ) -> AssistantMessage | Awaitable[AssistantMessage]: ...
+
+
+class _FauxModelCost(TypedDict):
+    input: float
+    output: float
+    cacheRead: float
+    cacheWrite: float
+
+
+class _FauxTokenSizeOptions(TypedDict, total=False):
+    min: int
+    max: int
+
+
+class RegisterFauxProviderOptions(TypedDict, total=False):
+    api: str
+    provider: str
+    models: list[FauxModelDefinition | dict[str, Any]]
+    tokensPerSecond: int
+    tokenSize: _FauxTokenSizeOptions
 
 
 @dataclass(slots=True)
@@ -73,8 +104,8 @@ class FauxModelDefinition:
     id: str
     name: str | None = None
     reasoning: bool | None = None
-    input: list[str] | None = None
-    cost: dict[str, float] | None = None
+    input: list[Literal["text", "image"]] | None = None
+    cost: _FauxModelCost | None = None
     contextWindow: int | None = None
     maxTokens: int | None = None
 
@@ -93,19 +124,31 @@ class FauxProviderRegistration:
     _pending_count: Any
     _unregister: Any
 
-    def get_model(self, model_id: str | None = None) -> Model | None:
-        if model_id is None:
+    def getModel(self, modelId: str | None = None) -> Model | None:
+        if modelId is None:
             return self.models[0]
-        return next((candidate for candidate in self.models if candidate.id == model_id), None)
+        return next((candidate for candidate in self.models if candidate.id == modelId), None)
 
-    def set_responses(self, responses: list[FauxResponseStep]) -> None:
+    def get_model(self, model_id: str | None = None) -> Model | None:
+        return self.getModel(model_id)
+
+    def setResponses(self, responses: list[FauxResponseStep]) -> None:
         self._set_responses(responses)
 
-    def append_responses(self, responses: list[FauxResponseStep]) -> None:
+    def set_responses(self, responses: list[FauxResponseStep]) -> None:
+        self.setResponses(responses)
+
+    def appendResponses(self, responses: list[FauxResponseStep]) -> None:
         self._append_responses(responses)
 
-    def get_pending_response_count(self) -> int:
+    def append_responses(self, responses: list[FauxResponseStep]) -> None:
+        self.appendResponses(responses)
+
+    def getPendingResponseCount(self) -> int:
         return self._pending_count()
+
+    def get_pending_response_count(self) -> int:
+        return self.getPendingResponseCount()
 
     def unregister(self) -> None:
         self._unregister()
@@ -136,12 +179,25 @@ def _normalize_faux_assistant_content(content: str | FauxContentBlock | list[Fau
 
 def faux_assistant_message(
     content: str | FauxContentBlock | list[FauxContentBlock],
-    *,
-    stop_reason: StopReason = "stop",
-    error_message: str | None = None,
-    response_id: str | None = None,
-    timestamp: int | None = None,
+    options: dict[str, Any] | None = None,
+    **legacy_kwargs: Any,
 ) -> AssistantMessage:
+    options_map = dict(options or {})
+    legacy_to_ts = {
+        "stop_reason": "stopReason",
+        "stopReason": "stopReason",
+        "error_message": "errorMessage",
+        "errorMessage": "errorMessage",
+        "response_id": "responseId",
+        "responseId": "responseId",
+        "timestamp": "timestamp",
+    }
+    for legacy_name, ts_name in legacy_to_ts.items():
+        if legacy_name in legacy_kwargs and ts_name not in options_map:
+            options_map[ts_name] = legacy_kwargs[legacy_name]
+
+    stop_reason = options_map["stopReason"] if "stopReason" in options_map else "stop"
+    timestamp = options_map["timestamp"] if "timestamp" in options_map else int(time.time() * 1000)
     return AssistantMessage(
         content=_normalize_faux_assistant_content(content),
         api=DEFAULT_API,
@@ -149,9 +205,9 @@ def faux_assistant_message(
         model=DEFAULT_MODEL_ID,
         usage=_copy_default_usage(),
         stopReason=stop_reason,
-        errorMessage=error_message,
-        responseId=response_id,
-        timestamp=timestamp or int(time.time() * 1000),
+        errorMessage=options_map.get("errorMessage"),
+        responseId=options_map.get("responseId"),
+        timestamp=timestamp,
     )
 
 
@@ -160,7 +216,19 @@ def _estimate_tokens(text: str) -> int:
 
 
 def _random_id(prefix: str) -> str:
-    return f"{prefix}:{int(time.time() * 1000)}:{random.random():.16f}".replace("0.", "")
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    value = random.random()
+    suffix = ""
+    while len(suffix) < 11 and value > 0:
+        value *= 36
+        digit = int(value)
+        suffix += digits[digit]
+        value -= digit
+    return f"{prefix}:{int(time.time() * 1000)}:{suffix or '0'}"
+
+
+def _json_stringify(value: Any) -> str:
+    return json.dumps(value, separators=(",", ":"), default=str)
 
 
 def _content_to_text(content: str | list[TextContent | ImageContent]) -> str:
@@ -180,7 +248,7 @@ def _assistant_content_to_text(content: list[FauxContentBlock]) -> str:
         elif block.type == "thinking":
             parts.append(block.thinking)
         else:
-            parts.append(f"{block.name}:{block.arguments!r}")
+            parts.append(f"{block.name}:{_json_stringify(block.arguments)}")
     return "\n".join(parts)
 
 
@@ -203,7 +271,19 @@ def _serialize_context(context: Context) -> str:
     for message in context.messages:
         parts.append(f"{message.role}:{_message_to_text(message)}")
     if context.tools:
-        parts.append(f"tools:{[tool.parameters_json_schema() for tool in context.tools]!r}")
+        parts.append(
+            "tools:"
+            + _json_stringify(
+                [
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters_json_schema(),
+                    }
+                    for tool in context.tools
+                ]
+            )
+        )
     return "\n\n".join(parts)
 
 
@@ -272,8 +352,8 @@ def _clone_message(message: AssistantMessage, api: str, provider: str, model_id:
             "api": api,
             "provider": provider,
             "model": model_id,
-            "timestamp": cloned.timestamp or int(time.time() * 1000),
-            "usage": cloned.usage or _copy_default_usage(),
+            "timestamp": cloned.timestamp if cloned.timestamp is not None else int(time.time() * 1000),
+            "usage": cloned.usage if cloned.usage is not None else _copy_default_usage(),
         }
     )
 
@@ -383,7 +463,7 @@ async def _stream_with_deltas(
 
         partial.content.append(ToolCall(id=block.id, name=block.name, arguments={}))
         stream.push(ToolCallStartEvent(contentIndex=index, partial=partial.model_copy(deep=True)))
-        for chunk in _split_string_by_token_size(repr(block.arguments), min_token_size, max_token_size):
+        for chunk in _split_string_by_token_size(_json_stringify(block.arguments), min_token_size, max_token_size):
             await _schedule_chunk(chunk, tokens_per_second)
             if _signal_aborted(signal):
                 aborted = _create_aborted_message(partial)
@@ -411,20 +491,22 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-def register_faux_provider(options: dict[str, Any] | None = None) -> FauxProviderRegistration:
+def register_faux_provider(options: RegisterFauxProviderOptions | dict[str, Any] | None = None) -> FauxProviderRegistration:
     options = options or {}
-    api = options.get("api") or _random_id(DEFAULT_API)
-    provider = options.get("provider") or DEFAULT_PROVIDER
+    api = _option(options, "api", _random_id(DEFAULT_API))
+    provider = _option(options, "provider", DEFAULT_PROVIDER)
     source_id = _random_id("faux-provider")
-    token_size = options.get("tokenSize") or {}
-    min_token_size = max(1, min(token_size.get("min", DEFAULT_MIN_TOKEN_SIZE), token_size.get("max", DEFAULT_MAX_TOKEN_SIZE)))
-    max_token_size = max(min_token_size, token_size.get("max", DEFAULT_MAX_TOKEN_SIZE))
-    tokens_per_second = options.get("tokensPerSecond")
+    token_size = _option(options, "tokenSize", {})
+    min_token_value = token_size.get("min") if isinstance(token_size, dict) and token_size.get("min") is not None else DEFAULT_MIN_TOKEN_SIZE
+    max_token_value = token_size.get("max") if isinstance(token_size, dict) and token_size.get("max") is not None else DEFAULT_MAX_TOKEN_SIZE
+    min_token_size = max(1, min(min_token_value, max_token_value))
+    max_token_size = max(min_token_size, max_token_value)
+    tokens_per_second = _option(options, "tokensPerSecond")
     pending_responses: list[FauxResponseStep] = []
     state = {"callCount": 0}
     prompt_cache: dict[str, str] = {}
 
-    model_definitions = options.get("models") or [
+    model_definitions = _option(options, "models") or [
         FauxModelDefinition(
             id=DEFAULT_MODEL_ID,
             name=DEFAULT_MODEL_NAME,
@@ -442,15 +524,15 @@ def register_faux_provider(options: dict[str, Any] | None = None) -> FauxProvide
     models = [
         Model(
             id=definition.id,
-            name=definition.name or definition.id,
+            name=definition.name if definition.name is not None else definition.id,
             api=api,
             provider=provider,
             baseUrl=DEFAULT_BASE_URL,
             reasoning=definition.reasoning if definition.reasoning is not None else False,
-            input=definition.input or ["text", "image"],
-            cost=definition.cost or {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-            contextWindow=definition.contextWindow or 128000,
-            maxTokens=definition.maxTokens or 16384,
+            input=definition.input if definition.input is not None else ["text", "image"],
+            cost=definition.cost if definition.cost is not None else {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+            contextWindow=definition.contextWindow if definition.contextWindow is not None else 128000,
+            maxTokens=definition.maxTokens if definition.maxTokens is not None else 16384,
         )
         for definition in normalized_definitions
     ]
@@ -462,8 +544,9 @@ def register_faux_provider(options: dict[str, Any] | None = None) -> FauxProvide
 
         async def run() -> None:
             try:
-                if stream_options is not None and stream_options.onResponse is not None:
-                    await _maybe_await(stream_options.onResponse({"status": 200, "headers": {}}, request_model))
+                on_response = _option(stream_options, "onResponse")
+                if callable(on_response):
+                    await _maybe_await(on_response({"status": 200, "headers": {}}, request_model))
 
                 if step is None:
                     message = _create_error_message("No more faux responses queued", api, provider, request_model.id)
@@ -485,9 +568,9 @@ def register_faux_provider(options: dict[str, Any] | None = None) -> FauxProvide
                     min_token_size,
                     max_token_size,
                     tokens_per_second,
-                    stream_options.signal if stream_options else None,
+                    _option(stream_options, "signal"),
                 )
-            except BaseException as error:  # noqa: BLE001
+            except Exception as error:  # noqa: BLE001
                 message = _create_error_message(error, api, provider, request_model.id)
                 outer.push(ErrorEvent(reason="error", error=message))
                 outer.end(message)
@@ -533,3 +616,17 @@ fauxThinking = faux_thinking
 fauxToolCall = faux_tool_call
 fauxAssistantMessage = faux_assistant_message
 registerFauxProvider = register_faux_provider
+
+__all__ = [
+    "FauxModelDefinition",
+    "FauxContentBlock",
+    "fauxText",
+    "fauxThinking",
+    "fauxToolCall",
+    "fauxAssistantMessage",
+    "FauxResponseFactory",
+    "FauxResponseStep",
+    "RegisterFauxProviderOptions",
+    "FauxProviderRegistration",
+    "registerFauxProvider",
+]
