@@ -142,9 +142,9 @@ def _create_client(
     if option_headers:
         headers.update(option_headers)
     client_kwargs: dict[str, Any] = {
-        api_key=api_key,
-        base_url=model.baseUrl,
-        default_headers=headers,
+        "api_key": api_key,
+        "base_url": model.baseUrl,
+        "default_headers": headers,
     }
     if max_retries is not None:
         client_kwargs["max_retries"] = max_retries
