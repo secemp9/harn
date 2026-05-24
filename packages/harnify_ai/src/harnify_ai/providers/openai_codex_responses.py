@@ -339,6 +339,7 @@ def build_request_body(
     context: Context,
     options: StreamOptions | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    text_verbosity = _option(options, "textVerbosity") or "low"
     messages = convert_responses_messages(model, context, CODEX_TOOL_CALL_PROVIDERS, {"includeSystemPrompt": False})
     body: dict[str, Any] = {
         "model": model.id,
@@ -346,7 +347,7 @@ def build_request_body(
         "stream": True,
         "instructions": context.systemPrompt or "You are a helpful assistant.",
         "input": messages,
-        "text": {"verbosity": _option(options, "textVerbosity", "low")},
+        "text": {"verbosity": text_verbosity},
         "include": ["reasoning.encrypted_content"],
         "prompt_cache_key": clamp_openai_prompt_cache_key(_option(options, "sessionId")),
         "tool_choice": "auto",
@@ -362,6 +363,7 @@ def build_request_body(
 
     reasoning_effort = _option(options, "reasoningEffort")
     if reasoning_effort is not None:
+        reasoning_summary = _option(options, "reasoningSummary")
         effort = (
             model.thinkingLevelMap.get("off", "none")
             if reasoning_effort == "none" and model.thinkingLevelMap
@@ -370,7 +372,10 @@ def build_request_body(
             else reasoning_effort
         )
         if effort is not None:
-            body["reasoning"] = {"effort": effort, "summary": _option(options, "reasoningSummary", "auto")}
+            body["reasoning"] = {
+                "effort": effort,
+                "summary": "auto" if reasoning_summary is None else reasoning_summary,
+            }
 
     return {key: value for key, value in body.items() if value is not None}
 
