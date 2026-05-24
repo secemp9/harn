@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 import harnify_ai.providers.mistral as mistral_provider
-from harnify_ai.types import Context, Model, ModelCost, SimpleStreamOptions, Tool
+from harnify_ai.types import AssistantMessage, Context, Model, ModelCost, SimpleStreamOptions, Tool, ToolResultMessage, Usage, UsageCost
 
 
 @dataclass(slots=True)
@@ -168,18 +168,22 @@ def test_to_chat_messages_uses_upstream_key_casing() -> None:
                 ],
                 "timestamp": 1,
             },
-            {
-                "role": "assistant",
-                "content": [{"type": "toolCall", "id": "call-1", "name": "calc", "arguments": {"a": 1}}],
-                "timestamp": 2,
-            },
-            {
-                "role": "tool",
-                "toolCallId": "call-1",
-                "toolName": "calc",
-                "content": [{"type": "image", "mimeType": "image/png", "data": "xyz"}],
-                "timestamp": 3,
-            },
+            AssistantMessage(
+                content=[{"type": "toolCall", "id": "call-1", "name": "calc", "arguments": {"a": 1}}],
+                api="mistral-conversations",
+                provider="mistral",
+                model="mistral-small-2603",
+                usage=Usage(input=0, output=0, cacheRead=0, cacheWrite=0, totalTokens=0, cost=UsageCost(input=0, output=0, cacheRead=0, cacheWrite=0, total=0)),
+                stopReason="toolUse",
+                timestamp=2,
+            ),
+            ToolResultMessage(
+                toolCallId="call-1",
+                toolName="calc",
+                content=[{"type": "image", "mimeType": "image/png", "data": "xyz"}],
+                isError=False,
+                timestamp=3,
+            ),
         ]
     )
 
