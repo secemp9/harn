@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
+from anthropic import omit
 
+import harnify_ai.providers.anthropic as anthropic_provider
 from harnify_ai.models import get_model
 from harnify_ai.providers.anthropic import (
     convert_tools,
@@ -54,6 +56,30 @@ class _FakeMessages:
 class _FakeClient:
     def __init__(self, response: _FakeResponse) -> None:
         self.messages = _FakeMessages(response)
+
+
+class _FakeRawMessages:
+    def __init__(self, response: _FakeResponse) -> None:
+        self._response = response
+        self.payloads: list[dict[str, object]] = []
+
+    @property
+    def with_raw_response(self) -> _FakeRawMessages:
+        return self
+
+    async def create(self, **kwargs: object) -> _FakeResponse:
+        self.payloads.append(kwargs)
+        return self._response
+
+
+class _FakeClientWithOptions:
+    def __init__(self, response: _FakeResponse) -> None:
+        self.messages = _FakeRawMessages(response)
+        self.with_options_calls: list[dict[str, object]] = []
+
+    def with_options(self, **kwargs: object) -> _FakeClientWithOptions:
+        self.with_options_calls.append(kwargs)
+        return self
 
 
 def _make_context(tools: list[Tool] | None = None) -> Context:
@@ -185,6 +211,28 @@ def test_anthropic_tool_compatibility_sets_expected_flags_and_headers() -> None:
     assert eager_tools[0]["eager_input_streaming"] is True
 
 
+def test_cloudflare_client_omits_sdk_auth_headers() -> None:
+    model = Model(
+        id="vendor--claude-opus-latest",
+        name="Vendor Proxy Opus Latest",
+        api="anthropic-messages",
+        provider="cloudflare-ai-gateway",
+        baseUrl="https://gateway.example/anthropic",
+        reasoning=False,
+        input=["text"],
+        cost=ModelCost(input=0, output=0, cacheRead=0, cacheWrite=0),
+        contextWindow=200_000,
+        maxTokens=32_000,
+    )
+
+    client, is_oauth = create_client(model, "test-key", True, False)
+
+    assert is_oauth is False
+    assert client.default_headers["cf-aig-authorization"] == "Bearer test-key"
+    assert client.default_headers["X-Api-Key"] is omit
+    assert client.default_headers["Authorization"] is omit
+
+
 @pytest.mark.asyncio
 async def test_stream_simple_anthropic_emits_disabled_thinking_payload_when_reasoning_is_off() -> None:
     model = get_model("anthropic", "claude-opus-4-7")
@@ -228,6 +276,69 @@ async def test_stream_simple_anthropic_emits_adaptive_payload_when_force_adaptiv
     assert captured_payload is not None
     assert captured_payload["thinking"] == {"type": "adaptive", "display": "summarized"}
     assert captured_payload["output_config"] == {"effort": "medium"}
+
+
+@pytest.mark.asyncio
+async def test_stream_anthropic_applies_timeout_and_retry_via_with_options() -> None:
+    model = get_model("anthropic", "claude-haiku-4-5")
+    assert model is not None
+    response = _FakeResponse(
+        [
+            {
+                "event": "message_start",
+                "data": (
+                    '{"type":"message_start","message":{"id":"msg_test","usage":{"input_tokens":1,'
+                    '"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}'
+                ),
+            },
+            {
+                "event": "content_block_start",
+                "data": '{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+            },
+            {
+                "event": "content_block_delta",
+                "data": '{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}',
+            },
+            {"event": "content_block_stop", "data": '{"type":"content_block_stop","index":0}'},
+            {
+                "event": "message_delta",
+                "data": (
+                    '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":1,'
+                    '"output_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}'
+                ),
+            },
+            {"event": "message_stop", "data": '{"type":"message_stop"}'},
+        ]
+    )
+    client = _FakeClientWithOptions(response)
+
+    stream = stream_anthropic(
+        model,
+        _make_context(),
+        {"client": client, "timeoutMs": 1500, "maxRetries": 4},
+    )
+    result = await stream.result()
+
+    assert result.stopReason == "stop"
+    assert client.with_options_calls == [{"timeout": 1.5, "max_retries": 4}]
+    assert client.messages.payloads == [
+        {
+            "model": model.id,
+            "messages": [{"role": "user", "content": "Use the tool."}],
+            "max_tokens": model.maxTokens,
+            "stream": True,
+        }
+    ]
+
+
+def test_anthropic_module_exports_expected_names() -> None:
+    assert anthropic_provider.__all__ == [
+        "AnthropicEffort",
+        "AnthropicOptions",
+        "AnthropicThinkingDisplay",
+        "streamAnthropic",
+        "streamSimpleAnthropic",
+    ]
 
 
 def test_claude_code_tool_name_normalization_round_trips_matching_tools_only() -> None:
