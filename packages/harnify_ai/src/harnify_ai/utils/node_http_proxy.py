@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import json
 from dataclasses import dataclass
 from urllib.parse import ParseResult, urlparse
 
@@ -45,14 +47,15 @@ def _should_proxy_hostname(hostname: str, port: int) -> bool:
     if no_proxy == "*":
         return False
 
-    for proxy in [item for item in no_proxy.replace(" ", ",").split(",") if item]:
+    for proxy in re.split(r"[,\s]", no_proxy):
+        if not proxy:
+            continue
         proxy_hostname = proxy
         proxy_port = 0
-        if ":" in proxy and proxy.count(":") == 1:
-            host_part, port_part = proxy.rsplit(":", 1)
-            if port_part.isdigit():
-                proxy_hostname = host_part
-                proxy_port = int(port_part)
+        parsed_proxy = re.match(r"^(.+):(\d+)$", proxy)
+        if parsed_proxy is not None:
+            proxy_hostname = parsed_proxy.group(1)
+            proxy_port = int(parsed_proxy.group(2))
         if proxy_port and proxy_port != port:
             continue
 
@@ -92,9 +95,9 @@ def resolve_http_proxy_url_for_target(target_url: str | ParseResult) -> ParseRes
 
     proxy_url = urlparse(proxy)
     if not proxy_url.scheme or not proxy_url.netloc:
-        raise ValueError(f"Invalid proxy URL {proxy!r}")
+        raise RuntimeError(f"Invalid proxy URL {json.dumps(proxy)}: Invalid URL")
     if proxy_url.scheme not in {"http", "https"}:
-        raise ValueError(f"{UNSUPPORTED_PROXY_PROTOCOL_MESSAGE} Got {proxy_url.scheme}:")
+        raise RuntimeError(f"{UNSUPPORTED_PROXY_PROTOCOL_MESSAGE} Got {proxy_url.scheme}:")
     return proxy_url
 
 
@@ -108,3 +111,13 @@ def create_http_proxy_agents_for_target(target_url: str | ParseResult) -> NodeHt
 
 resolveHttpProxyUrlForTarget = resolve_http_proxy_url_for_target
 createHttpProxyAgentsForTarget = create_http_proxy_agents_for_target
+
+__all__ = [
+    "NodeHttpProxyAgents",
+    "UNSUPPORTED_PROXY_PROTOCOL_MESSAGE",
+    "createHttpProxyAgentsForTarget",
+    "createHttpProxyAgentsForTarget",
+    "create_http_proxy_agents_for_target",
+    "resolveHttpProxyUrlForTarget",
+    "resolve_http_proxy_url_for_target",
+]
