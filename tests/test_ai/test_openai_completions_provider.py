@@ -197,6 +197,28 @@ def test_build_params_preserves_openrouter_off_reasoning_value() -> None:
     assert params["reasoning"] == {"effort": ""}
 
 
+def test_build_params_openrouter_default_off_reasoning_matches_ts_semantics() -> None:
+    base_model = _openrouter_auto_model().model_copy(update={"reasoning": True})
+
+    params_without_map = build_params(
+        base_model,
+        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+    )
+    assert params_without_map["reasoning"] == {"effort": "none"}
+
+    params_without_off_key = build_params(
+        base_model.model_copy(update={"thinkingLevelMap": {}}),
+        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+    )
+    assert params_without_off_key["reasoning"] == {"effort": "none"}
+
+    params_with_null_off = build_params(
+        base_model.model_copy(update={"thinkingLevelMap": {"off": None}}),
+        Context(messages=[{"role": "user", "content": "hi", "timestamp": 1}]),
+    )
+    assert "reasoning" not in params_with_null_off
+
+
 def test_create_client_cloudflare_gateway_uses_compat_base_url_and_affinity_headers(monkeypatch) -> None:
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account-id")
     monkeypatch.setenv("CLOUDFLARE_GATEWAY_ID", "gateway-id")
