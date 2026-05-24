@@ -29,10 +29,8 @@ from harnify_coding_agent.core.extensions.types import (
     ToolDefinition,
     ToolInfo,
     _LoadedExtension,
-    _LoadedExtensionRuntime,
 )
 from harnify_coding_agent.core.source_info import SourceInfo, create_synthetic_source_info
-from harnify_coding_agent.core.tools.tool_definition_wrapper import create_tool_definition_from_agent_tool
 from harnify_coding_agent.utils.paths import resolve_path
 
 CONFIG_DIR_NAME = ".harnify"
@@ -54,20 +52,11 @@ class _ExtensionAPI:
         self.runtime.assertActive()
         self.extension.handlers.setdefault(event, []).append(handler)
 
-    def register_tool(
-        self,
-        definition: ToolDefinition[Any, Any],
-        *,
-        source_path: str | None = None,
-        source_info: SourceInfo | None = None,
-    ) -> None:
+    def registerTool(self, definition: ToolDefinition[Any, Any]) -> None:
         self.runtime.assertActive()
-        normalized_definition = (
-            definition if isinstance(definition, ToolDefinition) else create_tool_definition_from_agent_tool(definition)
-        )
-        self.extension.tools[normalized_definition.name] = RegisteredTool(
-            definition=normalized_definition,
-            sourceInfo=source_info or self.extension.sourceInfo,
+        self.extension.tools[definition.name] = RegisteredTool(
+            definition=definition,
+            sourceInfo=self.extension.sourceInfo,
         )
         self.runtime.refreshTools()
 
@@ -142,7 +131,9 @@ class _ExtensionAPI:
 
     async def exec(self, command: str, args: list[str], options: ExecOptions | None = None) -> ExecResult:
         self.runtime.assertActive()
-        return await _exec_command(command, args, self.cwd, options or {})
+        resolved_options: ExecOptions = dict(options or {})
+        resolved_cwd = str(resolved_options.get("cwd") or self.cwd)
+        return await _exec_command(command, args, resolved_cwd, resolved_options)
 
     def getActiveTools(self) -> list[str]:
         self.runtime.assertActive()
@@ -180,28 +171,6 @@ class _ExtensionAPI:
         self.runtime.assertActive()
         self.runtime.unregisterProvider(name, self.extension.path)
 
-    def add_skill_path(self, path: str) -> None:
-        self.extension.skillPaths.append(resolve_path(path, self.cwd, trim=True))
-
-    def add_prompt_path(self, path: str) -> None:
-        self.extension.promptPaths.append(resolve_path(path, self.cwd, trim=True))
-
-    def add_theme_path(self, path: str) -> None:
-        self.extension.themePaths.append(resolve_path(path, self.cwd, trim=True))
-
-    def set_system_prompt(self, prompt: str | None) -> None:
-        self.extension.systemPrompt = prompt
-
-    def append_system_prompt(self, prompt: str) -> None:
-        self.extension.appendSystemPrompt.append(prompt)
-
-    registerTool = register_tool
-    addSkillPath = add_skill_path
-    addPromptPath = add_prompt_path
-    addThemePath = add_theme_path
-    setSystemPrompt = set_system_prompt
-    appendSystemPrompt = append_system_prompt
-
 
 def _not_initialized(*_args: Any, **_kwargs: Any) -> Any:
     raise RuntimeError("Extension runtime not initialized. Action methods cannot be called during extension loading.")
@@ -209,6 +178,10 @@ def _not_initialized(*_args: Any, **_kwargs: Any) -> Any:
 
 async def _not_initialized_async(*_args: Any, **_kwargs: Any) -> Any:
     raise RuntimeError("Extension runtime not initialized. Action methods cannot be called during extension loading.")
+
+
+async def _set_model_not_initialized(*_args: Any, **_kwargs: Any) -> Any:
+    raise RuntimeError("Extension runtime not initialized")
 
 
 def create_extension_runtime() -> ExtensionRuntime:
@@ -229,7 +202,7 @@ def create_extension_runtime() -> ExtensionRuntime:
             )
         )
 
-    runtime = _LoadedExtensionRuntime(
+    runtime = ExtensionRuntime(
         sendMessage=_not_initialized,
         sendUserMessage=_not_initialized,
         appendEntry=_not_initialized,
@@ -241,7 +214,7 @@ def create_extension_runtime() -> ExtensionRuntime:
         setActiveTools=_not_initialized,
         refreshTools=lambda: None,
         getCommands=_not_initialized,
-        setModel=_not_initialized_async,
+        setModel=_set_model_not_initialized,
         getThinkingLevel=_not_initialized,
         setThinkingLevel=_not_initialized,
         flagValues={},
@@ -259,7 +232,6 @@ def create_extension_runtime() -> ExtensionRuntime:
             slice(None),
             [entry for entry in runtime.pendingProviderRegistrations if entry.name != name],
         ),
-        loadedModules={},
     )
     return runtime
 
@@ -271,21 +243,18 @@ def _default_event_bus() -> EventBusController:
 async def load_extension_from_factory(
     factory: ExtensionFactory,
     cwd: str,
-    event_bus: Any | None = None,
-    runtime: ExtensionRuntime | None = None,
+    event_bus: Any,
+    runtime: ExtensionRuntime,
     extension_path: str = "<inline>",
 ) -> Extension:
-    resolved_runtime = runtime or create_extension_runtime()
-    resolved_event_bus = event_bus or _default_event_bus()
     extension = _create_extension(extension_path, extension_path)
     api = _ExtensionAPI(
         extension=extension,
         cwd=resolve_path(cwd),
-        runtime=resolved_runtime,
-        events=resolved_event_bus,
+        runtime=runtime,
+        events=event_bus,
     )
     await _invoke_factory(factory, api)
-    resolved_runtime.loadedModules[extension.resolvedPath] = factory
     return extension
 
 
@@ -301,12 +270,12 @@ async def load_extensions(
     runtime = create_extension_runtime()
 
     for ext_path in paths:
-        try:
-            extension = await _load_extension(ext_path, resolved_cwd, resolved_event_bus, runtime)
-        except Exception as error:
-            errors.append({"path": ext_path, "error": str(error)})
+        extension, error = await _load_extension(ext_path, resolved_cwd, resolved_event_bus, runtime)
+        if error is not None:
+            errors.append({"path": ext_path, "error": error})
             continue
-        extensions.append(extension)
+        if extension is not None:
+            extensions.append(extension)
 
     return LoadExtensionsResult(extensions=extensions, errors=errors, runtime=runtime)
 
@@ -402,18 +371,21 @@ async def _load_extension(
     cwd: str,
     event_bus: Any,
     runtime: ExtensionRuntime,
-) -> Extension:
-    resolved_path = resolve_path(path, cwd, trim=True)
-    module = _load_extension_module(resolved_path)
-    factory = _resolve_extension_factory(module)
-    extension = _create_extension(path, resolved_path)
-    api = _ExtensionAPI(extension=extension, cwd=cwd, runtime=runtime, events=event_bus)
-    await _invoke_factory(factory, api)
-    runtime.loadedModules[resolved_path] = module
-    return extension
+) -> tuple[Extension | None, str | None]:
+    resolved_path = resolve_path(path, cwd, trim=True, normalize_unicode_spaces=True)
+    try:
+        factory = _load_extension_module(resolved_path)
+        if factory is None:
+            return None, f"Extension does not export a valid factory function: {path}"
+        extension = _create_extension(path, resolved_path)
+        api = _ExtensionAPI(extension=extension, cwd=cwd, runtime=runtime, events=event_bus)
+        await _invoke_factory(factory, api)
+        return extension, None
+    except Exception as error:
+        return None, f"Failed to load extension: {error}"
 
 
-def _load_extension_module(resolved_path: str) -> Any:
+def _load_extension_module(resolved_path: str) -> ExtensionFactory | None:
     if not os.path.exists(resolved_path):
         raise FileNotFoundError(f"Extension path does not exist: {resolved_path}")
     spec = importlib.util.spec_from_file_location(f"harnify_extension_{uuid.uuid4().hex}", resolved_path)
@@ -421,15 +393,8 @@ def _load_extension_module(resolved_path: str) -> Any:
         raise ImportError(f"Could not create module spec for {resolved_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module
-
-
-def _resolve_extension_factory(module: Any) -> ExtensionFactory:
-    for attribute in ("default", "extension_factory", "register_extension"):
-        candidate = getattr(module, attribute, None)
-        if callable(candidate):
-            return candidate
-    raise AttributeError("Extension module must export default, extension_factory, or register_extension")
+    candidate = getattr(module, "default", None)
+    return candidate if callable(candidate) else None
 
 
 async def _invoke_factory(factory: ExtensionFactory, api: _ExtensionAPI) -> None:
@@ -465,26 +430,12 @@ def _default_agent_dir() -> str:
 
 createExtensionRuntime = create_extension_runtime
 discoverAndLoadExtensions = discover_and_load_extensions
-discoverExtensionsInDir = discover_extensions_in_dir
-isExtensionFile = is_extension_file
 loadExtensionFromFactory = load_extension_from_factory
 loadExtensions = load_extensions
-resolveExtensionEntries = resolve_extension_entries
 
 __all__ = [
-    "CONFIG_DIR_NAME",
     "createExtensionRuntime",
-    "create_extension_runtime",
     "discoverAndLoadExtensions",
-    "discoverExtensionsInDir",
-    "discover_and_load_extensions",
-    "discover_extensions_in_dir",
-    "isExtensionFile",
-    "is_extension_file",
     "loadExtensionFromFactory",
     "loadExtensions",
-    "load_extension_from_factory",
-    "load_extensions",
-    "resolveExtensionEntries",
-    "resolve_extension_entries",
 ]
