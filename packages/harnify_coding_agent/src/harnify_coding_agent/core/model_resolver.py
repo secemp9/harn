@@ -129,10 +129,10 @@ def _minimatch(value: str, pattern: str) -> bool:
                 continue
             content = pattern[index + 1 : closing]
             if content.startswith("!"):
-                content = "^" + re.escape(content[1:])
-            else:
-                content = re.escape(content)
-            regex.append(f"[{content}]")
+                content = "^" + content[1:]
+            elif content.startswith("^"):
+                content = "\\" + content
+            regex.append(f"[{content.replace('\\', '\\\\')}]")
             index = closing + 1
             continue
         regex.append(re.escape(char))
