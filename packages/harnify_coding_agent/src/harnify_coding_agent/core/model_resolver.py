@@ -330,7 +330,7 @@ def resolveCliModel(options: dict[str, Any]) -> ResolveCliModelResult:
             )
 
     if provider:
-        fallback_model = buildFallbackModel(provider, pattern, available_models)
+        fallback_model = _buildFallbackModel(provider, pattern, available_models)
         if fallback_model is not None:
             warning = (
                 f'{parsed.warning} Model "{pattern}" not found for provider "{provider}". Using custom model id.'
@@ -367,7 +367,8 @@ async def findInitialModel(options: dict[str, Any]) -> InitialModelResult:
             }
         )
         if resolved.error:
-            raise RuntimeError(resolved.error)
+            print(resolved.error, file=sys.stderr)
+            raise SystemExit(1)
         if resolved.model is not None:
             return InitialModelResult(
                 model=resolved.model,
@@ -417,7 +418,7 @@ async def restoreModelFromSession(
 
     if restored_model is not None and has_configured_auth:
         if shouldPrintMessages:
-            print(f"Restored model: {savedProvider}/{savedModelId}", file=sys.stderr)
+            print(f"Restored model: {savedProvider}/{savedModelId}")
         return {"model": restored_model, "fallbackMessage": None}
 
     reason = "model no longer exists" if restored_model is None else "no auth configured"
@@ -426,7 +427,7 @@ async def restoreModelFromSession(
 
     if currentModel is not None:
         if shouldPrintMessages:
-            print(f"Falling back to: {currentModel.provider}/{currentModel.id}", file=sys.stderr)
+            print(f"Falling back to: {currentModel.provider}/{currentModel.id}")
         return {
             "model": currentModel,
             "fallbackMessage": (
@@ -446,6 +447,8 @@ async def restoreModelFromSession(
             if fallback_model is not None:
                 break
         fallback_model = fallback_model or available_models[0]
+        if shouldPrintMessages:
+            print(f"Falling back to: {fallback_model.provider}/{fallback_model.id}")
         return {
             "model": fallback_model,
             "fallbackMessage": (
@@ -456,31 +459,19 @@ async def restoreModelFromSession(
 
     return {
         "model": None,
-        "fallbackMessage": f"Could not restore model {savedProvider}/{savedModelId} ({reason}).",
+        "fallbackMessage": None,
     }
-
-
-findExactModelReferenceMatch = findExactModelReferenceMatch
-parseModelPattern = parseModelPattern
-resolveModelScope = resolveModelScope
-resolveCliModel = resolveCliModel
-findInitialModel = findInitialModel
-restoreModelFromSession = restoreModelFromSession
 
 __all__ = [
     "InitialModelResult",
     "ParsedModelResult",
     "ResolveCliModelResult",
     "ScopedModel",
-    "buildFallbackModel",
     "defaultModelPerProvider",
     "findExactModelReferenceMatch",
     "findInitialModel",
-    "isAlias",
-    "isValidThinkingLevel",
     "parseModelPattern",
     "resolveCliModel",
     "resolveModelScope",
     "restoreModelFromSession",
-    "tryMatchModel",
 ]
