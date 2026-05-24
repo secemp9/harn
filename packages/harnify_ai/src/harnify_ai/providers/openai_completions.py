@@ -24,7 +24,6 @@ from harnify_ai.types import (
     Context,
     DoneEvent,
     ErrorEvent,
-    ImageContent,
     Model,
     SimpleStreamOptions,
     StartEvent,
@@ -99,8 +98,17 @@ class OpenAICompletionsOptions(TypedDict, total=False):
     onResponse: Any
     timeoutMs: int
     maxRetries: int
-    toolChoice: Literal["auto", "none", "required"] | dict[str, Any]
+    toolChoice: Literal["auto", "none", "required"] | "OpenAICompletionsToolChoiceObject"
     reasoningEffort: Literal["minimal", "low", "medium", "high", "xhigh"]
+
+
+class OpenAICompletionsToolChoiceFunction(TypedDict):
+    name: str
+
+
+class OpenAICompletionsToolChoiceObject(TypedDict):
+    type: Literal["function"]
+    function: OpenAICompletionsToolChoiceFunction
 
 
 def _empty_usage() -> Usage:
@@ -442,9 +450,6 @@ def create_client(
     options_headers: Mapping[str, str] | None = None,
     session_id: str | None = None,
     compat: Mapping[str, Any] | None = None,
-    *,
-    timeout_ms: int | None = None,
-    max_retries: int | None = None,
 ) -> AsyncOpenAI:
     if not api_key:
         env_key = os.environ.get("OPENAI_API_KEY")
@@ -482,20 +487,11 @@ def create_client(
     else:
         default_headers = headers
 
-    client = AsyncOpenAI(
+    return AsyncOpenAI(
         api_key=api_key,
         base_url=resolve_cloudflare_base_url(model) if is_cloudflare_provider(model.provider) else model.baseUrl,
         default_headers=default_headers,
     )
-
-    request_client_kwargs: dict[str, Any] = {}
-    if timeout_ms is not None:
-        request_client_kwargs["timeout"] = timeout_ms / 1000
-    if max_retries is not None:
-        request_client_kwargs["max_retries"] = max_retries
-    if request_client_kwargs:
-        return client.with_options(**request_client_kwargs)
-    return client
 
 
 def build_params(
@@ -806,7 +802,7 @@ def convert_messages(
 
                 if has_images and "image" in model.input:
                     for block in tool_message.content:
-                        if isinstance(block, ImageContent):
+                        if block.type == "image":
                             image_blocks.append(
                                 {
                                     "type": "image_url",
