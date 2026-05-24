@@ -230,10 +230,15 @@ def stream_mistral(
                 if next_payload is not None:
                     payload = next_payload
 
-            request_kwargs = build_request_kwargs(model, options)
-            mistral_stream = await _maybe_await(mistral.chat.stream_async(**payload, **request_kwargs))
+            request_options = build_request_kwargs(model, options)
+            sdk_payload = _prepare_sdk_chat_payload(payload)
+            sdk_request_kwargs = _prepare_sdk_request_kwargs(request_options)
+            mistral_stream = await _await_with_abort(
+                lambda: _maybe_await(mistral.chat.stream_async(**sdk_payload, **sdk_request_kwargs)),
+                _option(options, "signal"),
+            )
             stream.push(StartEvent(partial=output))
-            await consume_chat_stream(model, output, stream, mistral_stream)
+            await consume_chat_stream(model, output, stream, mistral_stream, _option(options, "signal"))
 
             if _is_aborted(_option(options, "signal")):
                 raise RuntimeError("Request was aborted")
