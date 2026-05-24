@@ -987,7 +987,10 @@ async def _create_completion_stream(client: Any, params: dict[str, Any], options
         request_client = client.with_options(**request_client_kwargs)
 
     if hasattr(getattr(getattr(request_client, "chat", None), "completions", None), "with_raw_response"):
-        raw_response = await _await_with_signal(request_client.chat.completions.with_raw_response.create(**params), signal)
+        raw_response = await _await_with_signal(
+            _maybe_await(request_client.chat.completions.with_raw_response.create(**params)),
+            signal,
+        )
         on_response = _option(options, "onResponse")
         if callable(on_response):
             await _maybe_await(
@@ -999,11 +1002,11 @@ async def _create_completion_stream(client: Any, params: dict[str, Any], options
                     model,
                 )
             )
-        return await _await_with_signal(raw_response.parse(), signal)
+        return await _await_with_signal(_maybe_await(raw_response.parse()), signal)
 
-    created = await _await_with_signal(request_client.chat.completions.create(**params), signal)
+    created = await _await_with_signal(_maybe_await(request_client.chat.completions.create(**params)), signal)
     if hasattr(created, "withResponse"):
-        wrapped = await _await_with_signal(created.withResponse(), signal)
+        wrapped = await _await_with_signal(_maybe_await(created.withResponse()), signal)
         on_response = _option(options, "onResponse")
         if callable(on_response):
             await _maybe_await(
