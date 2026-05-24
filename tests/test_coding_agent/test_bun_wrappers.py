@@ -37,6 +37,10 @@ def test_register_bedrock_forwards_module_override(monkeypatch) -> None:
     assert seen["module"] is sentinel
 
 
+def test_register_bedrock_module_exports_match_ts_surface() -> None:
+    assert register_bedrock.__all__ == []
+
+
 def test_bun_cli_main_runs_wrapper_steps_before_delegating(monkeypatch) -> None:
     seen: dict[str, object] = {}
 
