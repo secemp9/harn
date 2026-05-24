@@ -8,6 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 import harnify_ai.env_api_keys as env_api_keys
+import harnify_ai.session_resources as session_resources_module
 import harnify_ai.utils.validation as validation_utils
 from harnify_ai.session_resources import cleanup_session_resources, register_session_resource_cleanup
 from harnify_ai.types import AssistantMessage, Tool, ToolCall, Usage, UsageCost
@@ -116,6 +117,14 @@ def test_session_resource_cleanup_runs_all_handlers_and_aggregates_failures() ->
         unregister_bad()
 
     assert seen == [("ok", "session-123"), ("bad", "session-123")]
+
+
+def test_session_resources_module_exports_expected_names() -> None:
+    assert session_resources_module.__all__ == [
+        "SessionResourceCleanup",
+        "registerSessionResourceCleanup",
+        "cleanupSessionResources",
+    ]
 
 
 def test_validate_tool_arguments_supports_pydantic_models_and_raw_json_schema() -> None:
