@@ -195,9 +195,19 @@ def _coerce_oauth_credentials(value: dict[str, Any]) -> OAuthCredentials:
     return OAuthCredentials.model_validate({key: item for key, item in value.items() if key != "type"})
 
 
+def _coerce_storage_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        return {str(index): item for index, item in enumerate(value)}
+    if isinstance(value, str):
+        return {str(index): item for index, item in enumerate(value)}
+    return {}
+
+
 class AuthStorage:
     def __init__(self, storage: AuthStorageBackend):
-        self.data: AuthStorageData = {}
+        self.data: Any = {}
         self.runtimeOverrides: dict[str, str] = {}
         self.fallbackResolver: Callable[[str], str | None] | None = None
         self.loadError: Exception | None = None
@@ -257,7 +267,7 @@ class AuthStorage:
             return
 
         def persist(current: str | None) -> LockResult:
-            current_data = self._parse_storage_data(current)
+            current_data = _coerce_storage_object(self._parse_storage_data(current))
             merged = dict(current_data)
             if credential is None:
                 merged.pop(provider, None)
@@ -271,26 +281,30 @@ class AuthStorage:
             self._record_error(error)
 
     def get(self, provider: str) -> AuthCredential | None:
-        return self.data.get(provider)
+        return _coerce_storage_object(self.data).get(provider)
 
     def set(self, provider: str, credential: AuthCredential) -> None:
+        if not isinstance(self.data, dict):
+            self.data = _coerce_storage_object(self.data)
         self.data[provider] = credential
         self.persistProviderChange(provider, credential)
 
     def remove(self, provider: str) -> None:
+        if not isinstance(self.data, dict):
+            self.data = _coerce_storage_object(self.data)
         self.data.pop(provider, None)
         self.persistProviderChange(provider, None)
 
     def list(self) -> list[str]:
-        return list(self.data.keys())
+        return list(_coerce_storage_object(self.data).keys())
 
     def has(self, provider: str) -> bool:
-        return provider in self.data
+        return provider in _coerce_storage_object(self.data)
 
     def hasAuth(self, provider: str) -> bool:
         if provider in self.runtimeOverrides:
             return True
-        if provider in self.data:
+        if _coerce_storage_object(self.data).get(provider):
             return True
         if get_env_api_key(provider):
             return True
@@ -299,7 +313,7 @@ class AuthStorage:
         return False
 
     def getAuthStatus(self, provider: str) -> AuthStatus:
-        if provider in self.data:
+        if _coerce_storage_object(self.data).get(provider):
             return AuthStatus(configured=True, source="stored")
         if provider in self.runtimeOverrides:
             return AuthStatus(configured=False, source="runtime", label="--api-key")
@@ -311,7 +325,7 @@ class AuthStorage:
         return AuthStatus(configured=False)
 
     def getAll(self) -> AuthStorageData:
-        return dict(self.data)
+        return dict(_coerce_storage_object(self.data))
 
     def drainErrors(self) -> list[Exception]:
         drained = list(self.errors)
@@ -334,9 +348,10 @@ class AuthStorage:
             return None
 
         async def refresh(current: str | None) -> LockResult:
-            current_data = self._parse_storage_data(current)
-            self.data = current_data
+            current_data_raw = self._parse_storage_data(current)
+            self.data = current_data_raw
             self.loadError = None
+            current_data = _coerce_storage_object(current_data_raw)
             credential = current_data.get(providerId)
             if not isinstance(credential, dict) or credential.get("type") != "oauth":
                 return LockResult(result=None)
@@ -375,7 +390,7 @@ class AuthStorage:
         if runtime_key:
             return runtime_key
 
-        credential = self.data.get(providerId)
+        credential = _coerce_storage_object(self.data).get(providerId)
         if isinstance(credential, dict) and credential.get("type") == "api_key":
             return resolveConfigValue(str(credential.get("key", "")))
 
