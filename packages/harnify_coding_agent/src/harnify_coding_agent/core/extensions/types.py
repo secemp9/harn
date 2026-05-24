@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, TypeGuard, TypeVar, overload
 
 from harnify_agent.harness.messages import CustomMessage
 from harnify_agent.types import AgentMessage, AgentToolResult, AgentToolUpdateCallback, ThinkingLevel, ToolExecutionMode
@@ -64,7 +64,49 @@ TDetails = TypeVar("TDetails")
 TEvent = TypeVar("TEvent")
 TResult = TypeVar("TResult")
 
-type AppKeybinding = str
+type AppKeybinding = Literal[
+    "app.interrupt",
+    "app.clear",
+    "app.exit",
+    "app.suspend",
+    "app.thinking.cycle",
+    "app.model.cycleForward",
+    "app.model.cycleBackward",
+    "app.model.select",
+    "app.tools.expand",
+    "app.thinking.toggle",
+    "app.session.toggleNamedFilter",
+    "app.editor.external",
+    "app.message.followUp",
+    "app.message.dequeue",
+    "app.clipboard.pasteImage",
+    "app.session.new",
+    "app.session.tree",
+    "app.session.fork",
+    "app.session.resume",
+    "app.tree.foldOrUp",
+    "app.tree.unfoldOrDown",
+    "app.tree.editLabel",
+    "app.tree.toggleLabelTimestamp",
+    "app.session.togglePath",
+    "app.session.toggleSort",
+    "app.session.rename",
+    "app.session.delete",
+    "app.session.deleteNoninvasive",
+    "app.models.save",
+    "app.models.enableAll",
+    "app.models.clearAll",
+    "app.models.toggleProvider",
+    "app.models.reorderUp",
+    "app.models.reorderDown",
+    "app.tree.filter.default",
+    "app.tree.filter.noTools",
+    "app.tree.filter.userOnly",
+    "app.tree.filter.labeledOnly",
+    "app.tree.filter.all",
+    "app.tree.filter.cycleForward",
+    "app.tree.filter.cycleBackward",
+]
 type BranchSummaryEntry = SessionEntry
 type CompactionEntry = SessionEntry
 type WidgetPlacement = Literal["aboveEditor", "belowEditor"]
