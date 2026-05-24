@@ -96,6 +96,20 @@ def test_self_update_commands_match_python_install_methods(monkeypatch) -> None:
     )
 
 
+def test_self_update_command_requires_writable_install_path(monkeypatch) -> None:
+    monkeypatch.setattr(config, "detect_install_method", lambda: "pip")
+    monkeypatch.setattr(config, "_is_self_update_path_writable", lambda package_dir=None: False)
+
+    assert config.get_self_update_command(config.PACKAGE_NAME) is None
+    assert config.get_update_instruction(config.PACKAGE_NAME) == (
+        f"Run: {sys.executable} -m pip install --upgrade harnify-coding-agent"
+    )
+    assert config.get_self_update_unavailable_instruction(config.PACKAGE_NAME) == (
+        "This installation is managed by a pip install, but the install path is not writable. "
+        f"Update it yourself with: {sys.executable} -m pip install --upgrade harnify-coding-agent"
+    )
+
+
 def test_self_update_fallback_mentions_source_checkout(monkeypatch) -> None:
     monkeypatch.setattr(config, "detect_install_method", lambda: "source")
     assert config.get_self_update_command(config.PACKAGE_NAME) is None
