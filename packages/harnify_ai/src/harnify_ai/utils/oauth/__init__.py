@@ -50,7 +50,7 @@ BUILT_IN_OAUTH_PROVIDERS: list[OAuthProviderInterface] = [
 _oauth_provider_registry: dict[str, OAuthProviderInterface] = {provider.id: provider for provider in BUILT_IN_OAUTH_PROVIDERS}
 
 
-class OAuthApiKeyResult(TypedDict):
+class _OAuthApiKeyResult(TypedDict):
     newCredentials: OAuthCredentials
     apiKey: str
 
@@ -95,7 +95,7 @@ async def refresh_oauth_token(provider_id: OAuthProviderId, credentials: OAuthCr
 async def get_oauth_api_key(
     provider_id: OAuthProviderId,
     credentials: dict[str, OAuthCredentials],
-) -> OAuthApiKeyResult | None:
+) -> _OAuthApiKeyResult | None:
     provider = get_oauth_provider(provider_id)
     if provider is None:
         raise RuntimeError(f"Unknown OAuth provider: {provider_id}")
@@ -126,7 +126,6 @@ getOAuthApiKey = get_oauth_api_key
 __all__ = [
     "BUILT_IN_OAUTH_PROVIDERS",
     "OAuthAuthInfo",
-    "OAuthApiKeyResult",
     "OAuthCredentials",
     "OAuthDeviceCodeCompleteResult",
     "OAuthDeviceCodeFailedResult",
