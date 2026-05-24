@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from collections.abc import Callable
 from typing import Any
@@ -78,7 +79,8 @@ async def generate_images_openrouter(
                 output.output.append(TextContent(text=content))
 
             for image in getattr(choice.message, "images", []) or []:
-                image_url = image.image_url if isinstance(getattr(image, "image_url", None), str) else getattr(image.image_url, "url", None)
+                image_url_value = getattr(image, "image_url", None)
+                image_url = image_url_value if isinstance(image_url_value, str) else getattr(image_url_value, "url", None)
                 if not image_url or not image_url.startswith("data:"):
                     continue
                 matches = re.match(r"^data:([^;]+);base64,(.+)$", image_url)
@@ -89,7 +91,7 @@ async def generate_images_openrouter(
         return output
     except Exception as error:  # noqa: BLE001
         output.stopReason = "aborted" if _signal_aborted(options.signal if options else None) else "error"
-        output.errorMessage = str(error)
+        output.errorMessage = _format_openrouter_error(error)
         return output
 
 
@@ -123,14 +125,14 @@ async def _await_with_signal(request_factory: Callable[[], Any], signal: Any) ->
         request_task.cancel()
         try:
             await request_task
-        except BaseException:
+        except Exception:
             pass
         raise RuntimeError("Request aborted")
     finally:
         abort_task.cancel()
         try:
             await abort_task
-        except BaseException:
+        except Exception:
             pass
 
 
@@ -206,4 +208,10 @@ def _signal_aborted(signal: Any) -> bool:
     return False
 
 
+def _format_openrouter_error(error: Any) -> str:
+    return str(error) if isinstance(error, Exception) else json.dumps(error, default=str)
+
+
 generateImagesOpenRouter = generate_images_openrouter
+
+__all__ = ["generateImagesOpenRouter"]
