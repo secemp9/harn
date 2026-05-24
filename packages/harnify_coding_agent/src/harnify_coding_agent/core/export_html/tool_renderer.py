@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 from harnify_coding_agent.core.export_html.ansi_to_html import ansi_lines_to_html
 
-ANSI_ESCAPE_REGEX = re.compile(r"\x1b\[[\d;]*m")
+ANSI_ESCAPE_REGEX = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class RenderableComponent(Protocol):
@@ -200,14 +200,7 @@ def create_tool_html_renderer(deps: ToolHtmlRendererDeps | dict[str, Any]) -> To
 createToolHtmlRenderer = create_tool_html_renderer
 
 __all__ = [
-    "RenderableComponent",
     "ToolHtmlRenderer",
     "ToolHtmlRendererDeps",
-    "ToolHtmlResult",
-    "ToolRenderContext",
-    "ansi_lines_to_html",
     "createToolHtmlRenderer",
-    "create_tool_html_renderer",
-    "is_blank_rendered_line",
-    "trim_rendered_result_lines",
 ]

@@ -33,6 +33,17 @@ def test_export_html_module_exports_match_ts_surface() -> None:
     ]
 
 
+def test_tool_renderer_module_exports_match_ts_surface() -> None:
+    import importlib
+
+    module = importlib.import_module("harnify_coding_agent.core.export_html.tool_renderer")
+    assert module.__all__ == [
+        "ToolHtmlRenderer",
+        "ToolHtmlRendererDeps",
+        "createToolHtmlRenderer",
+    ]
+
+
 def test_ansi_to_html_handles_styles_and_escaping() -> None:
     rendered = ansi_to_html('plain \x1b[31m<red>\x1b[0m \x1b[1;4m"\'&"\x1b[0m')
     assert "plain " in rendered
