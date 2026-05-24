@@ -3,46 +3,42 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from harnify_agent.types import ThinkingLevel
 from harnify_ai.types import Model
 
 from harnify_coding_agent.config import get_agent_dir
 from harnify_coding_agent.core.auth_storage import AuthStorage
+from harnify_coding_agent.core.extensions.types import ToolDefinition
 from harnify_coding_agent.core.model_registry import ModelRegistry
-from harnify_coding_agent.core.resource_loader import DefaultResourceLoader, DefaultResourceLoaderOptions
+from harnify_coding_agent.core.resource_loader import (
+    DefaultResourceLoader,
+    DefaultResourceLoaderOptions,
+    ResourceLoaderLike,
+)
+from harnify_coding_agent.core.sdk import CreateAgentSessionResult, create_agent_session
+from harnify_coding_agent.core.session_manager import SessionManager
 from harnify_coding_agent.core.settings_manager import SettingsManager
 from harnify_coding_agent.utils.paths import resolve_path
-
-create_agent_session = None
-
-
-class SessionManagerLike(Protocol):
-    def getCwd(self) -> str: ...
-
-
-class ResourceLoaderLike(Protocol):
-    async def reload(self) -> None: ...
-
-    def getExtensions(self) -> Any: ...
 
 
 @dataclass(slots=True)
 class AgentSessionRuntimeDiagnostic:
-    type: str
+    type: Literal["info", "warning", "error"]
     message: str
 
 
-class CreateAgentSessionServicesOptions(TypedDict, total=False):
+class CreateAgentSessionServicesOptions(TypedDict):
     cwd: str
-    agentDir: str
-    authStorage: AuthStorage
-    settingsManager: SettingsManager
-    modelRegistry: ModelRegistry
-    extensionFlagValues: dict[str, bool | str]
-    resourceLoaderOptions: DefaultResourceLoaderOptions
+    agentDir: NotRequired[str]
+    authStorage: NotRequired[AuthStorage]
+    settingsManager: NotRequired[SettingsManager]
+    modelRegistry: NotRequired[ModelRegistry]
+    extensionFlagValues: NotRequired[Mapping[str, bool | str]]
+    resourceLoaderOptions: NotRequired[DefaultResourceLoaderOptions]
 
 
 @dataclass(slots=True)
@@ -56,27 +52,21 @@ class AgentSessionServices:
     diagnostics: list[AgentSessionRuntimeDiagnostic] = field(default_factory=list)
 
 
-class CreateAgentSessionResultLike(TypedDict, total=False):
-    session: Any
-    extensionsResult: Any
-    modelFallbackMessage: str
-
-
-class CreateAgentSessionFromServicesOptions(TypedDict, total=False):
+class CreateAgentSessionFromServicesOptions(TypedDict):
     services: AgentSessionServices
-    sessionManager: SessionManagerLike
-    sessionStartEvent: dict[str, Any]
-    model: Model[Any]
-    thinkingLevel: ThinkingLevel
-    scopedModels: list[dict[str, Any]]
-    tools: list[str]
-    noTools: str
-    customTools: list[Any]
+    sessionManager: SessionManager
+    sessionStartEvent: NotRequired[dict[str, Any]]
+    model: NotRequired[Model[Any]]
+    thinkingLevel: NotRequired[ThinkingLevel]
+    scopedModels: NotRequired[list[dict[str, Any]]]
+    tools: NotRequired[list[str]]
+    noTools: NotRequired[Literal["all", "builtin"]]
+    customTools: NotRequired[list[ToolDefinition[Any, Any] | Any]]
 
 
 def apply_extension_flag_values(
     resource_loader: ResourceLoaderLike,
-    extension_flag_values: dict[str, bool | str] | None,
+    extension_flag_values: Mapping[str, bool | str] | None,
 ) -> list[AgentSessionRuntimeDiagnostic]:
     if not extension_flag_values:
         return []
@@ -169,13 +159,9 @@ async def create_agent_session_services(
 
 async def create_agent_session_from_services(
     options: CreateAgentSessionFromServicesOptions,
-) -> CreateAgentSessionResultLike:
-    create_session = _resolve_create_agent_session()
-    if not callable(create_session):
-        raise RuntimeError("create_agent_session is not available; sdk.py has not been ported yet")
-
+) -> CreateAgentSessionResult:
     services = options["services"]
-    return await create_session(
+    return await create_agent_session(
         {
             "cwd": services.cwd,
             "agentDir": services.agentDir,
@@ -193,21 +179,6 @@ async def create_agent_session_from_services(
             "sessionStartEvent": options.get("sessionStartEvent"),
         }
     )
-
-
-def _resolve_create_agent_session() -> Any:
-    global create_agent_session
-    if callable(create_agent_session):
-        return create_agent_session
-    try:
-        from harnify_coding_agent.core.sdk import create_agent_session as imported_create_agent_session
-    except Exception:  # noqa: BLE001
-        return None
-    create_agent_session = imported_create_agent_session
-    return create_agent_session
-
-
-applyExtensionFlagValues = apply_extension_flag_values
 createAgentSessionFromServices = create_agent_session_from_services
 createAgentSessionServices = create_agent_session_services
 
@@ -215,14 +186,7 @@ __all__ = [
     "AgentSessionRuntimeDiagnostic",
     "AgentSessionServices",
     "CreateAgentSessionFromServicesOptions",
-    "CreateAgentSessionResultLike",
     "CreateAgentSessionServicesOptions",
-    "ResourceLoaderLike",
-    "SessionManagerLike",
-    "applyExtensionFlagValues",
-    "apply_extension_flag_values",
     "createAgentSessionFromServices",
     "createAgentSessionServices",
-    "create_agent_session_from_services",
-    "create_agent_session_services",
 ]
