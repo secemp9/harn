@@ -160,6 +160,8 @@ def test_model_registry_module_exports_match_ts_surface() -> None:
 
 
 def test_model_registry_private_helpers_are_not_public() -> None:
+    registry = ModelRegistry.inMemory(AuthStorage.inMemory())
+
     assert not hasattr(ModelRegistry, "loadModels")
     assert not hasattr(ModelRegistry, "loadCustomModels")
     assert not hasattr(ModelRegistry, "parseModels")
@@ -170,6 +172,18 @@ def test_model_registry_private_helpers_are_not_public() -> None:
     assert hasattr(ModelRegistry, "_parseModels")
     assert hasattr(ModelRegistry, "_getModelRequestKey")
     assert hasattr(ModelRegistry, "_applyProviderConfig")
+    assert not hasattr(registry, "models")
+    assert not hasattr(registry, "providerRequestConfigs")
+    assert not hasattr(registry, "modelRequestHeaders")
+    assert not hasattr(registry, "registeredProviders")
+    assert not hasattr(registry, "loadError")
+    assert not hasattr(registry, "modelsJsonPath")
+    assert hasattr(registry, "_models")
+    assert hasattr(registry, "_providerRequestConfigs")
+    assert hasattr(registry, "_modelRequestHeaders")
+    assert hasattr(registry, "_registeredProviders")
+    assert hasattr(registry, "_loadError")
+    assert hasattr(registry, "_modelsJsonPath")
 
 
 @pytest.mark.asyncio
