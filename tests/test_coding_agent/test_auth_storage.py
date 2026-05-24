@@ -154,6 +154,29 @@ def test_set_and_remove_preserve_unrelated_external_edits(tmp_path: Path) -> Non
     assert updated["google"]["key"] == "google-key"
 
 
+def test_non_object_json_storage_uses_ts_style_object_coercion(tmp_path: Path) -> None:
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text('["zero", {"type": "api_key", "key": "array-key"}]', encoding="utf-8")
+
+    storage = AuthStorage.create(str(auth_path))
+
+    assert storage.list() == ["0", "1"]
+    assert storage.has("1") is True
+    assert storage.get("1") == {"type": "api_key", "key": "array-key"}
+    assert storage.getAll() == {
+        "0": "zero",
+        "1": {"type": "api_key", "key": "array-key"},
+    }
+
+    storage.set("anthropic", {"type": "api_key", "key": "new-anthropic"})
+
+    assert json.loads(auth_path.read_text(encoding="utf-8")) == {
+        "0": "zero",
+        "1": {"type": "api_key", "key": "array-key"},
+        "anthropic": {"type": "api_key", "key": "new-anthropic"},
+    }
+
+
 @pytest.mark.asyncio
 async def test_get_and_get_all_match_ts_reference_semantics() -> None:
     storage = AuthStorage.inMemory({"anthropic": {"type": "api_key", "key": "stored-value"}})
