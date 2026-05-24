@@ -58,7 +58,7 @@ def test_footer_data_provider_uses_head_directly_in_regular_repo(
     nested_dir.mkdir(parents=True)
     calls: list[str] = []
     monkeypatch.setattr(
-        "harnify_coding_agent.core.footer_data_provider.resolve_branch_with_git_sync",
+        "harnify_coding_agent.core.footer_data_provider._resolve_branch_with_git_sync",
         lambda repo_dir: calls.append(repo_dir) or "main",
     )
 
@@ -77,7 +77,7 @@ def test_footer_data_provider_resolves_invalid_reftable_branch(
     repo_dir = create_plain_reftable_repo(tmp_path)
     calls: list[str] = []
     monkeypatch.setattr(
-        "harnify_coding_agent.core.footer_data_provider.resolve_branch_with_git_sync",
+        "harnify_coding_agent.core.footer_data_provider._resolve_branch_with_git_sync",
         lambda repo_dir: calls.append(repo_dir) or "main",
     )
 
@@ -95,7 +95,7 @@ def test_footer_data_provider_resolves_invalid_reftable_worktree(
 ) -> None:
     worktree_dir, _ = create_reftable_worktree(tmp_path)
     monkeypatch.setattr(
-        "harnify_coding_agent.core.footer_data_provider.resolve_branch_with_git_sync",
+        "harnify_coding_agent.core.footer_data_provider._resolve_branch_with_git_sync",
         lambda _repo_dir: "feature/foo",
     )
 
@@ -112,7 +112,7 @@ def test_footer_data_provider_uses_detached_for_unresolved_invalid_head(
 ) -> None:
     repo_dir = create_plain_reftable_repo(tmp_path)
     monkeypatch.setattr(
-        "harnify_coding_agent.core.footer_data_provider.resolve_branch_with_git_sync",
+        "harnify_coding_agent.core.footer_data_provider._resolve_branch_with_git_sync",
         lambda _repo_dir: None,
     )
 
@@ -136,7 +136,7 @@ def test_footer_data_provider_refreshes_on_reftable_changes_without_false_notifi
     )
     monkeypatch.setattr(footer_data_provider_module, "_TABLES_LIST_POLL_INTERVAL_SECONDS", 0.02)
     monkeypatch.setattr(
-        "harnify_coding_agent.core.footer_data_provider.resolve_branch_with_git_sync",
+        "harnify_coding_agent.core.footer_data_provider._resolve_branch_with_git_sync",
         lambda _repo_dir: next(branches),
     )
 
