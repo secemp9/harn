@@ -80,18 +80,24 @@ def _parse_authorization_input(input_text: str) -> dict[str, str | None]:
 
 
 def _format_error_details(error: Any) -> str:
-    if isinstance(error, BaseException):
-        details = [f"{error.__class__.__name__}: {error}"]
+    if isinstance(error, Exception):
+        name = getattr(error, "name", error.__class__.__name__)
+        details = [f"{name}: {error}"]
         code = getattr(error, "code", None)
         errno = getattr(error, "errno", None)
-        cause = getattr(error, "__cause__", None)
+        cause = getattr(error, "cause", None)
+        if cause is None:
+            cause = getattr(error, "__cause__", None)
+        stack = getattr(error, "stack", None)
         if code:
             details.append(f"code={code}")
         if errno is not None:
             details.append(f"errno={errno}")
         if cause is not None:
             details.append(f"cause={_format_error_details(cause)}")
-        if error.__traceback__ is not None:
+        if isinstance(stack, str) and stack:
+            details.append(f"stack={stack}")
+        elif error.__traceback__ is not None:
             details.append(f"stack={''.join(traceback.format_exception(type(error), error, error.__traceback__)).rstrip()}")
         return "; ".join(details)
     return str(error)
@@ -100,6 +106,14 @@ def _format_error_details(error: Any) -> str:
 async def _start_callback_server(expected_state: str) -> _CallbackServerInfo:
     loop = asyncio.get_running_loop()
     future: asyncio.Future[dict[str, str] | None] = loop.create_future()
+
+    def _status_line(status: int) -> str:
+        reason = {
+            200: "OK",
+            400: "Bad Request",
+            404: "Not Found",
+        }.get(status, "OK")
+        return f"HTTP/1.1 {status} {reason}\r\n"
 
     async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -132,7 +146,7 @@ async def _start_callback_server(expected_state: str) -> _CallbackServerInfo:
                     future.set_result({"code": params["code"][0], "state": params["state"][0]})
 
             response = (
-                f"HTTP/1.1 {status} OK\r\n"
+                f"{_status_line(status)}"
                 "Content-Type: text/html; charset=utf-8\r\n"
                 f"Content-Length: {len(body.encode('utf-8'))}\r\n"
                 "Connection: close\r\n\r\n"
@@ -240,7 +254,7 @@ async def login_anthropic(options: dict[str, Any]) -> OAuthCredentials:
                 nonlocal manual_input, manual_error
                 try:
                     manual_input = await options["onManualCodeInput"]()
-                except BaseException as error:  # noqa: BLE001
+                except Exception as error:
                     manual_error = error
                 finally:
                     server.cancel_wait()
@@ -351,3 +365,12 @@ anthropic_oauth_provider = _AnthropicOAuthProvider()
 loginAnthropic = login_anthropic
 refreshAnthropicToken = refresh_anthropic_token
 anthropicOAuthProvider = anthropic_oauth_provider
+
+__all__ = [
+    "anthropicOAuthProvider",
+    "anthropic_oauth_provider",
+    "loginAnthropic",
+    "login_anthropic",
+    "refreshAnthropicToken",
+    "refresh_anthropic_token",
+]
