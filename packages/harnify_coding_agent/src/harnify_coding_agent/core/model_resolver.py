@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fnmatch
 import inspect
 import re
 import sys
@@ -101,6 +100,46 @@ def _yellow(message: str) -> str:
 
 def _red(message: str) -> str:
     return _color(message, "31")
+
+
+def _minimatch(value: str, pattern: str) -> bool:
+    regex: list[str] = ["^"]
+    index = 0
+    length = len(pattern)
+
+    while index < length:
+        char = pattern[index]
+        if char == "*":
+            if index + 1 < length and pattern[index + 1] == "*":
+                regex.append(".*")
+                index += 2
+                continue
+            regex.append("[^/]*")
+            index += 1
+            continue
+        if char == "?":
+            regex.append("[^/]")
+            index += 1
+            continue
+        if char == "[":
+            closing = pattern.find("]", index + 1)
+            if closing == -1:
+                regex.append(r"\[")
+                index += 1
+                continue
+            content = pattern[index + 1 : closing]
+            if content.startswith("!"):
+                content = "^" + re.escape(content[1:])
+            else:
+                content = re.escape(content)
+            regex.append(f"[{content}]")
+            index = closing + 1
+            continue
+        regex.append(re.escape(char))
+        index += 1
+
+    regex.append("$")
+    return re.match("".join(regex), value) is not None
 
 
 def _isAlias(model_id: str) -> bool:
@@ -236,8 +275,8 @@ async def resolveModelScope(patterns: list[str], modelRegistry: Any) -> list[Sco
             matching_models = [
                 model
                 for model in available_models
-                if fnmatch.fnmatch(f"{model.provider}/{model.id}".lower(), glob_pattern.lower())
-                or fnmatch.fnmatch(model.id.lower(), glob_pattern.lower())
+                if _minimatch(f"{model.provider}/{model.id}".lower(), glob_pattern.lower())
+                or _minimatch(model.id.lower(), glob_pattern.lower())
             ]
             if not matching_models:
                 print(_yellow(f'Warning: No models match pattern "{pattern}"'), file=sys.stderr)
