@@ -72,9 +72,6 @@ adjustMaxTokensForThinking = adjust_max_tokens_for_thinking
 
 __all__ = [
     "adjustMaxTokensForThinking",
-    "adjust_max_tokens_for_thinking",
     "buildBaseOptions",
-    "build_base_options",
     "clampReasoning",
-    "clamp_reasoning",
 ]
