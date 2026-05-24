@@ -256,7 +256,7 @@ class ExtensionShortcut:
     description: str | None = None
 
 
-class ProviderModelConfig(TypedDict, total=False):
+class ProviderModelConfig(TypedDict):
     id: str
     name: str
     api: NotRequired[Api]
@@ -271,15 +271,15 @@ class ProviderModelConfig(TypedDict, total=False):
     compat: NotRequired[dict[str, Any]]
 
 
-class OAuthProviderConfig(TypedDict, total=False):
+class OAuthProviderConfig(TypedDict):
     name: str
     login: Callable[[OAuthLoginCallbacks], Awaitable[OAuthCredentials]]
     refreshToken: Callable[[OAuthCredentials], Awaitable[OAuthCredentials]]
     getApiKey: Callable[[OAuthCredentials], str]
-    modifyModels: Callable[[list[Model[Any]], OAuthCredentials], list[Model[Any]]]
+    modifyModels: NotRequired[Callable[[list[Model[Any]], OAuthCredentials], list[Model[Any]]]]
 
 
-class ProviderConfig(TypedDict, total=False):
+class ProviderConfig(TypedDict):
     name: NotRequired[str]
     baseUrl: NotRequired[str]
     apiKey: NotRequired[str]
