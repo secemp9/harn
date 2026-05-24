@@ -311,10 +311,8 @@ async def test_resource_loader_supports_inline_extension_factories_dynamic_exten
     (theme_dir_one / "shared.json").write_text('{"name":"Shared Theme","tone":"one"}', encoding="utf-8")
     (theme_dir_two / "shared.json").write_text('{"name":"Shared Theme","tone":"two"}', encoding="utf-8")
 
-    async def inline_factory(api: object) -> None:
-        api.addSkillPath(str(inline_skill_dir))  # type: ignore[attr-defined]
-        api.addPromptPath(str(inline_prompt_dir))  # type: ignore[attr-defined]
-        api.addThemePath(str(inline_theme_dir))  # type: ignore[attr-defined]
+    async def inline_factory(_api: object) -> None:
+        return None
 
     loader = DefaultResourceLoader(
         {
@@ -326,6 +324,44 @@ async def test_resource_loader_supports_inline_extension_factories_dynamic_exten
         }
     )
     await loader.reload()
+
+    loader.extendResources(
+        {
+            "skillPaths": [
+                {
+                    "path": str(inline_skill_dir),
+                    "metadata": {
+                        "source": "local",
+                        "scope": "temporary",
+                        "origin": "top-level",
+                        "baseDir": str(inline_skill_dir),
+                    },
+                }
+            ],
+            "promptPaths": [
+                {
+                    "path": str(inline_prompt_dir),
+                    "metadata": {
+                        "source": "local",
+                        "scope": "temporary",
+                        "origin": "top-level",
+                        "baseDir": str(inline_prompt_dir),
+                    },
+                }
+            ],
+            "themePaths": [
+                {
+                    "path": str(inline_theme_dir),
+                    "metadata": {
+                        "source": "local",
+                        "scope": "temporary",
+                        "origin": "top-level",
+                        "baseDir": str(inline_theme_dir),
+                    },
+                }
+            ],
+        }
+    )
 
     assert [extension.path for extension in loader.getExtensions().extensions] == ["<inline:1>"]
     assert [skill.name for skill in loader.getSkills()["skills"]] == ["extra-skill", "inline-skills"]
