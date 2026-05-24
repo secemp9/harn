@@ -101,6 +101,8 @@ class BedrockClientSettings:
     config_kwargs: dict[str, Any]
     default_headers: dict[str, str]
     bearer_token: str | None
+    aws_access_key_id: str | None
+    aws_secret_access_key: str | None
 
 
 class BedrockRuntimeServiceException(RuntimeError):
@@ -164,6 +166,10 @@ def create_client(model: Model, options: StreamOptions | dict[str, Any] | None =
         client_kwargs["endpoint_url"] = settings.endpoint_url
     if settings.config_kwargs:
         client_kwargs["config"] = Config(**settings.config_kwargs)
+    if settings.aws_access_key_id is not None:
+        client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+    if settings.aws_secret_access_key is not None:
+        client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
 
     client = session.client("bedrock-runtime", **client_kwargs)
     _register_request_overrides(client, settings.default_headers, settings.bearer_token)
@@ -188,26 +194,12 @@ def build_client_settings(model: Model, options: StreamOptions | dict[str, Any] 
             "https": proxy_agents.httpsAgent,
         }
 
-    timeout_ms = _option(options, "timeoutMs")
-    if timeout_ms is not None:
-        timeout_seconds = max(float(timeout_ms) / 1000.0, 0.001)
-        config_kwargs["connect_timeout"] = timeout_seconds
-        config_kwargs["read_timeout"] = timeout_seconds
-
-    max_retries = _option(options, "maxRetries")
-    if max_retries is not None:
-        config_kwargs["retries"] = {"max_attempts": int(max_retries), "mode": "standard"}
-
     bearer_token = _option(options, "bearerToken") or os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
     skip_auth = os.environ.get("AWS_BEDROCK_SKIP_AUTH") == "1"
-    if (bearer_token and not skip_auth) or skip_auth:
+    if bearer_token and not skip_auth:
         config_kwargs["signature_version"] = UNSIGNED
 
     default_headers: dict[str, str] = {}
-    if model.headers:
-        default_headers.update(model.headers)
-    if _option(options, "headers"):
-        default_headers.update(_option(options, "headers"))
 
     region_name = configured_region
     if region_name is None and endpoint_region is not None and use_explicit_endpoint:
@@ -222,6 +214,8 @@ def build_client_settings(model: Model, options: StreamOptions | dict[str, Any] 
         config_kwargs=config_kwargs,
         default_headers=default_headers,
         bearer_token=None if skip_auth else bearer_token,
+        aws_access_key_id="dummy-access-key" if skip_auth else None,
+        aws_secret_access_key="dummy-secret-key" if skip_auth else None,
     )
 
 
@@ -248,7 +242,7 @@ def stream_bedrock(
     async def run() -> None:
         output = AssistantMessage(
             content=[],
-            api=model.api,
+            api="bedrock-converse-stream",
             provider=model.provider,
             model=model.id,
             usage=_empty_usage(),
@@ -293,7 +287,8 @@ def stream_bedrock(
             if _is_aborted(signal):
                 raise RuntimeError("Request was aborted")
 
-            response = await _maybe_await(client.converse_stream(**command_input))
+            request_input = {key: value for key, value in command_input.items() if value is not None}
+            response = await _maybe_await(client.converse_stream(**request_input))
             response_metadata = response.get("ResponseMetadata", {}) if isinstance(response, dict) else {}
             on_response = _option(options, "onResponse")
             if callable(on_response) and response_metadata.get("HTTPStatusCode") is not None:
@@ -446,7 +441,7 @@ async def iterate_stream_events(response_stream: Any):
         try:
             for event in response_stream:
                 loop.call_soon_threadsafe(queue.put_nowait, event)
-        except BaseException as error:  # noqa: BLE001
+        except Exception as error:
             loop.call_soon_threadsafe(queue.put_nowait, error)
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, _STREAM_SENTINEL)
@@ -457,7 +452,7 @@ async def iterate_stream_events(response_stream: Any):
         item = await queue.get()
         if item is _STREAM_SENTINEL:
             return
-        if isinstance(item, BaseException):
+        if isinstance(item, Exception):
             raise item
         yield item
 
@@ -552,8 +547,6 @@ def handle_content_block_delta(
             if reasoning_content.get("signature"):
                 existing = block.thinkingSignature or ""
                 block.thinkingSignature = existing + str(reasoning_content["signature"])
-            if reasoning_content.get("redactedContent") is not None:
-                block.redacted = True
 
 
 def handle_metadata(event: dict[str, Any], model: Model, output: AssistantMessage) -> None:
@@ -1000,68 +993,10 @@ buildAdditionalModelRequestFields = build_additional_model_request_fields
 createImageBlock = create_image_block
 
 __all__ = [
-    "BEDROCK_ERROR_PREFIXES",
-    "BedrockClientSettings",
     "BedrockOptions",
-    "BedrockRuntimeServiceException",
     "BedrockThinkingDisplay",
-    "buildAdditionalModelRequestFields",
-    "buildClientSettings",
-    "buildSystemPrompt",
-    "build_additional_model_request_fields",
-    "build_client_settings",
-    "build_system_prompt",
-    "convertMessages",
-    "convertToolConfig",
-    "convert_messages",
-    "convert_tool_config",
-    "createClient",
-    "createImageBlock",
-    "create_client",
-    "create_image_block",
-    "formatBedrockError",
-    "format_bedrock_error",
-    "getConfiguredBedrockRegion",
-    "getModelMatchCandidates",
-    "getStandardBedrockEndpointRegion",
-    "get_configured_bedrock_region",
-    "get_model_match_candidates",
-    "get_standard_bedrock_endpoint_region",
-    "handleContentBlockDelta",
-    "handleContentBlockStart",
-    "handleContentBlockStop",
-    "handleMetadata",
-    "handle_content_block_delta",
-    "handle_content_block_start",
-    "handle_content_block_stop",
-    "handle_metadata",
-    "hasConfiguredBedrockProfile",
-    "has_configured_bedrock_profile",
-    "isAnthropicClaudeModel",
-    "isGovCloudBedrockTarget",
-    "is_anthropic_claude_model",
-    "is_govcloud_bedrock_target",
-    "iterate_stream_events",
-    "mapStopReason",
-    "mapThinkingLevelToEffort",
-    "map_stop_reason",
-    "map_thinking_level_to_effort",
-    "normalizeToolCallId",
-    "normalize_tool_call_id",
-    "resolveCacheRetention",
-    "resolve_cache_retention",
-    "shouldUseExplicitBedrockEndpoint",
-    "should_use_explicit_bedrock_endpoint",
     "streamBedrock",
     "streamSimpleBedrock",
     "stream_bedrock",
     "stream_simple_bedrock",
-    "supportsAdaptiveThinking",
-    "supportsNativeXhighEffort",
-    "supportsPromptCaching",
-    "supportsThinkingSignature",
-    "supports_adaptive_thinking",
-    "supports_native_xhigh_effort",
-    "supports_prompt_caching",
-    "supports_thinking_signature",
 ]
