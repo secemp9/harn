@@ -13,7 +13,7 @@ from harnify_ai.env_api_keys import get_env_api_key
 def _resolve_api_provider(api: str):
     provider = get_api_provider(api)
     if provider is None:
-        raise ValueError(f"No API provider registered for api: {api}")
+        raise RuntimeError(f"No API provider registered for api: {api}")
     return provider
 
 
@@ -48,3 +48,11 @@ async def complete_simple(
 completeSimple = complete_simple
 streamSimple = stream_simple
 getEnvApiKey = get_env_api_key
+
+__all__ = [
+    "getEnvApiKey",
+    "stream",
+    "complete",
+    "streamSimple",
+    "completeSimple",
+]
