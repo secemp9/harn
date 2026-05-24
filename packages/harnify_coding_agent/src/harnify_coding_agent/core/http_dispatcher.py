@@ -17,7 +17,7 @@ HTTP_IDLE_TIMEOUT_CHOICES = [
 _configured_http_idle_timeout_ms = DEFAULT_HTTP_IDLE_TIMEOUT_MS
 
 
-def parse_http_idle_timeout_ms(value: Any) -> int | None:
+def parseHttpIdleTimeoutMs(value: Any) -> int | None:
     if isinstance(value, str):
         trimmed = value.strip()
         if trimmed.lower() == "disabled":
@@ -25,7 +25,7 @@ def parse_http_idle_timeout_ms(value: Any) -> int | None:
         if not trimmed:
             return None
         try:
-            return parse_http_idle_timeout_ms(float(trimmed))
+            return parseHttpIdleTimeoutMs(float(trimmed))
         except ValueError:
             return None
 
@@ -36,15 +36,15 @@ def parse_http_idle_timeout_ms(value: Any) -> int | None:
     return int(value)
 
 
-def format_http_idle_timeout_ms(timeout_ms: int) -> str:
+def formatHttpIdleTimeoutMs(timeout_ms: int) -> str:
     for choice in HTTP_IDLE_TIMEOUT_CHOICES:
         if choice["timeoutMs"] == timeout_ms:
             return str(choice["label"])
     return f"{timeout_ms / 1000} sec"
 
 
-def configure_http_dispatcher(timeout_ms: int = DEFAULT_HTTP_IDLE_TIMEOUT_MS) -> None:
-    normalized_timeout_ms = parse_http_idle_timeout_ms(timeout_ms)
+def configureHttpDispatcher(timeout_ms: int = DEFAULT_HTTP_IDLE_TIMEOUT_MS) -> None:
+    normalized_timeout_ms = parseHttpIdleTimeoutMs(timeout_ms)
     if normalized_timeout_ms is None:
         raise ValueError(f"Invalid HTTP idle timeout: {timeout_ms}")
 
@@ -55,18 +55,10 @@ def configure_http_dispatcher(timeout_ms: int = DEFAULT_HTTP_IDLE_TIMEOUT_MS) ->
 def _get_configured_http_idle_timeout_ms() -> int:
     return _configured_http_idle_timeout_ms
 
-
-parseHttpIdleTimeoutMs = parse_http_idle_timeout_ms
-formatHttpIdleTimeoutMs = format_http_idle_timeout_ms
-configureHttpDispatcher = configure_http_dispatcher
-
 __all__ = [
     "DEFAULT_HTTP_IDLE_TIMEOUT_MS",
     "HTTP_IDLE_TIMEOUT_CHOICES",
     "configureHttpDispatcher",
-    "configure_http_dispatcher",
     "formatHttpIdleTimeoutMs",
-    "format_http_idle_timeout_ms",
     "parseHttpIdleTimeoutMs",
-    "parse_http_idle_timeout_ms",
 ]

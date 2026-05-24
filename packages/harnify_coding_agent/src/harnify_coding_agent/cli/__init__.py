@@ -8,7 +8,7 @@ import sys
 import warnings
 
 from harnify_coding_agent.config import APP_NAME
-from harnify_coding_agent.core.http_dispatcher import configure_http_dispatcher
+from harnify_coding_agent.core.http_dispatcher import configureHttpDispatcher
 
 
 def _set_process_title(title: str) -> None:
@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     _set_process_title(APP_NAME)
     os.environ["PI_CODING_AGENT"] = "true"
     _suppress_runtime_warnings()
-    configure_http_dispatcher()
+    configureHttpDispatcher()
     resolved_argv = list(sys.argv[1:] if argv is None else argv)
     return asyncio.run(_invoke_main(resolved_argv))
 

@@ -20,7 +20,7 @@ from harnify_tui import (
     getCapabilities,
 )
 
-from harnify_coding_agent.core.http_dispatcher import HTTP_IDLE_TIMEOUT_CHOICES, format_http_idle_timeout_ms
+from harnify_coding_agent.core.http_dispatcher import HTTP_IDLE_TIMEOUT_CHOICES, formatHttpIdleTimeoutMs
 from harnify_coding_agent.modes.interactive.theme.theme import (
     get_select_list_theme,
     get_settings_list_theme,
@@ -231,7 +231,7 @@ class SettingsSelectorComponent(Container):
                     "Maximum idle gap while waiting for HTTP headers or body chunks. "
                     "Disable for local models that pause longer than five minutes."
                 ),
-                currentValue=format_http_idle_timeout_ms(config.httpIdleTimeoutMs),
+                currentValue=formatHttpIdleTimeoutMs(config.httpIdleTimeoutMs),
                 values=[choice["label"] for choice in HTTP_IDLE_TIMEOUT_CHOICES],
             ),
             SettingItem(

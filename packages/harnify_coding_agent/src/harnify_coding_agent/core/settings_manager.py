@@ -15,7 +15,7 @@ from harnify_ai.types import Transport
 from harnify_coding_agent.config import CONFIG_DIR_NAME, get_agent_dir
 from harnify_coding_agent.core.http_dispatcher import (
     DEFAULT_HTTP_IDLE_TIMEOUT_MS,
-    parse_http_idle_timeout_ms,
+    parseHttpIdleTimeoutMs,
 )
 from harnify_coding_agent.utils.paths import normalize_path, resolve_path
 
@@ -461,7 +461,7 @@ class SettingsManager:
 
     def getHttpIdleTimeoutMs(self) -> int:
         value = self.settings.get("httpIdleTimeoutMs")
-        timeout_ms = parse_http_idle_timeout_ms(value)
+        timeout_ms = parseHttpIdleTimeoutMs(value)
         if timeout_ms is not None:
             return timeout_ms
         if value is not None:
