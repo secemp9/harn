@@ -84,4 +84,4 @@ async def _select_config(
 
 selectConfig = select_config
 
-__all__ = ["ConfigSelectorOptions", "selectConfig", "select_config"]
+__all__ = ["ConfigSelectorOptions", "selectConfig"]
