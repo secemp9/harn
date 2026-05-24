@@ -471,6 +471,78 @@ def test_extension_runner_resolves_commands_and_shortcuts_conflicts() -> None:
     assert any("conflicts with built-in shortcut" in message for message in messages)
 
 
+@pytest.mark.asyncio
+async def test_extension_runner_matches_ts_nullish_and_warning_behaviour(capsys: pytest.CaptureFixture[str]) -> None:
+    async def factory(api: Any) -> None:
+        api.on("context", lambda event, ctx: {"messages": []})
+        api.on("tool_result", lambda event, ctx: {"details": None})
+        api.on("input", lambda event, ctx: {"action": "transform", "text": "changed", "images": None})
+
+    extension = await load_extension_from_factory(
+        factory,
+        "/tmp/project",
+        create_event_bus(),
+        create_extension_runtime(),
+        extension_path="<inline:nullish>",
+    )
+    shortcut_extension = _extension_with_command_and_shortcut("<ext:warn>", "demo", "ctrl+c")
+    runner = ExtensionRunner(extensions=[extension, shortcut_extension], cwd="runner-cwd")
+
+    runner.bind_core(
+        {
+            "sendMessage": lambda message, options=None: None,
+            "sendUserMessage": lambda content, options=None: None,
+            "appendEntry": lambda custom_type, data=None: None,
+            "setSessionName": lambda name: None,
+            "getSessionName": lambda: "demo",
+            "setLabel": lambda entry_id, label: None,
+            "getActiveTools": lambda: [],
+            "getAllTools": lambda: [],
+            "setActiveTools": lambda names: None,
+            "refreshTools": lambda: None,
+            "getCommands": lambda: [],
+            "setModel": _set_model_true,
+            "getThinkingLevel": lambda: "off",
+            "setThinkingLevel": lambda level: None,
+        },
+        {
+            "getModel": lambda: None,
+            "isIdle": lambda: True,
+            "getSignal": lambda: None,
+            "abort": lambda: None,
+            "hasPendingMessages": lambda: False,
+            "shutdown": lambda: None,
+            "getContextUsage": lambda: None,
+            "compact": lambda options=None: None,
+            "getSystemPrompt": lambda: "prompt",
+        },
+    )
+
+    assert await runner.emit_context([{"role": "user", "content": "keep"}]) == [{"role": "user", "content": "keep"}]
+    assert await runner.emit_tool_result(
+        {"type": "tool_result", "content": ["orig"], "details": {"x": 1}, "isError": False}
+    ) == {
+        "content": ["orig"],
+        "details": None,
+        "isError": False,
+    }
+    images = [{"kind": "image"}]
+    assert await runner.emit_input("hello", images, "interactive") == {
+        "action": "transform",
+        "text": "changed",
+        "images": images,
+    }
+
+    runner.get_shortcuts({"app.interrupt": "ctrl+c"})
+    warning_output = capsys.readouterr().err
+    assert "conflicts with built-in shortcut" in warning_output
+
+    runner.invalidate()
+    with pytest.raises(RuntimeError, match=r"ctx\\.newSession\\(\\)") as excinfo:
+        _ = runner.create_context().cwd
+    assert "withSession" in str(excinfo.value)
+
+
 async def _set_model_true(_model: Any) -> bool:
     return True
 
