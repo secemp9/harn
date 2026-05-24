@@ -7,6 +7,7 @@ import pytest
 from harnify_ai.models import get_model
 from harnify_ai.providers.openai_prompt_cache import clamp_openai_prompt_cache_key
 import harnify_ai.providers.simple_options as simple_options_provider
+import harnify_ai.providers.transform_messages as transform_messages_provider
 from harnify_ai.providers.simple_options import adjust_max_tokens_for_thinking, build_base_options, clamp_reasoning
 from harnify_ai.providers.transform_messages import (
     transform_messages,
@@ -219,3 +220,7 @@ def test_transform_messages_synthesizes_missing_tool_results_and_skips_errored_a
     assert transformed[1].isError is True
     assert transformed[1].content[0].text == "No result provided"
     assert transformed[2].role == "user"
+
+
+def test_transform_messages_module_exports_expected_names() -> None:
+    assert transform_messages_provider.__all__ == ["transformMessages"]
