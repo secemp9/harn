@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import harnify_coding_agent.cli.config_selector as config_selector_module
@@ -10,8 +11,8 @@ from harnify_coding_agent.cli.config_selector import ConfigSelectorOptions, sele
 from harnify_coding_agent.cli.session_picker import select_session
 from harnify_coding_agent.config import APP_NAME
 from harnify_coding_agent.core.session_cwd import SessionCwdIssue
-from harnify_coding_agent.core.package_manager import ResolvedPaths
-from harnify_coding_agent.core.settings_manager import SettingsManager
+from harnify_coding_agent.core.package_manager import ConfiguredPackage, ResolvedPaths
+from harnify_coding_agent.core.settings_manager import SettingsError, SettingsManager
 from harnify_coding_agent.main import main, prompt_for_missing_session_cwd
 import harnify_coding_agent.package_manager_cli as package_manager_cli_module
 from harnify_coding_agent.package_manager_cli import handle_config_command, handle_package_command
@@ -205,6 +206,38 @@ async def test_handle_config_command_uses_real_package_resolution(
 
 
 @pytest.mark.asyncio
+async def test_handle_config_command_reports_settings_warnings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+
+    settings = SettingsManager.inMemory()
+    settings.errors.append(SettingsError(scope="global", error=Exception("bad global settings")))
+    stderr = io.StringIO()
+    called: list[str] = []
+
+    async def fake_select_config(_options: object) -> None:
+        called.append("config")
+
+    monkeypatch.setattr("sys.stderr", stderr)
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: settings)
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.select_config", fake_select_config)
+
+    handled = await handle_config_command(["config"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 0
+    assert called == ["config"]
+    assert "Warning (config command, global settings): bad global settings" in stderr.getvalue()
+
+
+@pytest.mark.asyncio
 async def test_main_routes_config_command_before_normal_arg_parsing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -306,6 +339,147 @@ async def test_handle_package_command_supports_extension_update_target(
     assert calls == ["npm:demo"]
     assert stdout.getvalue() == ""
     assert stderr.getvalue() == ""
+
+
+@pytest.mark.asyncio
+async def test_handle_package_command_list_matches_ts_sections_and_filtered_marker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    class FakePackageManager:
+        def __init__(self, _options: object) -> None:
+            return None
+
+        def setProgressCallback(self, _callback) -> None:
+            return None
+
+        def listConfiguredPackages(self) -> list[ConfiguredPackage]:
+            return [
+                ConfiguredPackage(
+                    source="npm:user-demo",
+                    scope="user",
+                    filtered=False,
+                    installedPath="/tmp/user-demo",
+                ),
+                ConfiguredPackage(
+                    source="npm:project-demo",
+                    scope="project",
+                    filtered=True,
+                    installedPath=None,
+                ),
+            ]
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
+
+    handled = await handle_package_command(["list"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 0
+    assert stdout.getvalue() == (
+        "User packages:\n"
+        "  npm:user-demo\n"
+        "    /tmp/user-demo\n"
+        "\n"
+        "Project packages:\n"
+        "  npm:project-demo (filtered)\n"
+    )
+    assert stderr.getvalue() == ""
+
+
+@pytest.mark.asyncio
+async def test_handle_package_command_install_reports_settings_warning_progress_and_success(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+
+    settings = SettingsManager.inMemory()
+    settings.errors.append(SettingsError(scope="project", error=Exception("bad project settings")))
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", stderr)
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: settings)
+
+    class FakePackageManager:
+        def __init__(self, _options: object) -> None:
+            self._progress = None
+
+        def setProgressCallback(self, callback) -> None:
+            self._progress = callback
+
+        async def installAndPersist(self, source: str, options: dict[str, bool] | None = None) -> None:
+            assert source == "npm:demo"
+            assert options == {"local": True}
+            assert self._progress is not None
+            self._progress(SimpleNamespace(type="start", message="Installing npm:demo..."))
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
+
+    handled = await handle_package_command(["install", "npm:demo", "--local"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 0
+    assert stdout.getvalue() == "Installing npm:demo...\nInstalled npm:demo\n"
+    assert "Warning (package command, project settings): bad project settings" in stderr.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_handle_package_command_remove_reports_missing_match(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    class FakePackageManager:
+        def __init__(self, _options: object) -> None:
+            return None
+
+        def setProgressCallback(self, _callback) -> None:
+            return None
+
+        async def removeAndPersist(self, source: str, options: dict[str, bool] | None = None) -> bool:
+            assert source == "npm:missing"
+            assert options == {"local": False}
+            return False
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
+
+    handled = await handle_package_command(["remove", "npm:missing"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 1
+    assert stdout.getvalue() == ""
+    assert stderr.getvalue() == "No matching package found for npm:missing\n"
 
 
 @pytest.mark.asyncio
