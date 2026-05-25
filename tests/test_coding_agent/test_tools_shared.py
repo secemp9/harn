@@ -119,15 +119,15 @@ def test_resolve_read_path_handles_curly_quote_and_nfd_variants(tmp_path: Path) 
 
 def test_get_text_output_strips_ansi_and_renders_hidden_images(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "harnify_coding_agent.core.tools.render_utils.get_capabilities",
+        "harnify_coding_agent.core.tools.render_utils.getCapabilities",
         lambda: SimpleNamespace(images=False),
     )
     monkeypatch.setattr(
-        "harnify_coding_agent.core.tools.render_utils.image_fallback",
+        "harnify_coding_agent.core.tools.render_utils.imageFallback",
         lambda mime, dims: f"[image {mime}]",
     )
     monkeypatch.setattr(
-        "harnify_coding_agent.core.tools.render_utils.get_image_dimensions",
+        "harnify_coding_agent.core.tools.render_utils.getImageDimensions",
         lambda data, mime: None,
     )
 
