@@ -35,6 +35,7 @@ from harnify_coding_agent.core.tools import (
 )
 from harnify_coding_agent.core.tools import file_mutation_queue as file_mutation_queue_module
 from harnify_coding_agent.core.tools import output_accumulator as output_accumulator_module
+from harnify_coding_agent.core.tools import path_utils as path_utils_module
 
 
 def test_truncate_head_honors_line_and_byte_limits() -> None:
@@ -167,6 +168,10 @@ async def test_file_mutation_queue_serializes_same_file() -> None:
 
 def test_file_mutation_queue_module_exports_match_ts_surface() -> None:
     assert file_mutation_queue_module.__all__ == ["withFileMutationQueue"]
+
+
+def test_path_utils_module_exports_match_ts_surface() -> None:
+    assert path_utils_module.__all__ == ["expandPath", "resolveReadPath", "resolveToCwd"]
 
 
 @pytest.mark.asyncio
