@@ -357,7 +357,6 @@ def create_runtime_factory(
             "noContextFiles": parsed.noContextFiles,
             "systemPrompt": parsed.systemPrompt,
             "appendSystemPrompt": parsed.appendSystemPrompt,
-            "extensionFactories": extension_factories,
         }
         if resolved_extension_paths is not None:
             resource_loader_options["additionalExtensionPaths"] = resolved_extension_paths
@@ -367,6 +366,8 @@ def create_runtime_factory(
             resource_loader_options["additionalPromptTemplatePaths"] = resolved_prompt_template_paths
         if resolved_theme_paths is not None:
             resource_loader_options["additionalThemePaths"] = resolved_theme_paths
+        if extension_factories is not None:
+            resource_loader_options["extensionFactories"] = extension_factories
 
         services = await create_agent_session_services(
             {
