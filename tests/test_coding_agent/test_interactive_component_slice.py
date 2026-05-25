@@ -13,6 +13,9 @@ from harnify_coding_agent.modes.interactive.components.dynamic_border import Dyn
 from harnify_coding_agent.modes.interactive.components.earendil_announcement import (
     EarendilAnnouncementComponent,
 )
+from harnify_coding_agent.modes.interactive.components.extension_editor import (
+    ExtensionEditorComponent,
+)
 from harnify_coding_agent.modes.interactive.components.keybinding_hints import (
     KeyTextFormatOptions,
     format_key_text,
@@ -45,6 +48,9 @@ dynamic_border_module = importlib.import_module(
 )
 earendil_announcement_module = importlib.import_module(
     "harnify_coding_agent.modes.interactive.components.earendil_announcement"
+)
+extension_editor_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.extension_editor"
 )
 
 
@@ -246,6 +252,38 @@ def test_earendil_announcement_renders_banner_without_image(monkeypatch) -> None
 
 def test_earendil_announcement_module_exports_match_ts_surface() -> None:
     assert earendil_announcement_module.__all__ == ["EarendilAnnouncementComponent"]
+
+
+def test_extension_editor_routes_cancel_and_external_shortcuts(monkeypatch) -> None:
+    class FakeUi:
+        def requestRender(self, force: bool | None = None) -> None:
+            del force
+
+    cancelled: list[bool] = []
+    scheduled: list[bool] = []
+    forwarded: list[str] = []
+    component = ExtensionEditorComponent(
+        FakeUi(),
+        KeybindingsManager(),
+        "Title",
+        None,
+        lambda _value: None,
+        lambda: cancelled.append(True),
+    )
+    monkeypatch.setattr(component, "_schedule_external_editor", lambda: scheduled.append(True))
+    monkeypatch.setattr(component.editor, "handleInput", lambda data: forwarded.append(data))
+
+    component.handleInput("\x1b")
+    component.handleInput("\x07")
+    component.handleInput("x")
+
+    assert cancelled == [True]
+    assert scheduled == [True]
+    assert forwarded == ["x"]
+
+
+def test_extension_editor_module_exports_match_ts_surface() -> None:
+    assert extension_editor_module.__all__ == ["ExtensionEditorComponent"]
 
 
 def test_theme_selector_previews_and_confirms() -> None:
