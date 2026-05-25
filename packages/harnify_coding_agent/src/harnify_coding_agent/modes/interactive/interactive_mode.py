@@ -4154,24 +4154,30 @@ class InteractiveMode:
         return bool(self.options.verbose or self.toolOutputExpanded)
 
     async def _cycle_model(self, direction: str) -> None:
-        result = await self.session.cycleModel(direction)
-        if result is None:
-            return
-        self.footer.invalidate()
-        self.updateEditorBorderColor()
-        self.updateAvailableProviderCount()
-        self._request_render()
-        self.showStatus(f"Model: {result.model.id}")
-        await self.maybeWarnAboutAnthropicSubscriptionAuth(result.model)
+        try:
+            result = await self.session.cycleModel(direction)
+            if result is None:
+                scoped_models = list(getattr(self.session, "scopedModels", []) or [])
+                self.showStatus("Only one model in scope" if scoped_models else "Only one model available")
+                return
+            self.footer.invalidate()
+            self.updateEditorBorderColor()
+            thinking_str = ""
+            if bool(_value(result.model, "reasoning", False)) and _value(result, "thinkingLevel") != "off":
+                thinking_str = f" (thinking: {_value(result, 'thinkingLevel')})"
+            self.showStatus(f"Switched to {_value(result.model, 'name', None) or result.model.id}{thinking_str}")
+            await self.maybeWarnAboutAnthropicSubscriptionAuth(result.model)
+        except Exception as error:  # noqa: BLE001
+            self.showError(str(error))
 
     async def _cycle_thinking_level(self) -> None:
         level = self.session.cycleThinkingLevel()
         if level is None:
+            self.showStatus("Current model does not support thinking")
             return
         self.footer.invalidate()
         self.updateEditorBorderColor()
-        self._request_render()
-        self.showStatus(f"Thinking: {level}")
+        self.showStatus(f"Thinking level: {level}")
 
     async def _handle_model_select(self, model: Any, done: Callable[[], None]) -> None:
         try:
