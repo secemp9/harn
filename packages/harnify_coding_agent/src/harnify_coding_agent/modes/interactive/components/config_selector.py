@@ -108,9 +108,9 @@ def build_groups(resolved: ResolvedPaths) -> list[ResourceGroup]:
                 group_map[group_key] = ResourceGroup(
                     key=group_key,
                     label=get_group_label(metadata),
-                    scope=str(metadata.get("scope")),
-                    origin=str(metadata.get("origin")),
-                    source=str(metadata.get("source")),
+                    scope=metadata.get("scope", ""),
+                    origin=metadata.get("origin", ""),
+                    source=metadata.get("source", ""),
                     subgroups=[],
                 )
 
@@ -217,7 +217,7 @@ class ResourceList(Component, Focusable):
         self.cwd = cwd
         self.agentDir = agentDir
         self.searchInput = Input()
-        self.maxVisible = max(5, (terminalHeight or 24) - 8)
+        self.maxVisible = max(5, ((24 if terminalHeight is None else terminalHeight) - 8))
         self.flatItems: list[FlatEntry] = []
         self.filteredItems: list[FlatEntry] = []
         self.selectedIndex = 0
@@ -265,9 +265,9 @@ class ResourceList(Component, Focusable):
             return
 
         lower_query = query.lower()
-        matching_items: set[str] = set()
-        matching_subgroups: set[str] = set()
-        matching_groups: set[str] = set()
+        matching_items: set[int] = set()
+        matching_subgroups: set[int] = set()
+        matching_groups: set[int] = set()
 
         for entry in self.flatItems:
             if entry.type != "item":
@@ -278,25 +278,22 @@ class ResourceList(Component, Focusable):
                 or lower_query in item.resourceType.lower()
                 or lower_query in item.path.lower()
             ):
-                matching_items.add(item.path)
+                matching_items.add(id(item))
 
         for group in self.groups:
             for subgroup in group.subgroups:
                 for item in subgroup.items:
-                    if item.path in matching_items:
-                        matching_subgroups.add(subgroup.label + subgroup.type + group.key)
-                        matching_groups.add(group.key)
+                    if id(item) in matching_items:
+                        matching_subgroups.add(id(subgroup))
+                        matching_groups.add(id(group))
 
         self.filteredItems = []
         for entry in self.flatItems:
-            if entry.type == "group" and entry.group.key in matching_groups:
+            if entry.type == "group" and id(entry.group) in matching_groups:
                 self.filteredItems.append(entry)
-            elif (
-                entry.type == "subgroup"
-                and (entry.subgroup.label + entry.subgroup.type + entry.group.key) in matching_subgroups
-            ):
+            elif entry.type == "subgroup" and id(entry.subgroup) in matching_subgroups:
                 self.filteredItems.append(entry)
-            elif entry.type == "item" and entry.item.path in matching_items:
+            elif entry.type == "item" and id(entry.item) in matching_items:
                 self.filteredItems.append(entry)
         self.selectFirstItem()
 
@@ -380,13 +377,13 @@ class ResourceList(Component, Focusable):
             if target >= 0:
                 self.selectedIndex = target
             return
-        if data == "\x03" or matchesKey(data, Key.ctrl("c")):
-            if callable(self.onExit):
-                self.onExit()
-            return
         if kb.matches(data, "tui.select.cancel"):
             if callable(self.onCancel):
                 self.onCancel()
+            return
+        if matchesKey(data, "ctrl+c"):
+            if callable(self.onExit):
+                self.onExit()
             return
         if data == " " or kb.matches(data, "tui.select.confirm"):
             entry = self.filteredItems[self.selectedIndex] if self.filteredItems else None
@@ -476,9 +473,12 @@ class ResourceList(Component, Focusable):
             if (entry[1:] if entry.startswith(("!", "+", "-")) else entry) != pattern
         ]
         updated.append(f"+{pattern}" if enabled else f"-{pattern}")
-        package[array_key] = updated if updated else None
+        if updated:
+            package[array_key] = updated
+        else:
+            package.pop(array_key, None)
 
-        has_filters = any(package.get(key) is not None for key in ("extensions", "skills", "prompts", "themes"))
+        has_filters = any(key in package for key in ("extensions", "skills", "prompts", "themes"))
         if not has_filters:
             packages[pkg_index] = package["source"]
 
@@ -491,16 +491,17 @@ class ResourceList(Component, Focusable):
         return os.path.join(self.cwd, CONFIG_DIR_NAME) if scope == "project" else self.agentDir
 
     def getResourcePattern(self, item: ResourceItem) -> str:
-        scope = str(item.metadata["scope"])
-        base_dir = str(
-            item.metadata.get("baseDir")
-            or self.getTopLevelBaseDir("project" if scope == "project" else "user")
-        )
-        return os.path.relpath(item.path, base_dir).replace(os.sep, "/")
+        scope = item.metadata["scope"]
+        base_dir = item.metadata.get("baseDir")
+        if base_dir is None:
+            base_dir = self.getTopLevelBaseDir("project" if scope == "project" else "user")
+        return os.path.relpath(item.path, base_dir)
 
     def getPackageResourcePattern(self, item: ResourceItem) -> str:
-        base_dir = str(item.metadata.get("baseDir") or os.path.dirname(item.path))
-        return os.path.relpath(item.path, base_dir).replace(os.sep, "/")
+        base_dir = item.metadata.get("baseDir")
+        if base_dir is None:
+            base_dir = os.path.dirname(item.path)
+        return os.path.relpath(item.path, base_dir)
 
 
 class ConfigSelectorComponent(Container, Focusable):
@@ -549,16 +550,4 @@ class ConfigSelectorComponent(Container, Focusable):
         return self.resourceList
 
 
-__all__ = [
-    "ConfigSelectorComponent",
-    "ConfigSelectorHeader",
-    "FlatEntry",
-    "ResourceGroup",
-    "ResourceItem",
-    "ResourceList",
-    "ResourceSubgroup",
-    "ResourceType",
-    "build_groups",
-    "format_base_dir",
-    "get_group_label",
-]
+__all__ = ["ConfigSelectorComponent"]
