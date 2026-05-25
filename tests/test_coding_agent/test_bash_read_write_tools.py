@@ -10,10 +10,12 @@ from harnify_coding_agent.core.tools import (
     create_bash_tool_definition,
     create_local_bash_operations,
     create_read_tool,
+    create_read_tool_definition,
     create_write_tool,
     get_text_output,
 )
 from harnify_coding_agent.core.tools import bash as bash_module
+from harnify_coding_agent.core.tools import read as read_module
 
 TINY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
 
@@ -303,4 +305,26 @@ def test_bash_module_exports_match_ts_surface() -> None:
         "createBashTool",
         "createBashToolDefinition",
         "createLocalBashOperations",
+    ]
+
+
+def test_read_tool_definition_surface_matches_ts(tmp_path: Path) -> None:
+    definition = create_read_tool_definition(str(tmp_path))
+
+    assert definition.promptSnippet == "Read file contents"
+    assert definition.promptGuidelines == ["Use read to examine files instead of cat or sed."]
+    assert definition.prepareArguments is None
+    assert definition.renderCall is not None
+    assert definition.renderResult is not None
+    assert "50.0KB" in definition.description
+
+
+def test_read_module_exports_match_ts_surface() -> None:
+    assert read_module.__all__ == [
+        "ReadOperations",
+        "ReadToolDetails",
+        "ReadToolInput",
+        "ReadToolOptions",
+        "createReadTool",
+        "createReadToolDefinition",
     ]
