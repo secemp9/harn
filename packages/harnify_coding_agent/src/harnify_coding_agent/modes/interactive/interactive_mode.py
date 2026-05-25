@@ -4517,6 +4517,8 @@ class InteractiveMode:
 
         self.registerSignalHandlers()
         self.changelogMarkdown = self.getChangelogForDisplay()
+        fd_path, _rg_path = await asyncio.gather(ensureTool("fd"), ensureTool("rg"))
+        self.fdPath = fd_path
         setKeybindings(self.keybindings)
         themes_result = {}
         get_themes = _callable_attr(getattr(self.session, "resourceLoader", None), "getThemes")
@@ -4528,6 +4530,27 @@ class InteractiveMode:
         self.setupAutocompleteProvider()
 
         quiet_startup = _safe_call_bool(self.settingsManager, "getQuietStartup")
+        scoped_models = list(getattr(self.session, "scopedModels", []) or [])
+        if scoped_models and (self.options.verbose or not quiet_startup):
+            model_list = ", ".join(
+                f"{_value(_value(scoped_model, 'model'), 'id', '')}"
+                + (
+                    f":{_value(scoped_model, 'thinkingLevel')}"
+                    if _value(scoped_model, "thinkingLevel")
+                    else ""
+                )
+                for scoped_model in scoped_models
+            )
+            cycle_keys = list(self.keybindings.getKeys("app.model.cycleForward"))
+            cycle_hint = (
+                interactive_theme.theme.fg(
+                    "muted",
+                    f" ({format_key_text('/'.join(cycle_keys), KeyTextFormatOptions(capitalize=True))} to cycle)",
+                )
+                if cycle_keys
+                else ""
+            )
+            print(interactive_theme.theme.fg("dim", f"Model scope: {model_list}{cycle_hint}"))
         self.headerContainer.clear()
         add_child = _callable_attr(self.ui, "addChild")
         if add_child is not None:
