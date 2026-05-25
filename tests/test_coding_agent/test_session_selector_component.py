@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import re
 from datetime import UTC, datetime, timedelta
 
@@ -15,6 +16,9 @@ from harnify_coding_agent.modes.interactive.theme.theme import init_theme
 from harnify_tui import setKeybindings
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*m|\]8;;.*?\x07)", re.DOTALL)
+session_selector_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.session_selector"
+)
 
 
 def _strip_ansi(text: str) -> str:
@@ -254,7 +258,7 @@ async def test_session_selector_status_message_auto_hides_and_discards_stale_all
     assert "Stale" not in output
 
 
-def test_session_list_ctrl_c_uses_exit_callback() -> None:
+def test_session_list_ctrl_c_uses_cancel_callback() -> None:
     now = datetime.now(UTC)
     session_list = SessionList(
         [
@@ -275,8 +279,59 @@ def test_session_list_ctrl_c_uses_exit_callback() -> None:
         "all",
         KeybindingsManager(),
     )
-    exit_calls: list[bool] = []
-    session_list.onExit = lambda: exit_calls.append(True)
+    cancel_calls: list[bool] = []
+    session_list.onCancel = lambda: cancel_calls.append(True)
 
     session_list.handleInput("\x03")
-    assert exit_calls == [True]
+    assert cancel_calls == [True]
+
+
+@pytest.mark.asyncio
+async def test_session_selector_blank_rename_keeps_rename_mode() -> None:
+    now = datetime.now(UTC)
+    sessions = [
+        SessionInfo(
+            path="/tmp/demo.jsonl",
+            id="sess-demo",
+            cwd="/repo/demo",
+            created=now - timedelta(hours=1),
+            modified=now - timedelta(minutes=2),
+            messageCount=1,
+            firstMessage="demo",
+            allMessagesText="demo",
+            name="Demo",
+        )
+    ]
+
+    async def load_current(on_progress=None):
+        del on_progress
+        return sessions
+
+    renamed: list[tuple[str, str]] = []
+
+    async def rename_session(session_path: str, next_name: str) -> None:
+        renamed.append((session_path, next_name))
+
+    component = SessionSelectorComponent(
+        load_current,
+        load_current,
+        lambda _session_path: None,
+        lambda: None,
+        lambda: None,
+        lambda: None,
+        {"renameSession": rename_session},
+    )
+
+    await asyncio.sleep(0)
+    component.enterRenameMode("/tmp/demo.jsonl", "Demo")
+    component.renameInput.setValue("   ")
+    component.renameInput.cursor = len(component.renameInput.getValue())
+    component.handleInput("\r")
+    await asyncio.sleep(0)
+
+    assert component.mode == "rename"
+    assert renamed == []
+
+
+def test_session_selector_module_exports_match_ts_surface() -> None:
+    assert session_selector_module.__all__ == ["SessionSelectorComponent"]
