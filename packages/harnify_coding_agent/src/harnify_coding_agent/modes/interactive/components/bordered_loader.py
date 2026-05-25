@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from harnify_tui import AbortController, CancellableLoader, Container, Loader, Spacer, Text
+from harnify_tui import CancellableLoader, Container, Loader, Spacer, Text
+from harnify_tui.components import AbortController
 
 from harnify_coding_agent.modes.interactive.components.dynamic_border import DynamicBorder
 from harnify_coding_agent.modes.interactive.components.keybinding_hints import key_hint
