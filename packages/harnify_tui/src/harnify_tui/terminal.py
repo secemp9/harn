@@ -33,18 +33,27 @@ class Terminal(Protocol):
     def stop(self) -> None: ...
     async def drainInput(self, maxMs: int = 1000, idleMs: int = 50) -> None: ...
     def write(self, data: str) -> None: ...
+    @property
+    def columns(self) -> int: ...
+    @property
+    def rows(self) -> int: ...
+    @property
+    def kittyProtocolActive(self) -> bool: ...
+    def moveBy(self, lines: int) -> None: ...
+    def hideCursor(self) -> None: ...
+    def showCursor(self) -> None: ...
+    def clearLine(self) -> None: ...
+    def clearFromCursor(self) -> None: ...
+    def clearScreen(self) -> None: ...
+    def setTitle(self, title: str) -> None: ...
+    def setProgress(self, active: bool) -> None: ...
 
 
 class ProcessTerminal:
-    def __init__(
-        self,
-        stdin: Any | None = None,
-        stdout: Any | None = None,
-        loop: asyncio.AbstractEventLoop | None = None,
-    ) -> None:
-        self.stdin = stdin if stdin is not None else sys.stdin
-        self.stdout = stdout if stdout is not None else sys.stdout
-        self.loop = loop
+    def __init__(self) -> None:
+        self.stdin = sys.stdin
+        self.stdout = sys.stdout
+        self.loop: asyncio.AbstractEventLoop | None = None
         self.wasRaw = False
         self.inputHandler: Any | None = None
         self.resizeHandler: Any | None = None
@@ -74,6 +83,10 @@ class ProcessTerminal:
             self.stdin.setRawMode(True)
         else:
             self._enter_raw_mode()
+
+        set_encoding = getattr(self.stdin, "setEncoding", None)
+        if callable(set_encoding):
+            set_encoding("utf8")
 
         if hasattr(self.stdin, "resume"):
             self.stdin.resume()
