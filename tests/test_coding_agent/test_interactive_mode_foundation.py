@@ -697,6 +697,26 @@ async def test_show_extension_custom_restores_editor_inline_and_overlay() -> Non
     assert handles[0].hidden["value"] is True
 
 
+def test_set_custom_editor_component_uses_default_editor_get_padding_x_like_ts() -> None:
+    ui = FakeUi()
+    default_editor = FakeEditor()
+    default_editor.setText("seed")
+    default_editor.paddingX = 1
+    default_editor.getPaddingX = lambda: 7  # type: ignore[method-assign]
+    container = Container()
+    container.addChild(default_editor)
+    mode = InteractiveMode(ui=ui, defaultEditor=default_editor, editor=default_editor, editorContainer=container)
+
+    class CustomSwapEditor(FakeEditor):
+        pass
+
+    mode.setCustomEditorComponent(lambda _ui, _theme, _keybindings: CustomSwapEditor())
+
+    swapped = mode.editor
+    assert swapped is not default_editor
+    assert swapped.paddingX == 7
+
+
 @pytest.mark.asyncio
 async def test_update_terminal_title_and_reload_command_binding() -> None:
     ui = FakeUi()
