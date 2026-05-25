@@ -3928,7 +3928,7 @@ async def test_command_context_navigate_tree_updates_chat_and_editor() -> None:
     actions = mode._build_command_context_actions()
     result = await actions["navigateTree"]("entry-1", {"summarize": False})
 
-    assert result["cancelled"] is False
+    assert result == {"cancelled": False}
     assert clears == [True]
     assert renders == [True]
     assert editor.text == "restored draft"
