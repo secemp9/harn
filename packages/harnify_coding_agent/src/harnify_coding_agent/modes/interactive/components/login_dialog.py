@@ -24,8 +24,6 @@ def _hyperlink(url: str, text: str | None = None) -> str:
 
 
 class LoginDialogComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(
         self,
         tui: Any,
@@ -91,10 +89,6 @@ class LoginDialogComponent(Container):
             self._inputFuture.set_exception(error)
         self._inputFuture = None
 
-    def _ensure_input_visible(self) -> None:
-        if self.input not in self.contentContainer.children:
-            self.contentContainer.addChild(self.input)
-
     def cancel(self) -> None:
         self.abortController.abort()
         self._reject_input(RuntimeError("Login cancelled"))
@@ -140,7 +134,7 @@ class LoginDialogComponent(Container):
     def showManualInput(self, prompt: str):  # noqa: ANN201
         self.contentContainer.addChild(Spacer(1))
         self.contentContainer.addChild(Text(theme.fg("dim", prompt), 1, 0))
-        self._ensure_input_visible()
+        self.contentContainer.addChild(self.input)
         self.contentContainer.addChild(Text(f"({keyHint('tui.select.cancel', 'to cancel')})", 1, 0))
         self._request_render()
         return self._set_future()
@@ -150,7 +144,7 @@ class LoginDialogComponent(Container):
         self.contentContainer.addChild(Text(theme.fg("text", message), 1, 0))
         if placeholder:
             self.contentContainer.addChild(Text(theme.fg("dim", f"e.g., {placeholder}"), 1, 0))
-        self._ensure_input_visible()
+        self.contentContainer.addChild(self.input)
         self.contentContainer.addChild(
             Text(
                 f"({keyHint('tui.select.cancel', 'to cancel,')} {keyHint('tui.select.confirm', 'to submit')})",
