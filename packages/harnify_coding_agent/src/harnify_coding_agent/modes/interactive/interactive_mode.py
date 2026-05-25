@@ -1220,9 +1220,10 @@ class InteractiveMode:
     def setHiddenThinkingLabel(self, label: str | None = None) -> None:
         self.hiddenThinkingLabel = label if label is not None else self.defaultHiddenThinkingLabel
         for child in getattr(self.chatContainer, "children", []):
-            set_hidden_label = _callable_attr(child, "setHiddenThinkingLabel")
-            if set_hidden_label is not None:
-                set_hidden_label(self.hiddenThinkingLabel)
+            if isinstance(child, AssistantMessageComponent):
+                set_hidden_label = _callable_attr(child, "setHiddenThinkingLabel")
+                if set_hidden_label is not None:
+                    set_hidden_label(self.hiddenThinkingLabel)
         streaming_component = getattr(self, "streamingComponent", None)
         set_streaming_label = _callable_attr(streaming_component, "setHiddenThinkingLabel")
         if set_streaming_label is not None:
