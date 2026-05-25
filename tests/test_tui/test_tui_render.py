@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from harnify_tui import tui as tui_module
 from harnify_tui.terminal_image import deleteKittyImage, encodeKitty
 from harnify_tui.tui import TUI
 
@@ -123,3 +124,23 @@ def test_tui_deletes_changed_kitty_image_before_redrawing_new_placement() -> Non
     delete_index = writes.index(deleteKittyImage(42))
     draw_index = writes.index(new_image)
     assert delete_index < draw_index
+
+
+def test_tui_module_exports_match_ts_surface() -> None:
+    assert tui_module.__all__ == [
+        "Component",
+        "Container",
+        "CURSOR_MARKER",
+        "Focusable",
+        "isFocusable",
+        "OverlayAnchor",
+        "OverlayHandle",
+        "OverlayMargin",
+        "OverlayOptions",
+        "SizeValue",
+        "TUI",
+        "visibleWidth",
+    ]
+    assert not hasattr(tui_module, "extract_kitty_image_ids")
+    assert not hasattr(tui_module, "parse_size_value")
+    assert not hasattr(tui_module, "OverlayLayout")
