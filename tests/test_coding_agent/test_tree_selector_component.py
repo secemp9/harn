@@ -233,7 +233,7 @@ def test_tree_list_formats_zero_offset_and_custom_tool_args_like_ts() -> None:
         "[read: /tmp/demo.txt:0-1]"
     )
     assert tree_list.formatToolCall("custom-tool", {"alpha": 1, "beta": True}) == (
-        '[custom-tool: {"alpha": 1, "beta": true}]'
+        '[custom-tool: {"alpha":1,"beta":true}]'
     )
 
 
