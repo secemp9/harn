@@ -1496,13 +1496,13 @@ async def test_init_matches_ts_startup_header_and_render_order(monkeypatch: pyte
         "count",
     ]
 
-    collapsed = _strip_ansi("\n".join(mode.builtInHeader.render(200)))
+    collapsed = _strip_ansi(str(getattr(mode.builtInHeader, "text", "")))
     assert "clear/exit" in collapsed
     assert "show full startup help and loaded resources" in collapsed
     assert "Ask it how to use or extend Pi." in collapsed
 
     mode.builtInHeader.setExpanded(True)
-    expanded = _strip_ansi("\n".join(mode.builtInHeader.render(200)))
+    expanded = _strip_ansi(str(getattr(mode.builtInHeader, "text", "")))
     assert "to suspend" in expanded
     assert "to queue follow-up" in expanded
     assert "to edit all queued messages" in expanded
