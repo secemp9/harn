@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 from harnify_tui.tui import TUI
 
@@ -24,7 +23,7 @@ class LoaderIndicatorOptions:
 class Loader(Text):
     def __init__(
         self,
-        ui: TUI | Any,
+        ui: TUI,
         spinnerColorFn: Callable[[str], str],
         messageColorFn: Callable[[str], str],
         message: str = "Loading...",
@@ -93,12 +92,8 @@ class Loader(Text):
         rendered_frame = frame if self.renderIndicatorVerbatim else self.spinnerColorFn(frame)
         indicator = f"{rendered_frame} " if frame else ""
         self.setText(f"{indicator}{self.messageColorFn(self.message)}")
-        request_render = getattr(self.ui, "requestRender", None)
-        if callable(request_render):
-            request_render()
-
-    def __del__(self) -> None:
-        self.stop()
+        if self.ui is not None:
+            self.ui.requestRender()
 
 
 __all__ = ["Loader", "LoaderIndicatorOptions"]
