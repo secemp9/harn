@@ -1499,11 +1499,11 @@ async def test_import_command_retries_with_selected_cwd() -> None:
         sessionFile="/tmp/session.jsonl",
     )
 
-    async def import_from_jsonl(path: str, cwd_override: str | None = None) -> dict[str, bool]:
+    async def import_from_jsonl(path: str, cwd_override: str | None = None) -> Any:
         calls.append((path, cwd_override))
         if cwd_override is None:
             raise MissingSessionCwdError(issue)
-        return {"cancelled": False}
+        return SimpleNamespace(cancelled=False)
 
     mode = InteractiveMode(
         runtimeHost=SimpleNamespace(importFromJsonl=import_from_jsonl),
@@ -3641,7 +3641,7 @@ async def test_handle_clear_command_renders_new_session_message() -> None:
     mode = InteractiveMode(
         ui=FakeUi(),
         chatContainer=Container(),
-        runtimeHost=SimpleNamespace(newSession=lambda: asyncio.sleep(0, result={"cancelled": False})),
+        runtimeHost=SimpleNamespace(newSession=lambda: asyncio.sleep(0, result=SimpleNamespace(cancelled=False))),
         statusContainer=SimpleNamespace(clear=lambda: cleared.append(True)),
         loadingAnimation=SimpleNamespace(stop=lambda: stopped.append(True)),
     )
@@ -3660,6 +3660,23 @@ async def test_handle_clear_command_renders_new_session_message() -> None:
     assert stopped == [True]
     assert cleared == [True]
     assert "✓ New session started" in stripped
+
+
+@pytest.mark.asyncio
+async def test_handle_new_session_accepts_object_shaped_runtime_result() -> None:
+    statuses: list[str] = []
+    rendered: list[str] = []
+    mode = InteractiveMode(
+        runtimeHost=SimpleNamespace(newSession=lambda: asyncio.sleep(0, result=SimpleNamespace(cancelled=False))),
+    )
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.renderCurrentSessionState = lambda: rendered.append("rendered")  # type: ignore[method-assign]
+
+    result = await mode.handleNewSession()
+
+    assert result.cancelled is False
+    assert rendered == ["rendered"]
+    assert statuses == ["Started new session"]
 
 
 @pytest.mark.asyncio
