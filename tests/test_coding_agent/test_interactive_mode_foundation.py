@@ -215,6 +215,21 @@ def test_set_tools_expanded_updates_header_and_chat_children() -> None:
     assert ui.render_calls == [None]
 
 
+def test_toggle_thinking_block_visibility_rebuilds_chat_and_reports_status() -> None:
+    statuses: list[str] = []
+    mode = InteractiveMode(
+        chatContainer=Container(),
+        settingsManager=SimpleNamespace(setHideThinkingBlock=lambda _value: None),
+    )
+    mode.rebuildChatFromMessages = lambda: statuses.append("rebuilt")  # type: ignore[method-assign]
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+
+    mode.toggleThinkingBlockVisibility()
+
+    assert mode.hideThinkingBlock is True
+    assert statuses == ["rebuilt", "Thinking blocks: hidden"]
+
+
 def test_extension_ui_context_persists_theme_and_rebuilds_autocomplete() -> None:
     current_theme = {"value": "dark"}
     settings = SimpleNamespace(
