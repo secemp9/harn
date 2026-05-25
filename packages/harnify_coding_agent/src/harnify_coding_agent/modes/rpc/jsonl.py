@@ -5,7 +5,6 @@ from __future__ import annotations
 import codecs
 import dataclasses
 import json
-import threading
 from collections.abc import Callable, Generator
 from typing import Any
 
@@ -53,7 +52,7 @@ class JsonlLineBuffer:
 
 
 def serialize_json_line(value: Any) -> str:
-    return json.dumps(to_jsonable(value), ensure_ascii=False) + "\n"
+    return json.dumps(to_jsonable(value), ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 def iter_jsonl_lines(stream: Any, chunk_size: int = 4096) -> Generator[str, None, None]:
@@ -70,34 +69,28 @@ def iter_jsonl_lines(stream: Any, chunk_size: int = 4096) -> Generator[str, None
 def attach_jsonl_line_reader(
     stream: Any,
     on_line: Callable[[str], None],
-    *,
-    chunk_size: int = 4096,
 ) -> Callable[[], None]:
-    stop_event = threading.Event()
     reader = JsonlLineBuffer()
-    source = getattr(stream, "buffer", stream)
 
-    def _run() -> None:
-        while not stop_event.is_set():
-            chunk = source.read(chunk_size)
-            if not chunk:
-                break
-            for line in reader.feed(chunk):
-                if stop_event.is_set():
-                    return
-                on_line(line)
-        if stop_event.is_set():
-            return
-        for line in reader.end():
-            if stop_event.is_set():
-                return
+    def _on_data(chunk: bytes | str) -> None:
+        for line in reader.feed(chunk):
             on_line(line)
 
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
+    def _on_end(*_args: Any) -> None:
+        for line in reader.end():
+            on_line(line)
+
+    on = getattr(stream, "on", None)
+    off = getattr(stream, "off", None)
+    if not callable(on) or not callable(off):
+        raise TypeError("attach_jsonl_line_reader requires a stream with on()/off() methods")
+
+    on("data", _on_data)
+    on("end", _on_end)
 
     def detach() -> None:
-        stop_event.set()
+        off("data", _on_data)
+        off("end", _on_end)
 
     return detach
 
@@ -106,11 +99,6 @@ attachJsonlLineReader = attach_jsonl_line_reader
 serializeJsonLine = serialize_json_line
 
 __all__ = [
-    "JsonlLineBuffer",
     "attachJsonlLineReader",
-    "attach_jsonl_line_reader",
-    "iter_jsonl_lines",
     "serializeJsonLine",
-    "serialize_json_line",
-    "to_jsonable",
 ]
