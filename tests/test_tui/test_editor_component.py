@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+import harnify_tui.components.editor as editor_module
 import pytest
 from harnify_tui.autocomplete import (
     AutocompleteItem,
@@ -105,6 +106,16 @@ async def flush_editor(delay: float = 0.0) -> None:
 def move_right(editor: Editor, count: int) -> None:
     for _ in range(count):
         editor.handleInput("\x1b[C")
+
+
+def test_editor_module_exports_match_ts_surface() -> None:
+    assert editor_module.__all__ == [
+        "Editor",
+        "EditorOptions",
+        "EditorTheme",
+        "TextChunk",
+        "wordWrapLine",
+    ]
 
 
 def test_history_up_arrow_does_nothing_when_empty() -> None:
@@ -505,6 +516,52 @@ async def test_typing_continues_aborts_active_autocomplete_request() -> None:
     await flush_editor(0.06)
 
     assert aborts == 1
+
+
+@pytest.mark.asyncio
+async def test_new_autocomplete_request_waits_for_previous_abort_cleanup() -> None:
+    editor, _tui = create_editor()
+    events: list[str] = []
+    loop = asyncio.get_running_loop()
+
+    async def get_suggestions(
+        lines: list[str],
+        _cursor_line: int,
+        cursor_col: int,
+        options: dict[str, object],
+    ) -> AutocompleteSuggestions | None:
+        prefix = (lines[0] if lines else "")[:cursor_col]
+        if prefix == "/":
+            events.append("first-start")
+            future: asyncio.Future[AutocompleteSuggestions | None] = loop.create_future()
+
+            def finish_first() -> None:
+                events.append("first-finish")
+                if not future.done():
+                    future.set_result(None)
+
+            def on_abort() -> None:
+                events.append("first-abort")
+                loop.call_later(0.02, finish_first)
+
+            signal = options["signal"]
+            signal.addEventListener("abort", on_abort, {"once": True})
+            return await future
+
+        events.append("second-start")
+        return AutocompleteSuggestions(
+            items=[AutocompleteItem(value="help", label="help")],
+            prefix=prefix,
+        )
+
+    editor.setAutocompleteProvider(MockAutocompleteProvider(get_suggestions))
+    editor.handleInput("/")
+    await flush_editor(0.01)
+
+    editor.handleInput("h")
+    await flush_editor(0.06)
+
+    assert events == ["first-start", "first-abort", "first-finish", "second-start"]
 
 
 @pytest.mark.asyncio
