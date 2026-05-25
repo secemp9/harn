@@ -23,6 +23,7 @@ from harnify_coding_agent.modes.interactive.components.scoped_models_selector im
     ModelsConfig,
     ScopedModelsSelectorComponent,
 )
+import harnify_coding_agent.modes.interactive.components.scoped_models_selector as scoped_models_selector_module
 from harnify_coding_agent.modes.interactive.theme.theme import init_theme
 from harnify_tui import setKeybindings
 
@@ -224,3 +225,11 @@ def test_model_selector_module_exports_match_ts_surface() -> None:
 
 def test_oauth_selector_module_exports_match_ts_surface() -> None:
     assert oauth_selector_module.__all__ == ["AuthSelectorProvider", "OAuthSelectorComponent"]
+
+
+def test_scoped_models_selector_module_exports_match_ts_surface() -> None:
+    assert scoped_models_selector_module.__all__ == [
+        "ModelsCallbacks",
+        "ModelsConfig",
+        "ScopedModelsSelectorComponent",
+    ]
