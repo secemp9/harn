@@ -10,6 +10,10 @@ from harnify_coding_agent.core.tools import create_grep_tool, get_text_output
 from harnify_coding_agent.utils import tools_manager
 
 
+def test_tools_manager_module_exports_match_ts_surface() -> None:
+    assert tools_manager.__all__ == ["ensureTool", "getToolPath"]
+
+
 def test_get_tool_path_prefers_local_binary_then_system_alias(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     local_binary = tmp_path / "fd"
     local_binary.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -74,10 +78,13 @@ async def test_download_tool_extracts_nested_binary_from_tar_gz(
 
     monkeypatch.setattr(tools_manager, "download_file", fake_download)
 
-    binary_path = await tools_manager.download_tool("rg", tools_dir=str(tmp_path / "bin"))
+    bin_dir = tmp_path / "bin"
+    binary_path = await tools_manager.download_tool("rg", tools_dir=str(bin_dir))
     binary = Path(binary_path)
     assert binary.exists()
     assert binary.read_text(encoding="utf-8") == "#!/bin/sh\necho rg\n"
+    assert binary.stat().st_mode & 0o777 == 0o755
+    assert sorted(path.name for path in bin_dir.iterdir()) == ["rg"]
 
 
 @pytest.mark.asyncio
