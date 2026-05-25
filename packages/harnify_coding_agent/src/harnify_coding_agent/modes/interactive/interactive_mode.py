@@ -5250,7 +5250,12 @@ class InteractiveMode:
         )
 
     async def showModelsSelector(self) -> None:
-        all_models = self.getModelCandidates()
+        model_registry = getattr(self.session, "modelRegistry", None)
+        refresh = _callable_attr(model_registry, "refresh")
+        if refresh is not None:
+            refresh()
+        get_available = _callable_attr(model_registry, "getAvailable")
+        all_models = list(get_available() or []) if get_available is not None else []
         if not all_models:
             self.showStatus("No models available")
             return
@@ -5272,6 +5277,7 @@ class InteractiveMode:
                 current_enabled_ids = None
 
         async def _update_session_models(enabled_ids: list[str] | None) -> None:
+            current_enabled_ids = None if enabled_ids is None else [*enabled_ids]
             if enabled_ids and len(enabled_ids) < len(all_models):
                 resolved = await resolveModelScope(enabled_ids, getattr(self.session, "modelRegistry", None))
                 self.session.setScopedModels(
