@@ -5289,30 +5289,29 @@ class InteractiveMode:
             self.updateAvailableProviderCount()
             self._request_render()
 
-        self.showSelector(
-            lambda done: {
-                "component": ScopedModelsSelectorComponent(
-                    ModelsConfig(
-                        allModels=list(all_models),
-                        enabledModelIds=current_enabled_ids,
-                    ),
-                    ModelsCallbacks(
-                        onChange=lambda enabled_ids: self._schedule_task(_update_session_models(enabled_ids)),
-                        onPersist=lambda enabled_ids: (
-                            _callable_attr(self.settingsManager, "setEnabledModels")
-                            and self.settingsManager.setEnabledModels(
-                                None
-                                if enabled_ids is None or len(enabled_ids) == len(all_models)
-                                else list(enabled_ids)
-                            ),
-                            self.showStatus("Model selection saved to settings"),
-                        ),
-                        onCancel=lambda: (done(), self._request_render()),
-                    ),
+        def _build_models_selector(done: Callable[[], None]) -> dict[str, Any]:
+            selector = ScopedModelsSelectorComponent(
+                ModelsConfig(
+                    allModels=list(all_models),
+                    enabledModelIds=current_enabled_ids,
                 ),
-                "focus": True,
-            }
-        )
+                ModelsCallbacks(
+                    onChange=lambda enabled_ids: self._schedule_task(_update_session_models(enabled_ids)),
+                    onPersist=lambda enabled_ids: (
+                        _callable_attr(self.settingsManager, "setEnabledModels")
+                        and self.settingsManager.setEnabledModels(
+                            None
+                            if enabled_ids is None or len(enabled_ids) == len(all_models)
+                            else list(enabled_ids)
+                        ),
+                        self.showStatus("Model selection saved to settings"),
+                    ),
+                    onCancel=lambda: (done(), self._request_render()),
+                ),
+            )
+            return {"component": selector, "focus": selector}
+
+        self.showSelector(_build_models_selector)
 
     def showUserMessageSelector(self) -> None:
         user_messages = list(_callable_attr(self.session, "getUserMessagesForForking")() or [])
@@ -5321,20 +5320,19 @@ class InteractiveMode:
             return
 
         initial_selected_id = _value(user_messages[-1], "entryId")
-        self.showSelector(
-            lambda done: {
-                "component": UserMessageSelectorComponent(
-                    [
-                        UserMessageItem(id=str(_value(message, "entryId")), text=str(_value(message, "text", "")))
-                        for message in user_messages
-                    ],
-                    lambda entry_id: self._schedule_task(self._handle_user_message_fork(entry_id, done)),
-                    lambda: (done(), self._request_render()),
-                    str(initial_selected_id) if initial_selected_id is not None else None,
-                ),
-                "focus": True,
-            }
-        )
+        def _build_user_message_selector(done: Callable[[], None]) -> dict[str, Any]:
+            selector = UserMessageSelectorComponent(
+                [
+                    UserMessageItem(id=str(_value(message, "entryId")), text=str(_value(message, "text", "")))
+                    for message in user_messages
+                ],
+                lambda entry_id: self._schedule_task(self._handle_user_message_fork(entry_id, done)),
+                lambda: (done(), self._request_render()),
+                str(initial_selected_id) if initial_selected_id is not None else None,
+            )
+            return {"component": selector, "focus": selector.getMessageList()}
+
+        self.showSelector(_build_user_message_selector)
 
     async def _handle_user_message_fork(self, entryId: str, done: Callable[[], None]) -> None:
         try:
