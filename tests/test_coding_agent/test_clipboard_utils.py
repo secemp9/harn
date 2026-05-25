@@ -17,6 +17,10 @@ class _NativeClipboard:
         self.calls.append(text)
 
 
+def test_clipboard_module_exports_match_ts_surface() -> None:
+    assert clipboard_utils.__all__ == ["copyToClipboard"]
+
+
 @pytest.mark.asyncio
 async def test_copy_to_clipboard_local_native_success_skips_osc52(monkeypatch: pytest.MonkeyPatch) -> None:
     writes: list[str] = []
