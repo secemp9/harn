@@ -458,7 +458,7 @@ async def test_agent_session_exposes_slash_commands_and_exports_jsonl(tmp_path: 
         assert len(content) == 3
         assert '"type":"session"' in content[0]
         assert '"parentId":null' in content[1]
-        assert '"parentId": "' in content[2]
+        assert '"parentId":"' in content[2]
     finally:
         session.dispose()
 
