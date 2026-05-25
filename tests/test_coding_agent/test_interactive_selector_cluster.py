@@ -10,6 +10,7 @@ from harnify_coding_agent.core.keybindings import KeybindingsManager
 from harnify_coding_agent.core.model_registry import ModelRegistry
 from harnify_coding_agent.core.settings_manager import SettingsManager
 from harnify_coding_agent.modes.interactive.components.login_dialog import LoginDialogComponent
+import harnify_coding_agent.modes.interactive.components.login_dialog as login_dialog_module
 from harnify_coding_agent.modes.interactive.components.model_selector import ModelSelectorComponent, ScopedModelItem
 from harnify_coding_agent.modes.interactive.components.oauth_selector import (
     AuthSelectorProvider,
@@ -209,3 +210,7 @@ def test_login_dialog_device_code_renders_and_opens_url(monkeypatch: pytest.Monk
     assert "ABCD-1234" in output
     assert "https://example.com/device" in output
     assert opened == ["https://example.com/device"]
+
+
+def test_login_dialog_module_exports_match_ts_surface() -> None:
+    assert login_dialog_module.__all__ == ["LoginDialogComponent"]
