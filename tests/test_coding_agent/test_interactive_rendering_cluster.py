@@ -20,6 +20,7 @@ from harnify_coding_agent.modes.interactive.components import (
     truncate_to_visual_lines,
 )
 import harnify_coding_agent.modes.interactive.components.assistant_message as assistant_message_module
+import harnify_coding_agent.modes.interactive.components.bash_execution as bash_execution_module
 from harnify_tui import Text, setKeybindings, visibleWidth
 
 OSC133_ZONE_START = "\x1b]133;A\x07"
@@ -112,6 +113,10 @@ def test_user_message_keeps_box_height_and_prefixes_closing_zone_markers() -> No
 
 def test_assistant_message_module_exports_match_ts_surface() -> None:
     assert assistant_message_module.__all__ == ["AssistantMessageComponent"]
+
+
+def test_bash_execution_module_exports_match_ts_surface() -> None:
+    assert bash_execution_module.__all__ == ["BashExecutionComponent"]
 
 
 def test_truncate_to_visual_lines_counts_wrapped_lines() -> None:

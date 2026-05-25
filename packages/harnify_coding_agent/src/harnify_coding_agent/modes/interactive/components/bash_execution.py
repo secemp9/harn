@@ -116,7 +116,7 @@ class BashExecutionComponent(Container):
         hidden_line_count = len(available_lines) - len(preview_logical_lines)
 
         self.contentContainer.clear()
-        self.contentContainer.addChild(Text(theme.fg(self.colorKey, theme.bold(f"$ {self.command}")), 1, 0))
+        self.contentContainer.addChild(Text(theme.fg("bashMode", theme.bold(f"$ {self.command}")), 1, 0))
 
         if available_lines:
             if self.expanded:
@@ -159,4 +159,4 @@ class BashExecutionComponent(Container):
             self.contentContainer.addChild(Text(f"\n{'\n'.join(status_parts)}", 1, 0))
 
 
-__all__ = ["BashExecutionComponent", "PREVIEW_LINES"]
+__all__ = ["BashExecutionComponent"]
