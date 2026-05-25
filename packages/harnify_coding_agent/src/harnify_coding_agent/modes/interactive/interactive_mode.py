@@ -4681,7 +4681,11 @@ class InteractiveMode:
     async def run(self) -> int:
         await self.init()
         self._shutdownFuture = asyncio.get_running_loop().create_future()
-        self.shutdownRequested = False
+
+        if self.shutdownRequested:
+            await self.checkShutdownRequested()
+            return await self._shutdownFuture
+
         self.isShuttingDown = False
         self._schedule_task(self._check_for_new_version())
         self._schedule_task(self._check_for_package_updates())
@@ -4739,6 +4743,8 @@ class InteractiveMode:
         if self.shutdownRequested:
             return
         self.shutdownRequested = True
+        if self._shutdownFuture is None:
+            return
         if not bool(getattr(self.session, "isStreaming", False)):
             self._schedule_task(self.shutdown())
 
