@@ -3400,6 +3400,9 @@ class InteractiveMode:
         await self.shutdown()
 
     async def handleEvent(self, event: dict[str, Any] | Any) -> None:
+        if not self.isInitialized:
+            await self.init()
+
         event_type = _value(event, "type")
         if event_type == "agent_start":
             self._toolComponentsById.clear()
