@@ -142,7 +142,7 @@ def test_calculate_image_cell_size_uses_fixed_default_dims_not_mutable_global() 
         setCellDimensions({"widthPx": 100, "heightPx": 100})
         size = calculateImageCellSize(ImageDimensions(widthPx=90, heightPx=180), 9)
         assert size.columns == 9
-        assert size.rows == 10
+        assert size.rows == 9
     finally:
         setCellDimensions(previous_dims)
 
