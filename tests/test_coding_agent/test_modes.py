@@ -691,8 +691,9 @@ async def test_rpc_client_routes_responses_and_events() -> None:
     assert await future == {"type": "response", "id": "req_1", "command": "get_state", "success": True}
 
     client._handle_line(json.dumps({"type": "agent_end", "messages": []}))
+    client._handle_line(json.dumps(["non-object-event"]))
     unsubscribe()
-    assert events == [{"type": "agent_end", "messages": []}]
+    assert events == [{"type": "agent_end", "messages": []}, ["non-object-event"]]
 
 
 @pytest.mark.asyncio
