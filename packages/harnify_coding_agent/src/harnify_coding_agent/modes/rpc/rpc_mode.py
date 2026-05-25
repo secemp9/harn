@@ -9,6 +9,7 @@ import uuid
 from typing import Any
 
 from harnify_coding_agent.core.output_guard import restoreStdout, takeOverStdout, writeRawStdout
+from harnify_coding_agent.modes.interactive.theme.theme import theme
 from harnify_coding_agent.modes.rpc.jsonl import JsonlLineBuffer, serialize_json_line
 from harnify_coding_agent.modes.rpc.rpc_types import (
     RpcCommand,
@@ -26,6 +27,12 @@ def _value(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 
+async def _maybe_await(value: Any) -> Any:
+    if asyncio.iscoroutine(value) or isinstance(value, asyncio.Future):
+        return await value
+    return value
+
+
 class _RpcUIContext:
     def __init__(
         self,
@@ -34,7 +41,6 @@ class _RpcUIContext:
     ) -> None:
         self._output = output
         self._pending_requests = pending_requests
-        self.theme = None
 
     async def _dialog(
         self,
@@ -42,16 +48,40 @@ class _RpcUIContext:
         *,
         default: Any,
         timeout: float | None = None,
+        signal: Any = None,
     ) -> Any:
+        if _value(signal, "aborted"):
+            return default
         request_id = request["id"]
         future: asyncio.Future[RpcExtensionUIResponse] = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
+
+        remove_abort_listener = None
+
+        def cleanup() -> None:
+            self._pending_requests.pop(request_id, None)
+            if callable(remove_abort_listener):
+                remove_abort_listener()
+
+        def on_abort(*_args: Any) -> None:
+            cleanup()
+            if not future.done():
+                future.set_result({"cancelled": True})
+
+        add_abort_listener = getattr(signal, "addEventListener", None)
+        remove_event_listener = getattr(signal, "removeEventListener", None)
+        if callable(add_abort_listener):
+            add_abort_listener("abort", on_abort, {"once": True})
+            if callable(remove_event_listener):
+                remove_abort_listener = lambda: remove_event_listener("abort", on_abort)
+
         self._output(request)
         try:
             response = await asyncio.wait_for(future, timeout=timeout) if timeout else await future
         except TimeoutError:
-            self._pending_requests.pop(request_id, None)
+            cleanup()
             return default
+        cleanup()
         if response.get("cancelled"):
             return default
         if "confirmed" in response:
@@ -70,6 +100,7 @@ class _RpcUIContext:
             },
             default=None,
             timeout=_value(opts, "timeout"),
+            signal=_value(opts, "signal"),
         )
 
     async def confirm(self, title: str, message: str, opts: Any = None) -> bool:
@@ -85,6 +116,7 @@ class _RpcUIContext:
                 },
                 default=False,
                 timeout=_value(opts, "timeout"),
+                signal=_value(opts, "signal"),
             )
         )
 
@@ -100,6 +132,7 @@ class _RpcUIContext:
             },
             default=None,
             timeout=_value(opts, "timeout"),
+            signal=_value(opts, "signal"),
         )
 
     async def editor(self, title: str, prefill: str | None = None) -> str | None:
@@ -109,9 +142,10 @@ class _RpcUIContext:
                 "id": str(uuid.uuid4()),
                 "method": "editor",
                 "title": title,
-                "prefill": prefill or "",
+                "prefill": prefill,
             },
             default=None,
+            signal=None,
         )
 
     def notify(self, message: str, type: str | None = None) -> None:
@@ -208,6 +242,10 @@ class _RpcUIContext:
     def getEditorComponent(self) -> None:
         return None
 
+    @property
+    def theme(self) -> Any:
+        return theme
+
     def getAllThemes(self) -> list[Any]:
         return []
 
@@ -252,18 +290,38 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
     async def rebind_session() -> None:
         nonlocal session, unsubscribe
         session = runtime_host.session
+
+        async def _fork(entry_id: str, options: Any = None) -> dict[str, Any]:
+            result = await runtime_host.fork(entry_id, options)
+            return {"cancelled": _value(result, "cancelled")}
+
+        async def _navigate_tree(target_id: str, options: Any = None) -> dict[str, Any]:
+            result = await session.navigateTree(
+                target_id,
+                {
+                    "summarize": _value(options, "summarize"),
+                    "customInstructions": _value(options, "customInstructions"),
+                    "replaceInstructions": _value(options, "replaceInstructions"),
+                    "label": _value(options, "label"),
+                },
+            )
+            return {"cancelled": _value(result, "cancelled")}
+
+        async def _reload() -> None:
+            await session.reload()
+
         await session.bindExtensions(
             {
                 "uiContext": _RpcUIContext(output, pending_extension_requests),
                 "commandContextActions": {
                     "waitForIdle": lambda: session.agent.waitForIdle(),
                     "newSession": lambda options=None: runtime_host.newSession(options),
-                    "fork": lambda entry_id, options=None: runtime_host.fork(entry_id, options),
-                    "navigateTree": lambda _target_id, _options=None: {"cancelled": False},
+                    "fork": _fork,
+                    "navigateTree": _navigate_tree,
                     "switchSession": (
                         lambda session_path, options=None: runtime_host.switchSession(session_path, options)
                     ),
-                    "reload": lambda: None,
+                    "reload": _reload,
                 },
                 "shutdownHandler": lambda: _request_shutdown(),
                 "onError": lambda error: output(
@@ -284,8 +342,7 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
         nonlocal shutdown_requested
         shutdown_requested = True
 
-    if hasattr(runtime_host, "setRebindSession"):
-        runtime_host.setRebindSession(rebind_session)
+    runtime_host.setRebindSession(rebind_session)
     await rebind_session()
 
     async def handle_command(command: RpcCommand) -> RpcResponse | None:
@@ -335,7 +392,7 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
             result = await runtime_host.newSession(
                 {"parentSession": command["parentSession"]} if command.get("parentSession") else None
             )
-            if not result.get("cancelled"):
+            if not _value(result, "cancelled"):
                 await rebind_session()
             return success(request_id, "new_session", result)
 
@@ -357,8 +414,17 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
             return success(request_id, "get_state", state)
 
         if command_type == "set_model":
-            model = session.modelRegistry.find(str(command.get("provider")), str(command.get("modelId")))
-            if model is None or not session.modelRegistry.hasConfiguredAuth(model):
+            models = await _maybe_await(session.modelRegistry.getAvailable())
+            model = next(
+                (
+                    candidate
+                    for candidate in models
+                    if _value(candidate, "provider") == str(command.get("provider"))
+                    and _value(candidate, "id") == str(command.get("modelId"))
+                ),
+                None,
+            )
+            if model is None:
                 return failure(
                     request_id,
                     "set_model",
@@ -388,7 +454,7 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
                 {
                     "models": [
                         model.model_dump() if hasattr(model, "model_dump") else model
-                        for model in session.modelRegistry.getAvailable()
+                        for model in await _maybe_await(session.modelRegistry.getAvailable())
                     ]
                 },
             )
@@ -451,18 +517,18 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
 
         if command_type == "switch_session":
             result = await runtime_host.switchSession(str(command.get("sessionPath")))
-            if not result.get("cancelled"):
+            if not _value(result, "cancelled"):
                 await rebind_session()
             return success(request_id, "switch_session", result)
 
         if command_type == "fork":
             result = await runtime_host.fork(str(command.get("entryId")))
-            if not result.get("cancelled"):
+            if not _value(result, "cancelled"):
                 await rebind_session()
             return success(
                 request_id,
                 "fork",
-                {"text": result.get("selectedText"), "cancelled": bool(result.get("cancelled"))},
+                {"text": _value(result, "selectedText"), "cancelled": bool(_value(result, "cancelled"))},
             )
 
         if command_type == "clone":
@@ -470,9 +536,9 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
             if not leaf_id:
                 return failure(request_id, "clone", "Cannot clone session: no current entry selected")
             result = await runtime_host.fork(leaf_id, {"position": "at"})
-            if not result.get("cancelled"):
+            if not _value(result, "cancelled"):
                 await rebind_session()
-            return success(request_id, "clone", {"cancelled": bool(result.get("cancelled"))})
+            return success(request_id, "clone", {"cancelled": bool(_value(result, "cancelled"))})
 
         if command_type == "get_fork_messages":
             return success(request_id, "get_fork_messages", {"messages": session.getUserMessagesForForking()})
@@ -521,7 +587,7 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
                 )
             return success(request_id, "get_commands", {"commands": commands})
 
-        return failure(request_id, command_type, f"Unknown command: {command_type}")
+        return failure(None, command_type, f"Unknown command: {command_type}")
 
     async def handle_input_line(line: str) -> None:
         try:
@@ -579,7 +645,5 @@ __all__ = [
     "RpcExtensionUIResponse",
     "RpcResponse",
     "RpcSessionState",
-    "RpcSlashCommand",
     "runRpcMode",
-    "run_rpc_mode",
 ]
