@@ -373,4 +373,4 @@ class Input:
         return [prompt + text_with_cursor + padding]
 
 
-__all__ = ["Input", "InputState"]
+__all__ = ["Input"]
