@@ -242,7 +242,9 @@ def test_update_editor_border_color_matches_ts_and_requests_render() -> None:
 
     mode.updateEditorBorderColor()
 
-    assert editor.borderColor == interactive_mode_module.interactive_theme.theme.getThinkingBorderColor("high")
+    expected = interactive_mode_module.interactive_theme.theme.getThinkingBorderColor("high")
+    assert callable(editor.borderColor)
+    assert editor.borderColor("sample") == expected("sample")
     assert ui.render_calls == [None]
 
 
