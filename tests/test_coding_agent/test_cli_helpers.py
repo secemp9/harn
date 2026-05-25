@@ -323,7 +323,7 @@ async def test_create_session_manager_fork_failures_exit_with_error_message(tmp_
         )
 
     assert excinfo.value.code == 1
-    assert err.getvalue() == "Error: fork boom\n"
+    assert err.getvalue() == "\x1b[31mError: fork boom\x1b[0m\n"
 
 
 @pytest.mark.asyncio
@@ -349,7 +349,7 @@ async def test_create_session_manager_prompts_to_fork_global_sessions(tmp_path: 
         output_stream=out,
     )
 
-    assert "Session found in different project" in out.getvalue()
+    assert "\x1b[33mSession found in different project:" in out.getvalue()
     assert manager.getCwd() == str(current_project)
     assert manager.getHeader()["parentSession"] == source_manager.getSessionFile()
 
