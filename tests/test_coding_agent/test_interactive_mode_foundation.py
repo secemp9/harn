@@ -1128,6 +1128,27 @@ async def test_warns_once_for_anthropic_subscription_auth() -> None:
     assert warnings == [ANTHROPIC_SUBSCRIPTION_AUTH_WARNING]
 
 
+@pytest.mark.asyncio
+async def test_warns_for_object_shaped_anthropic_oauth_credentials() -> None:
+    warnings: list[str] = []
+    mode = InteractiveMode(
+        settingsManager=SimpleNamespace(getWarnings=lambda: {}),
+        session=SimpleNamespace(
+            modelRegistry=SimpleNamespace(
+                authStorage=SimpleNamespace(get=lambda _provider: SimpleNamespace(type="oauth")),
+                getApiKeyForProvider=lambda _provider: (_ for _ in ()).throw(
+                    AssertionError("API key lookup should not run for stored oauth credentials")
+                ),
+            )
+        ),
+    )
+    mode.showWarning = warnings.append  # type: ignore[method-assign]
+
+    await mode.maybeWarnAboutAnthropicSubscriptionAuth(SimpleNamespace(provider="anthropic"))
+
+    assert warnings == [ANTHROPIC_SUBSCRIPTION_AUTH_WARNING]
+
+
 def test_handle_ctrl_z_windows_reports_status(monkeypatch: pytest.MonkeyPatch) -> None:
     mode = InteractiveMode()
     statuses: list[str] = []
