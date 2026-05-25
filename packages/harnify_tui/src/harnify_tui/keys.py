@@ -621,7 +621,7 @@ def parse_key_id(key_id: str) -> dict[str, bool | str] | None:
     }
 
 
-def matches_key(data: str, key_id: KeyId) -> bool:
+def matchesKey(data: str, key_id: KeyId) -> bool:
     parsed = parse_key_id(key_id)
     if parsed is None:
         return False
@@ -910,7 +910,7 @@ def format_parsed_key(codepoint: int, modifier: int, base_layout_key: int | None
     return format_key_name_with_modifiers(key_name, modifier)
 
 
-def parse_key(data: str) -> str | None:
+def parseKey(data: str) -> str | None:
     kitty = parse_kitty_sequence(data)
     if kitty is not None:
         return format_parsed_key(kitty.codepoint, kitty.modifier, kitty.baseLayoutKey)
