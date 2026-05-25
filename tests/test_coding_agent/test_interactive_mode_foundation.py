@@ -1825,6 +1825,44 @@ async def test_run_seeds_initial_messages_and_starts_ui(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_run_catches_initial_prompt_errors_and_continues(monkeypatch: pytest.MonkeyPatch) -> None:
+    ui = FakeUi()
+    prompts: list[tuple[str, dict[str, Any] | None]] = []
+    errors: list[str] = []
+
+    async def prompt(text: str, options: dict[str, Any] | None = None) -> None:
+        prompts.append((text, options))
+        if text == "first":
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(interactive_mode_module, "ensureTool", _noop_async)
+
+    mode = InteractiveMode(
+        ui=ui,
+        options={
+            "initialMessage": "first",
+            "initialImages": ["img-1"],
+            "initialMessages": ["second"],
+        },
+    )
+    mode.session.prompt = prompt
+    mode.showError = errors.append  # type: ignore[method-assign]
+    mode.checkForPackageUpdates = lambda: asyncio.sleep(0, result=[])  # type: ignore[method-assign]
+    mode.checkTmuxKeyboardSetup = lambda: asyncio.sleep(0, result=None)  # type: ignore[method-assign]
+
+    run_task = asyncio.create_task(mode.run())
+    for _ in range(8):
+        if prompts == [("first", {"images": ["img-1"]}), ("second", None)]:
+            break
+        await asyncio.sleep(0)
+    mode.requestShutdown()
+    assert await run_task == 0
+
+    assert prompts == [("first", {"images": ["img-1"]}), ("second", None)]
+    assert errors == ["boom"]
+
+
+@pytest.mark.asyncio
 async def test_run_honors_shutdown_requested_before_shutdown_future_exists() -> None:
     mode = InteractiveMode(ui=FakeUi())
     init_started = asyncio.Event()
