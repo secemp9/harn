@@ -15,11 +15,11 @@ from harnify_tui import (
     SelectListLayoutOptions,
     SettingItem,
     SettingsList,
-    SettingsListOptions,
     Spacer,
     Text,
     getCapabilities,
 )
+from harnify_tui.components import SettingsListOptions
 
 from harnify_coding_agent.core.http_dispatcher import HTTP_IDLE_TIMEOUT_CHOICES, formatHttpIdleTimeoutMs
 from harnify_coding_agent.core.settings_manager import WarningSettings
