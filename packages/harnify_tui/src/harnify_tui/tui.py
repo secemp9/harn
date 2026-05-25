@@ -247,7 +247,6 @@ class TUI(Container):
         self.stopped = False
         self.focusOrderCounter = 0
         self.overlayStack: list[dict[str, Any]] = []
-        self._rendering = False
         if showHardwareCursor is not None:
             self.showHardwareCursor = showHardwareCursor
 
