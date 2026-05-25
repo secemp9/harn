@@ -291,10 +291,10 @@ _register(
     "truncateHead",
     "truncateLine",
     "truncateTail",
-    "withFileMutationQueue",
     "WriteOperations",
     "WriteToolInput",
     "WriteToolOptions",
+    "withFileMutationQueue",
 )
 _register("harnify_coding_agent.main", "MainOptions", "main")
 _register(
