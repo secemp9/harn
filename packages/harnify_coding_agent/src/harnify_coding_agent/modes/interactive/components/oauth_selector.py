@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from harnify_tui import Container, Input, Spacer, TruncatedText, fuzzyFilter, getKeybindings
 
@@ -17,15 +18,13 @@ from .dynamic_border import DynamicBorder
 class AuthSelectorProvider:
     id: str
     name: str
-    authType: str
+    authType: Literal["oauth", "api_key"]
 
 
 class OAuthSelectorComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(
         self,
-        mode: str,
+        mode: Literal["login", "logout"],
         authStorage: AuthStorage,
         providers: list[AuthSelectorProvider],
         onSelect: Callable[[str], None],
