@@ -5310,6 +5310,7 @@ class InteractiveMode:
                         onCancel=lambda: (done(), self._request_render()),
                     ),
                 ),
+                "focus": True,
             }
         )
 
@@ -5331,6 +5332,7 @@ class InteractiveMode:
                     lambda: (done(), self._request_render()),
                     str(initial_selected_id) if initial_selected_id is not None else None,
                 ),
+                "focus": True,
             }
         )
 
