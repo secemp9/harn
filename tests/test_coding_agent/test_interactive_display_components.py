@@ -319,6 +319,9 @@ async def test_tool_execution_converts_non_png_images_for_kitty(monkeypatch: pyt
 
     component = ToolExecutionComponent("read", "tool-1", {}, ui=SimpleNamespace(requestRender=lambda: None))
     component.updateResult({"content": [{"type": "image", "data": "jpeg-data", "mimeType": "image/jpeg"}]})
+
+    assert component.imageComponents == []
+
     await asyncio.sleep(0)
 
     assert component._converted_images[0] == ("png-data", "image/png")
