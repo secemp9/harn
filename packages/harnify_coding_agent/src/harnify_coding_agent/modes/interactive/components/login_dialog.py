@@ -41,7 +41,7 @@ class LoginDialogComponent(Container):
         self._inputFuture: asyncio.Future[str] | None = None
 
         providerInfo = next((provider for provider in getOAuthProviders() if provider.id == providerId), None)
-        providerName = providerNameOverride if providerNameOverride is not None else getattr(providerInfo, "name", None)
+        providerName = providerNameOverride or getattr(providerInfo, "name", None)
         if providerName is None:
             providerName = providerId
         title = titleOverride if titleOverride is not None else f"Login to {providerName}"
@@ -106,7 +106,8 @@ class LoginDialogComponent(Container):
         if instructions:
             self.contentContainer.addChild(Spacer(1))
             self.contentContainer.addChild(Text(theme.fg("warning", instructions), 1, 0))
-        if (options or {}).get("autoOpenBrowser", True):
+        autoOpenBrowser = (options or {}).get("autoOpenBrowser")
+        if autoOpenBrowser if autoOpenBrowser is not None else True:
             self.openUrl(url)
         self._request_render()
 
@@ -182,8 +183,6 @@ class LoginDialogComponent(Container):
         kb = getKeybindings()
         if kb.matches(data, "tui.select.cancel"):
             self.cancel()
-            return
-        if self.abortController.signal.aborted:
             return
         self.input.handleInput(data)
 
