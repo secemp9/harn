@@ -986,6 +986,27 @@ def test_uncaught_crash_restores_tui_and_exits(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
+async def test_handle_fatal_runtime_error_matches_ts_shutdown_and_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[Any] = []
+    monkeypatch.setattr(
+        interactive_mode_module.interactive_theme,
+        "stop_theme_watcher",
+        lambda: calls.append("theme"),
+    )
+    mode = InteractiveMode()
+    mode.showError = lambda message: calls.append(("error", message))  # type: ignore[method-assign]
+    mode.stop = lambda: calls.append("stop")  # type: ignore[method-assign]
+
+    with pytest.raises(SystemExit) as exc_info:
+        await mode.handleFatalRuntimeError("Failed to import session", RuntimeError("boom"))
+
+    assert exc_info.value.code == 1
+    assert calls == [("error", "Failed to import session: boom"), "theme", "stop"]
+
+
+@pytest.mark.asyncio
 async def test_import_command_retries_with_selected_cwd() -> None:
     calls: list[tuple[str, str | None]] = []
     statuses: list[str] = []
