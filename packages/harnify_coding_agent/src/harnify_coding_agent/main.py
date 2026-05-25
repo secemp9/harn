@@ -349,26 +349,32 @@ def create_runtime_factory(
     extension_factories: list[Any] | None = None,
 ) -> Callable[[dict[str, Any]], Awaitable[CreateAgentSessionRuntimeResult]]:
     async def _factory(runtime_options: dict[str, Any]) -> CreateAgentSessionRuntimeResult:
+        resource_loader_options: dict[str, Any] = {
+            "noExtensions": parsed.noExtensions,
+            "noSkills": parsed.noSkills,
+            "noPromptTemplates": parsed.noPromptTemplates,
+            "noThemes": parsed.noThemes,
+            "noContextFiles": parsed.noContextFiles,
+            "systemPrompt": parsed.systemPrompt,
+            "appendSystemPrompt": parsed.appendSystemPrompt,
+            "extensionFactories": extension_factories,
+        }
+        if resolved_extension_paths is not None:
+            resource_loader_options["additionalExtensionPaths"] = resolved_extension_paths
+        if resolved_skill_paths is not None:
+            resource_loader_options["additionalSkillPaths"] = resolved_skill_paths
+        if resolved_prompt_template_paths is not None:
+            resource_loader_options["additionalPromptTemplatePaths"] = resolved_prompt_template_paths
+        if resolved_theme_paths is not None:
+            resource_loader_options["additionalThemePaths"] = resolved_theme_paths
+
         services = await create_agent_session_services(
             {
                 "cwd": runtime_options["cwd"],
                 "agentDir": runtime_options["agentDir"],
                 "authStorage": auth_storage,
                 "extensionFlagValues": parsed.unknownFlags,
-                "resourceLoaderOptions": {
-                    "additionalExtensionPaths": resolved_extension_paths,
-                    "additionalSkillPaths": resolved_skill_paths,
-                    "additionalPromptTemplatePaths": resolved_prompt_template_paths,
-                    "additionalThemePaths": resolved_theme_paths,
-                    "noExtensions": parsed.noExtensions,
-                    "noSkills": parsed.noSkills,
-                    "noPromptTemplates": parsed.noPromptTemplates,
-                    "noThemes": parsed.noThemes,
-                    "noContextFiles": parsed.noContextFiles,
-                    "systemPrompt": parsed.systemPrompt,
-                    "appendSystemPrompt": parsed.appendSystemPrompt,
-                    "extensionFactories": extension_factories,
-                },
+                "resourceLoaderOptions": resource_loader_options,
             }
         )
         settings_manager = services.settingsManager
@@ -534,9 +540,14 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
     if took_over_stdout:
         takeOverStdout()
 
+    def finish(code: int) -> int:
+        if took_over_stdout and isStdoutTakenOver():
+            restoreStdout()
+        return code
+
     if parsed.version:
         print(VERSION)
-        return 0
+        return finish(0)
 
     if parsed.export:
         output_path = parsed.messages[0] if parsed.messages else None
@@ -544,19 +555,19 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
             result = await export_from_file(parsed.export, output_path)
         except Exception as error:
             print(f"Error: {error}", file=sys.stderr)
-            return 1
+            return finish(1)
         print(f"Exported to: {result}")
-        return 0
+        return finish(0)
 
     if parsed.mode == "rpc" and parsed.fileArgs:
         print("Error: @file arguments are not supported in RPC mode", file=sys.stderr)
-        return 1
+        return finish(1)
 
     try:
         validate_fork_flags(parsed)
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
-        return 1
+        return finish(1)
 
     cwd = os.getcwd()
     migration_result = run_migrations(cwd) or {}
@@ -575,7 +586,7 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
         session_manager = await create_session_manager(parsed, cwd, session_dir, startup_settings_manager)
     except SystemExit as exit_signal:
         code = exit_signal.code
-        return int(code) if isinstance(code, int) else 1
+        return finish(int(code) if isinstance(code, int) else 1)
     missing_session_cwd_issue = None
     if hasattr(session_manager, "getSessionFile") and hasattr(session_manager, "getCwd"):
         missing_session_cwd_issue = get_missing_session_cwd_issue(session_manager, cwd)
@@ -583,10 +594,10 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
         if resolve_app_mode(parsed, sys.stdin.isatty()) == "interactive":
             selected_cwd = await prompt_for_missing_session_cwd(missing_session_cwd_issue, startup_settings_manager)
             if selected_cwd is None:
-                return 0
+                return finish(0)
             if not missing_session_cwd_issue.sessionFile:
                 print(f"Error: {MissingSessionCwdError(missing_session_cwd_issue)}", file=sys.stderr)
-                return 1
+                return finish(1)
             session_manager = SessionManager.open(
                 missing_session_cwd_issue.sessionFile,
                 session_dir,
@@ -594,7 +605,7 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
             )
         else:
             print(f"Error: {MissingSessionCwdError(missing_session_cwd_issue)}", file=sys.stderr)
-            return 1
+            return finish(1)
     time_mark("createSessionManager")
 
     resolved_extension_paths = resolve_cli_paths(cwd, parsed.extensions)
@@ -602,30 +613,30 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
     resolved_prompt_template_paths = resolve_cli_paths(cwd, parsed.promptTemplates)
     resolved_theme_paths = resolve_cli_paths(cwd, parsed.themes)
     auth_storage = AuthStorage.create()
-    runtime = await create_agent_session_runtime(
-        create_runtime_factory(
-            parsed,
-            auth_storage,
-            resolved_extension_paths=resolved_extension_paths,
-            resolved_skill_paths=resolved_skill_paths,
-            resolved_prompt_template_paths=resolved_prompt_template_paths,
-            resolved_theme_paths=resolved_theme_paths,
-            extension_factories=options.get("extensionFactories") if options else None,
-        ),
-        {
-            "cwd": session_manager.getCwd(),
-            "agentDir": agent_dir,
-            "sessionManager": session_manager,
-        },
-    )
-    services = runtime.services
-    session = runtime.session
-    settings_manager = services.settingsManager
-    model_registry = services.modelRegistry
-    configureHttpDispatcher(settings_manager.getHttpIdleTimeoutMs())
-    time_mark("createAgentSessionRuntime")
-
     try:
+        runtime = await create_agent_session_runtime(
+            create_runtime_factory(
+                parsed,
+                auth_storage,
+                resolved_extension_paths=resolved_extension_paths,
+                resolved_skill_paths=resolved_skill_paths,
+                resolved_prompt_template_paths=resolved_prompt_template_paths,
+                resolved_theme_paths=resolved_theme_paths,
+                extension_factories=options.get("extensionFactories") if options else None,
+            ),
+            {
+                "cwd": session_manager.getCwd(),
+                "agentDir": agent_dir,
+                "sessionManager": session_manager,
+            },
+        )
+        services = runtime.services
+        session = runtime.session
+        settings_manager = services.settingsManager
+        model_registry = services.modelRegistry
+        configureHttpDispatcher(settings_manager.getHttpIdleTimeoutMs())
+        time_mark("createAgentSessionRuntime")
+
         if parsed.help:
             extension_flags = [
                 flag

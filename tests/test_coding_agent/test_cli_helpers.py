@@ -443,6 +443,7 @@ async def test_main_list_models_uses_runtime_bootstrap(
     (agent_dir / "auth.json").write_text('{"openai":{"type":"api_key","key":"sk-test"}}', encoding="utf-8")
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.stdin", type("TTY", (), {"isatty": lambda self: True})())
 
     code = await main(["--list-models", "gpt-4o"])
 
@@ -462,6 +463,7 @@ async def test_main_help_includes_runtime_extension_flags(
     agent_dir.mkdir()
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.stdin", type("TTY", (), {"isatty": lambda self: True})())
 
     async def extension_factory(api: object) -> None:
         api.registerFlag(  # type: ignore[attr-defined]
