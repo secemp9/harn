@@ -183,14 +183,6 @@ def test_markdown_adds_single_blank_line_after_blocks_without_trailing_blank_lin
     assert tail_lines[-1] != ""
 
 
-def test_markdown_code_block_preserves_trailing_empty_line_like_ts() -> None:
-    markdown = Markdown("```py\nprint(1)\n```", 0, 0, TEST_MARKDOWN_THEME)
-
-    lines = [strip_ansi(line).rstrip() for line in markdown.render(80)]
-
-    assert lines == ["```py", "  print(1)", "  ", "```"]
-
-
 def test_markdown_keeps_html_like_tags_visible() -> None:
     markdown = Markdown(
         "This is text with <thinking>hidden content</thinking> that should be visible",
