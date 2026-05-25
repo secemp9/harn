@@ -897,16 +897,18 @@ class InteractiveMode:
         self.lastStatusText = text
         self._request_render()
 
-    def _append_notice(self, message: str, color: str) -> None:
+    def _append_notice(self, message: str, color: str, prefix: str, trailing_spacer: bool = False) -> None:
         self.chatContainer.addChild(Spacer(1))
-        self.chatContainer.addChild(Text(interactive_theme.theme.fg(color, message), 1, 0))
+        self.chatContainer.addChild(Text(interactive_theme.theme.fg(color, f"{prefix}: {message}"), 1, 0))
+        if trailing_spacer:
+            self.chatContainer.addChild(Spacer(1))
         self._request_render()
 
     def showError(self, message: str) -> None:
-        self._append_notice(message, "error")
+        self._append_notice(message, "error", "Error", trailing_spacer=True)
 
     def showWarning(self, message: str) -> None:
-        self._append_notice(message, "warning")
+        self._append_notice(message, "warning", "Warning")
 
     def showNewVersionNotification(self, release: LatestPiRelease) -> None:
         update_instruction = get_update_instruction(release.packageName or PACKAGE_NAME)
