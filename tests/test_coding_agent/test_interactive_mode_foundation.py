@@ -1216,6 +1216,39 @@ def test_handle_ctrl_z_suspends_and_restores_tui(monkeypatch: pytest.MonkeyPatch
     assert installed_handlers[signal.SIGCONT] is previous_sigcont
 
 
+def test_handle_hotkeys_command_matches_ts_sections_and_extension_shortcuts() -> None:
+    mode = InteractiveMode(
+        ui=FakeUi(),
+        chatContainer=Container(),
+        session=SimpleNamespace(
+            extensionRunner=SimpleNamespace(
+                getShortcuts=lambda _config: {
+                    "ctrl+k": SimpleNamespace(description="Extension action", extensionPath="/tmp/ext")
+                }
+            )
+        ),
+    )
+
+    mode.handleHotkeysCommand()
+
+    rendered = "\n".join(
+        line
+        for child in mode.chatContainer.children
+        if hasattr(child, "render")
+        for line in child.render(120)
+    )
+    stripped = _strip_ansi(rendered)
+
+    assert "Keyboard Shortcuts" in stripped
+    assert "Navigation" in stripped
+    assert "Editing" in stripped
+    assert "Other" in stripped
+    assert "Slash commands" in stripped
+    assert "Run bash command" in stripped
+    assert "Extensions" in stripped
+    assert "Extension action" in stripped
+
+
 @pytest.mark.asyncio
 async def test_handle_ctrl_c_matches_ts_double_sigint_shutdown_flow(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
