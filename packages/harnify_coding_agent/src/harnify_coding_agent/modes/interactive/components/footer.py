@@ -8,6 +8,8 @@ from typing import Any
 
 from harnify_tui import truncateToWidth, visibleWidth
 
+from harnify_coding_agent.modes.interactive.theme.theme import theme
+
 
 def _value(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
@@ -32,11 +34,10 @@ def format_tokens(count: int) -> str:
 
 
 class FooterComponent:
-    def __init__(self, session: Any, footerData: Any, theme: Any) -> None:
+    def __init__(self, session: Any, footerData: Any) -> None:
         self.autoCompactEnabled = True
         self.session = session
         self.footerData = footerData
-        self.theme = theme
 
     def setSession(self, session: Any) -> None:
         self.session = session
@@ -111,9 +112,9 @@ class FooterComponent:
         else:
             context_percent_display = f"{context_percent}%/{format_tokens(context_window)}{auto_indicator}"
         if context_percent_value > 90:
-            context_percent_str = self.theme.fg("error", context_percent_display)
+            context_percent_str = theme.fg("error", context_percent_display)
         elif context_percent_value > 70:
-            context_percent_str = self.theme.fg("warning", context_percent_display)
+            context_percent_str = theme.fg("warning", context_percent_display)
         else:
             context_percent_str = context_percent_display
         stats_parts.append(context_percent_str)
@@ -155,11 +156,11 @@ class FooterComponent:
             else:
                 stats_line = stats_left
 
-        dim_stats_left = self.theme.fg("dim", stats_left)
+        dim_stats_left = theme.fg("dim", stats_left)
         remainder = stats_line[len(stats_left) :]
-        dim_remainder = self.theme.fg("dim", remainder)
+        dim_remainder = theme.fg("dim", remainder)
 
-        pwd_line = truncateToWidth(self.theme.fg("dim", pwd), width, self.theme.fg("dim", "..."))
+        pwd_line = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."))
         lines = [pwd_line, dim_stats_left + dim_remainder]
 
         extension_statuses = self.footerData.getExtensionStatuses()
@@ -169,7 +170,7 @@ class FooterComponent:
                 for _key, text in sorted(extension_statuses.items(), key=lambda item: item[0])
             ]
             status_line = " ".join(sorted_statuses)
-            lines.append(truncateToWidth(status_line, width, self.theme.fg("dim", "...")))
+            lines.append(truncateToWidth(status_line, width, theme.fg("dim", "...")))
 
         return lines
 
@@ -177,4 +178,4 @@ class FooterComponent:
 formatTokens = format_tokens
 sanitizeStatusText = sanitize_status_text
 
-__all__ = ["FooterComponent", "formatTokens", "format_tokens", "sanitizeStatusText", "sanitize_status_text"]
+__all__ = ["FooterComponent"]
