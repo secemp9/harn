@@ -3202,11 +3202,10 @@ async def test_command_context_navigate_tree_updates_chat_and_editor() -> None:
     async def flush_queue(options: dict[str, bool]) -> None:
         flushes.append(options)
 
-    scheduled: list[Any] = []
+    scheduled: list[asyncio.Task[Any]] = []
 
     def schedule(awaitable: Any) -> None:
-        scheduled.append(awaitable)
-        awaitable.close()
+        scheduled.append(asyncio.create_task(awaitable))
 
     mode.flushCompactionQueue = flush_queue  # type: ignore[method-assign]
     mode._schedule_task = schedule  # type: ignore[method-assign]
@@ -3221,6 +3220,8 @@ async def test_command_context_navigate_tree_updates_chat_and_editor() -> None:
     assert statuses == ["Navigated to selected point"]
     assert flushes == []
     assert len(scheduled) == 1
+    await asyncio.gather(*scheduled)
+    assert flushes == [{"willRetry": False}]
 
 
 @pytest.mark.asyncio
@@ -3228,7 +3229,7 @@ async def test_handle_tree_select_prompts_for_summary_and_passes_custom_instruct
     calls: list[tuple[str, Any]] = []
     statuses: list[str] = []
     flushes: list[dict[str, bool]] = []
-    scheduled: list[Any] = []
+    scheduled: list[asyncio.Task[Any]] = []
     editor = FakeEditor()
 
     async def navigate_tree(_target_id: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -3265,8 +3266,7 @@ async def test_handle_tree_select_prompts_for_summary_and_passes_custom_instruct
         flushes.append(options)
 
     def schedule(awaitable: Any) -> None:
-        scheduled.append(awaitable)
-        awaitable.close()
+        scheduled.append(asyncio.create_task(awaitable))
 
     mode.flushCompactionQueue = flush_queue  # type: ignore[method-assign]
     mode._schedule_task = schedule  # type: ignore[method-assign]
@@ -3284,6 +3284,8 @@ async def test_handle_tree_select_prompts_for_summary_and_passes_custom_instruct
     assert flushes == []
     assert len(scheduled) == 1
     assert calls.count(("navigate", {"summarize": True, "customInstructions": "focus on files"})) == 1
+    await asyncio.gather(*scheduled)
+    assert flushes == [{"willRetry": False}]
 
 
 @pytest.mark.asyncio
