@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections import OrderedDict
+
+from harnify_tui import utils as utils_module
 from harnify_tui.utils import (
     normalizeTerminalOutput,
     sliceByColumn,
@@ -54,3 +57,40 @@ def test_wrap_text_with_ansi_keeps_styles_on_continuation_lines() -> None:
 def test_slice_by_column_avoids_wide_character_overflow_when_strict() -> None:
     assert sliceByColumn("ab界cd", 0, 3, True) == "ab"
     assert sliceByColumn("ab界cd", 2, 2, True) == "界"
+
+
+def test_utils_module_exports_match_ts_surface() -> None:
+    assert utils_module.__all__ == [
+        "applyBackgroundToLine",
+        "extractAnsiCode",
+        "extractSegments",
+        "getSegmenter",
+        "isPunctuationChar",
+        "isWhitespaceChar",
+        "normalizeTerminalOutput",
+        "sliceByColumn",
+        "sliceWithWidth",
+        "truncateToWidth",
+        "visibleWidth",
+        "wrapTextWithAnsi",
+    ]
+    assert not hasattr(utils_module, "visible_width")
+    assert not hasattr(utils_module, "wrap_text_with_ansi")
+    assert not hasattr(utils_module, "ActiveHyperlink")
+
+
+def test_is_whitespace_char_matches_js_test_semantics() -> None:
+    assert utils_module.isWhitespaceChar("a b") is True
+    assert utils_module.isWhitespaceChar("abc") is False
+
+
+def test_visible_width_cache_uses_fifo_eviction_like_ts(monkeypatch) -> None:
+    monkeypatch.setattr(utils_module, "_width_cache", OrderedDict())
+    monkeypatch.setattr(utils_module, "_WIDTH_CACHE_SIZE", 2)
+
+    assert utils_module.visibleWidth("é") == 1
+    assert utils_module.visibleWidth("ß") == 1
+    assert utils_module.visibleWidth("é") == 1
+    assert utils_module.visibleWidth("ø") == 1
+
+    assert list(utils_module._width_cache.keys()) == ["ß", "ø"]
