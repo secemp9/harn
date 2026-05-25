@@ -53,6 +53,20 @@ _SAFE_PATH_SEPARATORS = re.compile(r"[/\\:]")
 MAX_CONCURRENT_SESSION_INFO_LOADS = 10
 
 
+@dataclass(slots=True, frozen=True)
+class _InvalidSessionDate:
+    raw: str | None = None
+
+    def timestamp(self) -> float:
+        return float("nan")
+
+    def __str__(self) -> str:
+        return "Invalid Date"
+
+    def __repr__(self) -> str:
+        return "Invalid Date"
+
+
 @dataclass(slots=True)
 class NewSessionOptions:
     id: str | None = None
@@ -427,8 +441,6 @@ class SessionManager:
         if self.persist:
             file_timestamp = timestamp.replace(":", "-").replace(".", "-")
             self.sessionFile = os.path.join(self.getSessionDir(), f"{file_timestamp}_{self.sessionId}.jsonl")
-        else:
-            self.sessionFile = None
         return self.sessionFile
 
     def _buildIndex(self) -> None:
@@ -1056,7 +1068,7 @@ def _build_session_info_sync(file_path: str) -> SessionInfo | None:
         cwd = str(header.get("cwd")) if isinstance(header.get("cwd"), str) else ""
         parent_session_path = header.get("parentSession")
         header_timestamp = str(header.get("timestamp"))
-        created = _datetime_from_iso(header_timestamp) or datetime.fromtimestamp(stats.st_mtime, UTC)
+        created = _datetime_from_iso(header_timestamp) or _InvalidSessionDate(header_timestamp)
         modified = _session_modified_date(entries, header, stats.st_mtime)
         return SessionInfo(
             path=file_path,
@@ -1117,6 +1129,8 @@ async def _build_session_infos_with_concurrency(
 async def _list_sessions_from_dir(
     session_dir: str,
     on_progress: SessionListProgress | None = None,
+    progress_offset: int = 0,
+    progress_total: int | None = None,
 ) -> list[SessionInfo]:
     resolved_dir = normalize_path(session_dir)
     try:
@@ -1129,13 +1143,13 @@ async def _list_sessions_from_dir(
         return []
 
     sessions: list[SessionInfo] = []
-    total = len(files)
+    total = progress_total if progress_total is not None else len(files)
     loaded_ref = {"value": 0}
 
     def on_loaded() -> None:
         loaded_ref["value"] += 1
         if on_progress is not None:
-            on_progress(loaded_ref["value"], total)
+            on_progress(progress_offset + loaded_ref["value"], total)
 
     results = await _build_session_infos_with_concurrency(files, on_loaded)
     for info in results:
