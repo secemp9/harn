@@ -1573,6 +1573,59 @@ async def test_clone_command_and_compaction_end_rebuild_chat() -> None:
 
 
 @pytest.mark.asyncio
+async def test_handle_user_message_fork_accepts_object_shaped_runtime_result() -> None:
+    statuses: list[str] = []
+    rendered: list[bool] = []
+    done_calls: list[bool] = []
+    editor = FakeEditor()
+
+    async def fork(entry_id: str) -> Any:
+        assert entry_id == "entry-1"
+        return SimpleNamespace(cancelled=False, selectedText="picked text")
+
+    mode = InteractiveMode(
+        runtimeHost=SimpleNamespace(fork=fork),
+        editor=editor,
+        defaultEditor=editor,
+    )
+    mode.renderCurrentSessionState = lambda: rendered.append(True)  # type: ignore[method-assign]
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+
+    await mode._handle_user_message_fork("entry-1", lambda: done_calls.append(True))
+
+    assert done_calls == [True]
+    assert rendered == [True]
+    assert editor.text == "picked text"
+    assert statuses == ["Forked to new session"]
+
+
+@pytest.mark.asyncio
+async def test_clone_command_accepts_object_shaped_runtime_result() -> None:
+    statuses: list[str] = []
+    rendered: list[bool] = []
+    editor = FakeEditor()
+
+    async def fork(entry_id: str, options: dict[str, str]) -> Any:
+        assert entry_id == "leaf-123"
+        assert options == {"position": "at"}
+        return SimpleNamespace(cancelled=False)
+
+    mode = InteractiveMode(
+        sessionManager=SimpleNamespace(getLeafId=lambda: "leaf-123"),
+        runtimeHost=SimpleNamespace(fork=fork),
+        editor=editor,
+    )
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode.renderCurrentSessionState = lambda: rendered.append(True)  # type: ignore[method-assign]
+
+    await mode.handleCloneCommand()
+
+    assert rendered == [True]
+    assert editor.text == ""
+    assert statuses == ["Cloned to new session"]
+
+
+@pytest.mark.asyncio
 async def test_handle_event_compaction_start_sets_escape_handler_loader_and_progress() -> None:
     progress: list[bool] = []
     status_children: list[Any] = []
