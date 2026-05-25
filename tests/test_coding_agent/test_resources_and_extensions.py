@@ -142,10 +142,14 @@ def test_skills_load_with_collisions_and_prompt_formatting(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_extensions_and_resource_loader_compose_session_start_resources(tmp_path: Path) -> None:
+async def test_extensions_and_resource_loader_compose_session_start_resources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     cwd = tmp_path / "workspace" / "nested"
     cwd.mkdir(parents=True)
     agent_dir = tmp_path / "agent"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     (agent_dir / "extensions").mkdir(parents=True)
     (agent_dir / "AGENTS.md").write_text("global context", encoding="utf-8")
     (cwd.parent / "AGENTS.md").write_text("parent context", encoding="utf-8")
@@ -345,11 +349,13 @@ def test_load_project_context_files_orders_global_then_ancestors(tmp_path: Path)
 @pytest.mark.asyncio
 async def test_resource_loader_supports_inline_extension_factories_dynamic_extension_and_dedupes(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cwd = tmp_path / "project"
     cwd.mkdir()
     agent_dir = tmp_path / "agent"
     agent_dir.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
     inline_skill_dir = tmp_path / "inline-skills"
     inline_skill_dir.mkdir()
