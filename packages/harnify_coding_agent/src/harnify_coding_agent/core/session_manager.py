@@ -86,7 +86,7 @@ class SessionInfo:
     path: str
     id: str
     cwd: str
-    created: datetime
+    created: datetime | _InvalidSessionDate
     modified: datetime
     messageCount: int
     firstMessage: str
