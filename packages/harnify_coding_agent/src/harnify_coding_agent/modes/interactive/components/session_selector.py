@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Awaitable, Callable
