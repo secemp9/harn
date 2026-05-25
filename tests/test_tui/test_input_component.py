@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import harnify_tui.components.input as input_module
 from harnify_tui.components.input import Input
 from harnify_tui.utils import visibleWidth
 
@@ -12,6 +13,10 @@ def _type_text(input_component: Input, text: str) -> None:
 def _move_right(input_component: Input, count: int) -> None:
     for _ in range(count):
         input_component.handleInput("\x1b[C")
+
+
+def test_input_module_exports_match_ts_surface() -> None:
+    assert input_module.__all__ == ["Input"]
 
 
 def test_input_submits_value_including_backslash_on_enter() -> None:
