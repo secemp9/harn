@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import platform
 import re
-import sys
 from dataclasses import dataclass
 from typing import Any
 from urllib.request import Request, urlopen
+
+from harnify_coding_agent.utils.pi_user_agent import get_pi_user_agent
 
 LATEST_VERSION_URL = "https://pi.dev/api/latest-version"
 DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10_000
@@ -71,7 +71,7 @@ async def get_latest_pi_release(
         else DEFAULT_VERSION_CHECK_TIMEOUT_MS
     )
     headers = {
-        "User-Agent": _get_pi_user_agent(current_version),
+        "User-Agent": get_pi_user_agent(current_version),
         "accept": "application/json",
     }
     data = await _fetch_latest_release_json(LATEST_VERSION_URL, headers, timeout_ms)
@@ -118,11 +118,6 @@ def _parse_package_version(version: str) -> _ParsedVersion | None:
     )
 
 
-def _get_pi_user_agent(version: str) -> str:
-    runtime = f"python/{platform.python_version()}"
-    return f"pi/{version} ({sys.platform}; {runtime}; {platform.machine()})"
-
-
 async def _fetch_latest_release_json(url: str, headers: dict[str, str], timeout_ms: int) -> dict[str, Any] | None:
     def _load() -> dict[str, Any] | None:
         request = Request(url, headers=headers)
@@ -146,17 +141,10 @@ getLatestPiVersion = get_latest_pi_version
 isNewerPackageVersion = is_newer_package_version
 
 __all__ = [
-    "DEFAULT_VERSION_CHECK_TIMEOUT_MS",
-    "LATEST_VERSION_URL",
     "LatestPiRelease",
-    "checkForNewPiVersion",
-    "check_for_new_pi_version",
     "comparePackageVersions",
-    "compare_package_versions",
+    "isNewerPackageVersion",
     "getLatestPiRelease",
     "getLatestPiVersion",
-    "get_latest_pi_release",
-    "get_latest_pi_version",
-    "isNewerPackageVersion",
-    "is_newer_package_version",
+    "checkForNewPiVersion",
 ]
