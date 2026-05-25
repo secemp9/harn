@@ -16,6 +16,7 @@ from harnify_coding_agent.core.settings_manager import SettingsError, SettingsMa
 from harnify_coding_agent.main import main, prompt_for_missing_session_cwd
 import harnify_coding_agent.package_manager_cli as package_manager_cli_module
 from harnify_coding_agent.package_manager_cli import handle_config_command, handle_package_command
+from harnify_coding_agent.utils.version_check import LatestPiRelease
 
 
 class _FakeTerminal:
@@ -337,7 +338,7 @@ async def test_handle_package_command_supports_extension_update_target(
     assert handled is True
     assert package_manager_cli_module._take_command_exit_code() == 0
     assert calls == ["npm:demo"]
-    assert stdout.getvalue() == ""
+    assert stdout.getvalue() == "Updated npm:demo\n"
     assert stderr.getvalue() == ""
 
 
@@ -483,6 +484,93 @@ async def test_handle_package_command_remove_reports_missing_match(
 
 
 @pytest.mark.asyncio
+async def test_handle_package_command_update_self_reports_already_up_to_date(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
+        lambda _version: _return_latest_release(LatestPiRelease(version=package_manager_cli_module.VERSION)),
+    )
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    class FakePackageManager:
+        def __init__(self, _options: object) -> None:
+            return None
+
+        def setProgressCallback(self, _callback) -> None:
+            return None
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
+
+    handled = await handle_package_command(["update", "--self"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 0
+    assert stdout.getvalue() == f"{APP_NAME} is already up to date (v{package_manager_cli_module.VERSION})\n"
+    assert stderr.getvalue() == ""
+
+
+@pytest.mark.asyncio
+async def test_handle_package_command_update_self_unavailable_sets_exit_code(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
+        lambda _version: _return_latest_release(None),
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_self_update_command",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_self_update_unavailable_instruction",
+        lambda *_args, **_kwargs: "Update it yourself manually.",
+    )
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    class FakePackageManager:
+        def __init__(self, _options: object) -> None:
+            return None
+
+        def setProgressCallback(self, _callback) -> None:
+            return None
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
+
+    handled = await handle_package_command(["update", "--self"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 1
+    assert stdout.getvalue() == ""
+    assert f"error: {APP_NAME} cannot self-update this installation." in stderr.getvalue()
+    assert "Update it yourself manually." in stderr.getvalue()
+
+
+@pytest.mark.asyncio
 async def test_prompt_for_missing_session_cwd_returns_fallback_and_sets_keybindings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -509,4 +597,8 @@ async def test_prompt_for_missing_session_cwd_returns_fallback_and_sets_keybindi
 
 
 async def _async_sessions(value: list[object]) -> list[object]:
+    return value
+
+
+async def _return_latest_release(value):
     return value
