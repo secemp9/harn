@@ -25,6 +25,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from harnify_ai.types import ImageContent
+from harnify_ai.models import getProviders
 from harnify_tui import (
     TUI,
     AutocompleteProvider,
@@ -62,6 +63,7 @@ from harnify_coding_agent.core.keybindings import KEYBINDINGS, KeybindingsManage
 from harnify_coding_agent.core.messages import createCompactionSummaryMessage
 from harnify_coding_agent.core.model_resolver import findExactModelReferenceMatch, resolveModelScope
 from harnify_coding_agent.core.package_manager import DefaultPackageManager
+from harnify_coding_agent.core.provider_display_names import BUILT_IN_PROVIDER_DISPLAY_NAMES
 from harnify_coding_agent.core.session_cwd import MissingSessionCwdError, format_missing_session_cwd_prompt
 from harnify_coding_agent.core.session_manager import SessionManager
 from harnify_coding_agent.core.slash_commands import BUILTIN_SLASH_COMMANDS, _LOCAL_ALIAS_SLASH_COMMANDS
@@ -135,6 +137,8 @@ ANTHROPIC_SUBSCRIPTION_AUTH_WARNING = (
     "token, not your Claude plan limits. Manage extra usage at https://claude.ai/settings/usage."
 )
 
+_BUILT_IN_MODEL_PROVIDERS = frozenset(getProviders())
+
 
 @dataclass(slots=True)
 class InteractiveModeOptions:
@@ -167,6 +171,18 @@ class ExpandableText(Text):
 
 def is_anthropic_subscription_auth_key(api_key: str | None) -> bool:
     return isinstance(api_key, str) and api_key.startswith("sk-ant-oat")
+
+
+def isApiKeyLoginProvider(
+    providerId: str,
+    oauthProviderIds: frozenset[str] | set[str],
+    builtInProviderIds: frozenset[str] | set[str] = _BUILT_IN_MODEL_PROVIDERS,
+) -> bool:
+    if BUILT_IN_PROVIDER_DISPLAY_NAMES.get(providerId):
+        return True
+    if providerId in builtInProviderIds:
+        return False
+    return providerId not in oauthProviderIds
 
 
 async def _noop_async(*_args: Any, **_kwargs: Any) -> Any:
@@ -840,10 +856,8 @@ class InteractiveMode:
 
     def showPackageUpdateNotification(self, packages: list[str]) -> None:
         package_lines = "\n".join(f"- {package_name}" for package_name in packages)
-        review_instruction = interactive_theme.theme.fg(
-            "muted",
-            f"Configured package updates are available. Review them via {APP_NAME} config.",
-        )
+        action = interactive_theme.theme.fg("accent", f"{APP_NAME} update")
+        update_instruction = interactive_theme.theme.fg("muted", "Package updates are available. Run ") + action
 
         self.chatContainer.addChild(Spacer(1))
         self.chatContainer.addChild(DynamicBorder(lambda text: interactive_theme.theme.fg("warning", text)))
@@ -854,7 +868,7 @@ class InteractiveMode:
                         interactive_theme.theme.bold(
                             interactive_theme.theme.fg("warning", "Package Updates Available")
                         ),
-                        review_instruction,
+                        update_instruction,
                         interactive_theme.theme.fg("muted", "Packages:"),
                         package_lines,
                     ]
@@ -1873,7 +1887,7 @@ class InteractiveMode:
             return None
         if extended_keys not in {"on", "always"}:
             return (
-                "tmux extended-keys is off. Add `set -g extended-keys on` "
+                "tmux extended-keys is off. Modified Enter keys may not work. Add `set -g extended-keys on` "
                 "to ~/.tmux.conf and restart tmux."
             )
         if extended_keys_format == "xterm":
@@ -1886,7 +1900,7 @@ class InteractiveMode:
     async def promptForMissingSessionCwd(self, error: MissingSessionCwdError) -> str | None:
         confirmed = await _maybe_await(
             self.showExtensionConfirm(
-                "Session cwd missing",
+                "Session cwd not found",
                 format_missing_session_cwd_prompt(error.issue),
             )
         )
@@ -4295,9 +4309,7 @@ def _rename_session_file(session_file_path: str, next_name: str | None) -> None:
 
 
 __all__ = [
-    "ANTHROPIC_SUBSCRIPTION_AUTH_WARNING",
-    "ExpandableText",
     "InteractiveMode",
     "InteractiveModeOptions",
-    "is_anthropic_subscription_auth_key",
+    "isApiKeyLoginProvider",
 ]
