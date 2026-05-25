@@ -858,23 +858,22 @@ def _load_context_file_from_dir(dir_path: str) -> dict[str, str] | None:
             continue
         try:
             return {"path": file_path, "content": Path(file_path).read_text(encoding="utf-8")}
-        except OSError:
+        except OSError as error:
+            _warn(f"Warning: Could not read {file_path}: {error}")
             continue
     return None
 
 
-def _default_agent_dir() -> str:
-    return str(Path.home() / ".harnify" / "agent")
-
-
 DefaultResourceLoaderOptions = DefaultResourceLoaderOptions
+ResourceLoaderLike = ResourceLoader
+loadProjectContextFiles = load_project_context_files
 
 __all__ = [
     "DefaultResourceLoader",
     "DefaultResourceLoaderOptions",
+    "ResourceCollision",
+    "ResourceDiagnostic",
     "ResourceExtensionPaths",
-    "ResourceLoaderLike",
-    "ThemeResource",
-    "load_project_context_files",
-    "resolve_prompt_input",
+    "ResourceLoader",
+    "loadProjectContextFiles",
 ]
