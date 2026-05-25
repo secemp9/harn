@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from harnify_coding_agent.core.extensions.types import ToolDefinition
 from harnify_coding_agent.core.tools.output_accumulator import OutputAccumulator, OutputAccumulatorOptions, OutputSnapshot
-from harnify_coding_agent.core.tools.render_utils import get_text_output, invalid_arg_text, str as str_value
+from harnify_coding_agent.core.tools.render_utils import get_text_output, invalid_arg_text
 from harnify_coding_agent.core.tools.tool_definition_wrapper import wrap_tool_definition
 from harnify_coding_agent.core.tools.truncate import DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, TruncationResult, format_size
 from harnify_coding_agent.modes.interactive.theme.theme import theme
@@ -304,6 +304,14 @@ def _format_duration(ms: float) -> str:
     return f"{ms / 1000:.1f}s"
 
 
+def _string_arg(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    return None
+
+
 def _value(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, Mapping):
         return obj.get(name, default)
@@ -337,7 +345,7 @@ def _create_render_interval(invalidate: Callable[[], None]) -> asyncio.Task[None
 
 
 def _format_bash_call(args: dict[str, Any] | None) -> str:
-    command = str_value(_value(args, "command"))
+    command = _string_arg(_value(args, "command"))
     timeout = _value(args, "timeout")
     timeout_suffix = theme.fg("muted", f" (timeout {timeout}s)") if timeout else ""
     if command is None:
