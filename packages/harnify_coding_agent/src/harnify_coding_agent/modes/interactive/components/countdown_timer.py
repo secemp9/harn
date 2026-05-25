@@ -18,7 +18,7 @@ class CountdownTimer:
         self._tui = tui
         self._onTick = onTick
         self._onExpire = onExpire
-        self._remainingSeconds = max(0, math.ceil(timeoutMs / 1000))
+        self._remainingSeconds = math.ceil(timeoutMs / 1000)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -28,7 +28,7 @@ class CountdownTimer:
 
     def _run(self) -> None:
         while not self._stop.wait(1.0):
-            self._remainingSeconds = max(0, self._remainingSeconds - 1)
+            self._remainingSeconds -= 1
             self._onTick(self._remainingSeconds)
             if self._tui is not None:
                 request_render = getattr(self._tui, "requestRender", None)
