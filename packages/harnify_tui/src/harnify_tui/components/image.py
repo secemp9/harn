@@ -59,13 +59,14 @@ class Image(Component):
         if self.cachedLines is not None and self.cachedWidth == width:
             return self.cachedLines
 
-        max_width = max(1, min(width - 2, self.options.maxWidthCells or 60))
+        max_width_cells = 60 if self.options.maxWidthCells is None else self.options.maxWidthCells
+        max_width = max(1, min(width - 2, max_width_cells))
         cell_dimensions = getCellDimensions()
         default_max_height = max(
             1,
             (max_width * cell_dimensions.widthPx + cell_dimensions.heightPx - 1) // cell_dimensions.heightPx,
         )
-        max_height = self.options.maxHeightCells or default_max_height
+        max_height = default_max_height if self.options.maxHeightCells is None else self.options.maxHeightCells
 
         caps = getCapabilities()
         lines: list[str]
