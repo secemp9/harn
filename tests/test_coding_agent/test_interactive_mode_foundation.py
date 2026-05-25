@@ -418,6 +418,15 @@ def test_set_extension_header_footer_and_reset_ui_restore_builtins() -> None:
     header_container = Container()
     header_container.addChild(built_in_header)
     footer = Text("Footer", 0, 0)
+    loader_messages: list[str] = []
+
+    class FakeLoader:
+        def setIndicator(self, _indicator: Any) -> None:
+            return None
+
+        def setMessage(self, message: str) -> None:
+            loader_messages.append(message)
+
     mode = InteractiveMode(
         ui=ui,
         headerContainer=header_container,
@@ -425,6 +434,7 @@ def test_set_extension_header_footer_and_reset_ui_restore_builtins() -> None:
         footer=footer,
         defaultEditor=FakeEditor(),
         editor=FakeEditor(),
+        loadingAnimation=FakeLoader(),
     )
     ui.addChild(footer)
     disposed: list[str] = []
@@ -449,6 +459,61 @@ def test_set_extension_header_footer_and_reset_ui_restore_builtins() -> None:
     assert mode.extensionWidgetsAbove == {}
     assert mode.footerDataProvider.getExtensionStatuses() == {}
     assert {"custom-header", "custom-footer"} <= set(disposed)
+    assert loader_messages == [f"Working... ({interactive_mode_module.key_text('app.interrupt')} to interrupt)"]
+
+
+@pytest.mark.asyncio
+async def test_handle_reload_command_matches_ts_banner_copy_and_reset_loader_message() -> None:
+    ui = FakeUi()
+    editor = FakeEditor()
+    banner_texts: list[str] = []
+    loader_messages: list[str] = []
+
+    class FakeLoader:
+        def setIndicator(self, _indicator: Any) -> None:
+            return None
+
+        def setMessage(self, message: str) -> None:
+            loader_messages.append(message)
+
+    async def fake_reload() -> None:
+        reload_box = mode.editorContainer.children[0]
+        text_child = next(child for child in reload_box.children if isinstance(child, Text))
+        banner_texts.append(_strip_ansi("\n".join(text_child.render(200))))
+
+    mode = InteractiveMode(
+        ui=ui,
+        defaultEditor=editor,
+        editor=editor,
+        loadingAnimation=FakeLoader(),
+        session=SimpleNamespace(
+            isStreaming=False,
+            isCompacting=False,
+            reload=fake_reload,
+            extensionRunner=SimpleNamespace(getShortcuts=lambda _config: {}),
+            resourceLoader=SimpleNamespace(getThemes=lambda: {"themes": []}),
+            modelRegistry=SimpleNamespace(getError=lambda: None),
+            autoCompactionEnabled=False,
+        ),
+        settingsManager=SimpleNamespace(
+            getHideThinkingBlock=lambda: False,
+            getTheme=lambda: None,
+            getEditorPaddingX=lambda: 0,
+            getAutocompleteMaxVisible=lambda: 5,
+            getShowHardwareCursor=lambda: False,
+            getClearOnShrink=lambda: False,
+            getHttpIdleTimeoutMs=lambda: 300_000,
+        ),
+    )
+    mode.setupAutocompleteProvider = lambda: None  # type: ignore[method-assign]
+    mode.setupExtensionShortcuts = lambda _runner: None  # type: ignore[method-assign]
+    mode.rebuildChatFromMessages = lambda: None  # type: ignore[method-assign]
+    mode.showLoadedResources = lambda _options=None: None  # type: ignore[method-assign]
+
+    await mode.handleReloadCommand()
+
+    assert banner_texts == ["Reloading keybindings, extensions, skills, prompts, themes..."]
+    assert loader_messages == [f"Working... ({interactive_mode_module.key_text('app.interrupt')} to interrupt)"]
 
 
 @pytest.mark.asyncio
