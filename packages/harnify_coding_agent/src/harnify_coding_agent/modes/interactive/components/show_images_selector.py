@@ -13,8 +13,6 @@ SHOW_IMAGES_SELECT_LIST_LAYOUT = SelectListLayoutOptions(minPrimaryColumnWidth=1
 
 
 class ShowImagesSelectorComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(self, currentValue: bool, onSelect: Callable[[bool], None], onCancel: Callable[[], None]) -> None:
         super().__init__()
         items = [
