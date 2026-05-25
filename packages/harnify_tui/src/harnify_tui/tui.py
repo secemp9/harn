@@ -357,15 +357,14 @@ class TUI(Container):
     def removeInputListener(self, listener: Any) -> None:
         self.inputListeners.pop(listener, None)
 
-    def _iter_input_listeners(self) -> list[Any]:
+    def _iter_input_listeners(self):
         visited: set[Any] = set()
-        ordered: list[Any] = []
         while True:
             next_listener = next((listener for listener in self.inputListeners if listener not in visited), None)
             if next_listener is None:
-                return ordered
+                return
             visited.add(next_listener)
-            ordered.append(next_listener)
+            yield next_listener
 
     def queryCellSize(self) -> None:
         if not getCapabilities().images:
