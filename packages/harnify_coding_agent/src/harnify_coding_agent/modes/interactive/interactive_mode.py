@@ -5209,10 +5209,7 @@ class InteractiveMode:
             return []
 
     def showSettingsSelector(self) -> None:
-        available_themes = [
-            str(_value(item, "name", item))
-            for item in interactive_theme.get_available_themes_with_paths()
-        ]
+        available_themes = list(interactive_theme.get_available_themes())
         get_available_thinking_levels = _callable_attr(self.session, "getAvailableThinkingLevels")
         get_warnings = _callable_attr(self.settingsManager, "getWarnings")
 
@@ -5262,13 +5259,42 @@ class InteractiveMode:
             if set_hide_thinking_block is not None:
                 set_hide_thinking_block(hidden)
             for child in getattr(self.chatContainer, "children", []):
-                set_hidden = _callable_attr(child, "setHideThinkingBlock")
-                if set_hidden is not None:
-                    set_hidden(hidden)
+                if isinstance(child, AssistantMessageComponent):
+                    set_hidden = _callable_attr(child, "setHideThinkingBlock")
+                    if set_hidden is not None:
+                        set_hidden(hidden)
             clear_chat = _callable_attr(self.chatContainer, "clear")
             if clear_chat is not None:
                 clear_chat()
             self.rebuildChatFromMessages()
+
+        def _on_show_images_change(enabled: bool) -> None:
+            set_show_images = _callable_attr(self.settingsManager, "setShowImages")
+            if set_show_images is not None:
+                set_show_images(enabled)
+            for child in getattr(self.chatContainer, "children", []):
+                if isinstance(child, ToolExecutionComponent):
+                    set_child_images = _callable_attr(child, "setShowImages")
+                    if set_child_images is not None:
+                        set_child_images(enabled)
+
+        def _on_image_width_cells_change(width: int) -> None:
+            set_image_width_cells = _callable_attr(self.settingsManager, "setImageWidthCells")
+            if set_image_width_cells is not None:
+                set_image_width_cells(width)
+            for child in getattr(self.chatContainer, "children", []):
+                if isinstance(child, ToolExecutionComponent):
+                    set_child_width = _callable_attr(child, "setImageWidthCells")
+                    if set_child_width is not None:
+                        set_child_width(width)
+
+        def _on_transport_change(transport: str) -> None:
+            set_transport = _callable_attr(self.settingsManager, "setTransport")
+            if set_transport is not None:
+                set_transport(transport)
+            agent = getattr(self.session, "agent", None)
+            if agent is not None:
+                setattr(agent, "transport", transport)
 
         self.showSelector(
             lambda done: {
@@ -5288,12 +5314,7 @@ class InteractiveMode:
                         availableThinkingLevels=list(get_available_thinking_levels() or [])
                         if get_available_thinking_levels is not None
                         else [],
-                        currentTheme=_safe_call_str(
-                            self.settingsManager,
-                            "getTheme",
-                            interactive_theme.theme.name or interactive_theme.get_default_theme(),
-                        )
-                        or interactive_theme.get_default_theme(),
+                        currentTheme=_safe_call_str(self.settingsManager, "getTheme", "dark") or "dark",
                         availableThemes=available_themes,
                         hideThinkingBlock=self.hideThinkingBlock,
                         collapseChangelog=_safe_call_bool(self.settingsManager, "getCollapseChangelog", True),
@@ -5320,22 +5341,8 @@ class InteractiveMode:
                     ),
                     SettingsCallbacks(
                         onAutoCompactChange=_on_auto_compact_change,
-                        onShowImagesChange=lambda enabled: (
-                            _callable_attr(self.settingsManager, "setShowImages")
-                            and self.settingsManager.setShowImages(enabled),
-                            [
-                                _callable_attr(child, "setShowImages") and child.setShowImages(enabled)
-                                for child in getattr(self.chatContainer, "children", [])
-                            ],
-                        ),
-                        onImageWidthCellsChange=lambda width: (
-                            _callable_attr(self.settingsManager, "setImageWidthCells")
-                            and self.settingsManager.setImageWidthCells(width),
-                            [
-                                _callable_attr(child, "setImageWidthCells") and child.setImageWidthCells(width)
-                                for child in getattr(self.chatContainer, "children", [])
-                            ],
-                        ),
+                        onShowImagesChange=_on_show_images_change,
+                        onImageWidthCellsChange=_on_image_width_cells_change,
                         onAutoResizeImagesChange=lambda enabled: (
                             _callable_attr(self.settingsManager, "setImageAutoResize")
                             and self.settingsManager.setImageAutoResize(enabled)
@@ -5355,12 +5362,7 @@ class InteractiveMode:
                         onFollowUpModeChange=lambda mode: (
                             _callable_attr(self.session, "setFollowUpMode") and self.session.setFollowUpMode(mode)
                         ),
-                        onTransportChange=lambda transport: (
-                            _callable_attr(self.settingsManager, "setTransport")
-                            and self.settingsManager.setTransport(transport),
-                            hasattr(getattr(self.session, "agent", None), "transport")
-                            and setattr(self.session.agent, "transport", transport),
-                        ),
+                        onTransportChange=_on_transport_change,
                         onHttpIdleTimeoutMsChange=_on_http_idle_timeout_ms_change,
                         onThinkingLevelChange=lambda level: (
                             _callable_attr(self.session, "setThinkingLevel") and self.session.setThinkingLevel(level),
