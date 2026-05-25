@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -234,7 +235,7 @@ class TUI(Container):
         self.inputListeners: dict[Any, None] = {}
         self.onDebug: Any | None = None
         self.renderRequested = False
-        self.renderTimer: Any | None = None
+        self.renderTimer: threading.Timer | None = None
         self.lastRenderAt = 0.0
         self.cursorRow = 0
         self.hardwareCursorRow = 0
@@ -355,6 +356,9 @@ class TUI(Container):
 
     def stop(self) -> None:
         self.stopped = True
+        if self.renderTimer is not None:
+            self.renderTimer.cancel()
+            self.renderTimer = None
         if self.previousLines:
             target_row = len(self.previousLines)
             line_diff = target_row - self.hardwareCursorRow
@@ -367,8 +371,6 @@ class TUI(Container):
         self.terminal.stop()
 
     def requestRender(self, force: bool = False) -> None:
-        if self.stopped:
-            return
         if force:
             self.previousLines = []
             self.previousWidth = -1
@@ -377,18 +379,50 @@ class TUI(Container):
             self.hardwareCursorRow = 0
             self.maxLinesRendered = 0
             self.previousViewportTop = 0
-        if self._rendering:
+            if self.renderTimer is not None:
+                self.renderTimer.cancel()
+                self.renderTimer = None
             self.renderRequested = True
+            self._schedule_next_tick(self._run_forced_render)
+            return
+        if self.renderRequested:
+            return
+        self.renderRequested = True
+        self._schedule_next_tick(self._scheduleRender)
+
+    def _schedule_next_tick(self, callback: Callable[[], None]) -> None:
+        timer = threading.Timer(0, callback)
+        timer.daemon = True
+        timer.start()
+
+    def _run_forced_render(self) -> None:
+        if self.stopped or not self.renderRequested:
             return
         self.renderRequested = False
-        self._rendering = True
-        try:
-            self.lastRenderAt = time.perf_counter() * 1000
-            self.doRender()
-        finally:
-            self._rendering = False
-            if self.renderRequested:
-                self.requestRender()
+        self.lastRenderAt = time.perf_counter() * 1000
+        self.doRender()
+
+    def _run_scheduled_render(self, timer: threading.Timer) -> None:
+        if self.renderTimer is not timer:
+            return
+        self.renderTimer = None
+        if self.stopped or not self.renderRequested:
+            return
+        self.renderRequested = False
+        self.lastRenderAt = time.perf_counter() * 1000
+        self.doRender()
+        if self.renderRequested:
+            self._scheduleRender()
+
+    def _scheduleRender(self) -> None:
+        if self.stopped or self.renderTimer is not None or not self.renderRequested:
+            return
+        elapsed = (time.perf_counter() * 1000) - self.lastRenderAt
+        delay_ms = max(0.0, self.MIN_RENDER_INTERVAL_MS - elapsed)
+        timer = threading.Timer(delay_ms / 1000.0, lambda: self._run_scheduled_render(timer))
+        timer.daemon = True
+        self.renderTimer = timer
+        timer.start()
 
     def handleInput(self, data: str) -> None:
         if self.inputListeners:
