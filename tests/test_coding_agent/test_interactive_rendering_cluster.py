@@ -19,6 +19,7 @@ from harnify_coding_agent.modes.interactive.components import (
     UserMessageComponent,
     truncate_to_visual_lines,
 )
+import harnify_coding_agent.modes.interactive.components.assistant_message as assistant_message_module
 from harnify_tui import Text, setKeybindings, visibleWidth
 
 OSC133_ZONE_START = "\x1b]133;A\x07"
@@ -107,6 +108,10 @@ def test_user_message_keeps_box_height_and_prefixes_closing_zone_markers() -> No
     assert OSC133_ZONE_END not in lines[0]
     assert "hello" in _strip_ansi(lines[1])
     assert lines[2].startswith(OSC133_ZONE_END + OSC133_ZONE_FINAL)
+
+
+def test_assistant_message_module_exports_match_ts_surface() -> None:
+    assert assistant_message_module.__all__ == ["AssistantMessageComponent"]
     assert lines[2].endswith(BG_RESET)
 
 

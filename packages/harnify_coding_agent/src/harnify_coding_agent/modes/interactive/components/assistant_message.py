@@ -22,9 +22,11 @@ def _value(obj: Any, name: str, default: Any = None) -> Any:
 def _visible_content(block: Any) -> bool:
     block_type = _value(block, "type")
     if block_type == "text":
-        return bool(str(_value(block, "text", "")).strip())
+        text = _value(block, "text", "")
+        return bool(text.strip()) if isinstance(text, str) else False
     if block_type == "thinking":
-        return bool(str(_value(block, "thinking", "")).strip())
+        thinking = _value(block, "thinking", "")
+        return bool(thinking.strip()) if isinstance(thinking, str) else False
     return False
 
 
@@ -82,11 +84,13 @@ class AssistantMessageComponent(Container):
         for index, block in enumerate(content):
             block_type = _value(block, "type")
             if block_type == "text":
-                text = str(_value(block, "text", "")).strip()
+                text_value = _value(block, "text", "")
+                text = text_value.strip() if isinstance(text_value, str) else ""
                 if text:
                     self.contentContainer.addChild(Markdown(text, 1, 0, self.markdownTheme))
             elif block_type == "thinking":
-                thinking = str(_value(block, "thinking", "")).strip()
+                thinking_value = _value(block, "thinking", "")
+                thinking = thinking_value.strip() if isinstance(thinking_value, str) else ""
                 if thinking:
                     has_visible_after = any(_visible_content(item) for item in content[index + 1 :])
                     if self.hideThinkingBlock:
@@ -128,9 +132,4 @@ class AssistantMessageComponent(Container):
             self.contentContainer.addChild(Text(theme.fg("error", f"Error: {error_message or 'Unknown error'}"), 1, 0))
 
 
-__all__ = [
-    "AssistantMessageComponent",
-    "OSC133_ZONE_END",
-    "OSC133_ZONE_FINAL",
-    "OSC133_ZONE_START",
-]
+__all__ = ["AssistantMessageComponent"]
