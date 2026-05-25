@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Literal
 
+from harnify_agent.types import ThinkingLevel
 from harnify_ai.types import Transport
 from harnify_tui import (
     Container,
@@ -21,6 +22,7 @@ from harnify_tui import (
 )
 
 from harnify_coding_agent.core.http_dispatcher import HTTP_IDLE_TIMEOUT_CHOICES, formatHttpIdleTimeoutMs
+from harnify_coding_agent.core.settings_manager import WarningSettings
 from harnify_coding_agent.modes.interactive.theme.theme import (
     get_select_list_theme,
     get_settings_list_theme,
@@ -30,9 +32,13 @@ from harnify_coding_agent.modes.interactive.theme.theme import (
 from .dynamic_border import DynamicBorder
 from .keybinding_hints import key_display_text
 
+type SteeringMode = Literal["all", "one-at-a-time"]
+type DoubleEscapeAction = Literal["fork", "tree", "none"]
+type TreeFilterMode = Literal["default", "no-tools", "user-only", "labeled-only", "all"]
+
 SETTINGS_SUBMENU_SELECT_LIST_LAYOUT = SelectListLayoutOptions(minPrimaryColumnWidth=12, maxPrimaryColumnWidth=32)
 
-THINKING_DESCRIPTIONS: dict[str, str] = {
+THINKING_DESCRIPTIONS: dict[ThinkingLevel, str] = {
     "off": "No reasoning",
     "minimal": "Very brief reasoning (~1k tokens)",
     "low": "Light reasoning (~2k tokens)",
@@ -40,8 +46,6 @@ THINKING_DESCRIPTIONS: dict[str, str] = {
     "high": "Deep reasoning (~16k tokens)",
     "xhigh": "Maximum reasoning (~32k tokens)",
 }
-
-type WarningSettings = dict[str, Any]
 
 
 @dataclass(slots=True)
@@ -52,19 +56,19 @@ class SettingsConfig:
     autoResizeImages: bool
     blockImages: bool
     enableSkillCommands: bool
-    steeringMode: str
-    followUpMode: str
+    steeringMode: SteeringMode
+    followUpMode: SteeringMode
     transport: Transport
     httpIdleTimeoutMs: int
-    thinkingLevel: str
-    availableThinkingLevels: list[str]
+    thinkingLevel: ThinkingLevel
+    availableThinkingLevels: list[ThinkingLevel]
     currentTheme: str
     availableThemes: list[str]
     hideThinkingBlock: bool
     collapseChangelog: bool
     enableInstallTelemetry: bool
-    doubleEscapeAction: str
-    treeFilterMode: str
+    doubleEscapeAction: DoubleEscapeAction
+    treeFilterMode: TreeFilterMode
     showHardwareCursor: bool
     editorPaddingX: int
     autocompleteMaxVisible: int
@@ -82,18 +86,18 @@ class SettingsCallbacks:
     onAutoResizeImagesChange: Callable[[bool], None]
     onBlockImagesChange: Callable[[bool], None]
     onEnableSkillCommandsChange: Callable[[bool], None]
-    onSteeringModeChange: Callable[[str], None]
-    onFollowUpModeChange: Callable[[str], None]
+    onSteeringModeChange: Callable[[SteeringMode], None]
+    onFollowUpModeChange: Callable[[SteeringMode], None]
     onTransportChange: Callable[[Transport], None]
     onHttpIdleTimeoutMsChange: Callable[[int], None]
-    onThinkingLevelChange: Callable[[str], None]
+    onThinkingLevelChange: Callable[[ThinkingLevel], None]
     onThemeChange: Callable[[str], None]
     onThemePreview: Callable[[str], None] | None
     onHideThinkingBlockChange: Callable[[bool], None]
     onCollapseChangelogChange: Callable[[bool], None]
     onEnableInstallTelemetryChange: Callable[[bool], None]
-    onDoubleEscapeActionChange: Callable[[str], None]
-    onTreeFilterModeChange: Callable[[str], None]
+    onDoubleEscapeActionChange: Callable[[DoubleEscapeAction], None]
+    onTreeFilterModeChange: Callable[[TreeFilterMode], None]
     onShowHardwareCursorChange: Callable[[bool], None]
     onEditorPaddingXChange: Callable[[int], None]
     onAutocompleteMaxVisibleChange: Callable[[int], None]
@@ -105,8 +109,6 @@ class SettingsCallbacks:
 
 
 class WarningSettingsSubmenu(Container):
-    wantsKeyRelease = False
-
     def __init__(self, warnings: WarningSettings, onChange, onCancel) -> None:
         super().__init__()
         self.state = dict(warnings)
@@ -138,8 +140,6 @@ class WarningSettingsSubmenu(Container):
 
 
 class SelectSubmenu(Container):
-    wantsKeyRelease = False
-
     def __init__(
         self,
         title: str,
@@ -151,7 +151,7 @@ class SelectSubmenu(Container):
         onSelectionChange: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__()
-        self.addChild(Text(theme.fg("accent", theme.bold(title)), 0, 0))
+        self.addChild(Text(theme.bold(theme.fg("accent", title)), 0, 0))
         if description:
             self.addChild(Spacer(1))
             self.addChild(Text(theme.fg("muted", description), 0, 0))
@@ -181,8 +181,6 @@ class SelectSubmenu(Container):
 
 
 class SettingsSelectorComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(self, config: SettingsConfig, callbacks: SettingsCallbacks) -> None:
         super().__init__()
         supports_images = bool(getCapabilities().images)
@@ -505,12 +503,7 @@ class SettingsSelectorComponent(Container):
 
 
 __all__ = [
-    "SETTINGS_SUBMENU_SELECT_LIST_LAYOUT",
-    "THINKING_DESCRIPTIONS",
-    "SelectSubmenu",
     "SettingsCallbacks",
     "SettingsConfig",
     "SettingsSelectorComponent",
-    "WarningSettings",
-    "WarningSettingsSubmenu",
 ]
