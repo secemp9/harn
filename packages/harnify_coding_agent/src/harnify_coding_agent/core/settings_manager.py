@@ -579,7 +579,7 @@ class SettingsManager:
         self._set_global_value("npmCommand", list(command) if command is not None else None)
 
     def getCollapseChangelog(self) -> bool:
-        return bool(self.settings.get("collapseChangelog", False))
+        return self._nullish(self.settings.get("collapseChangelog"), False)
 
     def setCollapseChangelog(self, collapse: bool) -> None:
         self._set_global_value("collapseChangelog", collapse)
@@ -606,11 +606,11 @@ class SettingsManager:
         return list(self.settings.get("extensions") or [])
 
     def setExtensionPaths(self, paths: list[str]) -> None:
-        self._set_global_value("extensions", list(paths))
+        self._set_global_value("extensions", paths)
 
     def setProjectExtensionPaths(self, paths: list[str]) -> None:
         project_settings = copy.deepcopy(self.projectSettings)
-        project_settings["extensions"] = list(paths)
+        project_settings["extensions"] = paths
         self.markProjectModified("extensions")
         self.saveProjectSettings(project_settings)
 
@@ -618,11 +618,11 @@ class SettingsManager:
         return list(self.settings.get("skills") or [])
 
     def setSkillPaths(self, paths: list[str]) -> None:
-        self._set_global_value("skills", list(paths))
+        self._set_global_value("skills", paths)
 
     def setProjectSkillPaths(self, paths: list[str]) -> None:
         project_settings = copy.deepcopy(self.projectSettings)
-        project_settings["skills"] = list(paths)
+        project_settings["skills"] = paths
         self.markProjectModified("skills")
         self.saveProjectSettings(project_settings)
 
@@ -630,11 +630,11 @@ class SettingsManager:
         return list(self.settings.get("prompts") or [])
 
     def setPromptTemplatePaths(self, paths: list[str]) -> None:
-        self._set_global_value("prompts", list(paths))
+        self._set_global_value("prompts", paths)
 
     def setProjectPromptTemplatePaths(self, paths: list[str]) -> None:
         project_settings = copy.deepcopy(self.projectSettings)
-        project_settings["prompts"] = list(paths)
+        project_settings["prompts"] = paths
         self.markProjectModified("prompts")
         self.saveProjectSettings(project_settings)
 
@@ -642,11 +642,11 @@ class SettingsManager:
         return list(self.settings.get("themes") or [])
 
     def setThemePaths(self, paths: list[str]) -> None:
-        self._set_global_value("themes", list(paths))
+        self._set_global_value("themes", paths)
 
     def setProjectThemePaths(self, paths: list[str]) -> None:
         project_settings = copy.deepcopy(self.projectSettings)
-        project_settings["themes"] = list(paths)
+        project_settings["themes"] = paths
         self.markProjectModified("themes")
         self.saveProjectSettings(project_settings)
 
@@ -721,11 +721,10 @@ class SettingsManager:
         self.save()
 
     def getEnabledModels(self) -> list[str] | None:
-        enabled_models = self.settings.get("enabledModels")
-        return list(enabled_models) if isinstance(enabled_models, list) else None
+        return self.settings.get("enabledModels")
 
     def setEnabledModels(self, patterns: list[str] | None) -> None:
-        self._set_global_value("enabledModels", list(patterns) if patterns is not None else None)
+        self._set_global_value("enabledModels", patterns)
 
     def getDoubleEscapeAction(self) -> str:
         return self._nullish(self.settings.get("doubleEscapeAction"), "tree")
