@@ -397,7 +397,9 @@ def test_on_editor_change_only_updates_border_when_bash_mode_toggles() -> None:
     assert ui.render_calls == [None]
 
 
-def test_extension_ui_context_persists_theme_and_rebuilds_autocomplete() -> None:
+def test_extension_ui_context_persists_theme_and_rebuilds_autocomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     current_theme = {"value": "dark"}
     settings = SimpleNamespace(
         getTheme=lambda: current_theme["value"],
@@ -407,14 +409,22 @@ def test_extension_ui_context_persists_theme_and_rebuilds_autocomplete() -> None
     mode = InteractiveMode(settingsManager=settings, ui=ui)
     rebuilds: list[str] = []
     mode.setupAutocompleteProvider = lambda: rebuilds.append("rebuilt")  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        interactive_mode_module.interactive_theme,
+        "set_theme",
+        lambda theme_name, _watcher=True: SimpleNamespace(
+            success=theme_name != "__missing_theme__",
+            error=None if theme_name != "__missing_theme__" else "missing",
+        ),
+    )
 
     ctx = mode.createExtensionUIContext()
     ok = ctx.setTheme("light")
     bad = ctx.setTheme("__missing_theme__")
     ctx.addAutocompleteProvider(lambda current: current)
 
-    assert ok["success"] is True
-    assert bad["success"] is False
+    assert ok.success is True
+    assert bad.success is False
     assert current_theme["value"] == "light"
     assert len(mode.autocompleteProviderWrappers) == 1
     assert rebuilds == ["rebuilt"]
@@ -4037,7 +4047,7 @@ def test_show_settings_selector_builds_live_settings_callbacks(monkeypatch: pyte
         interactive_mode_module.interactive_theme,
         "set_theme",
         lambda theme_name, _watcher=True: (
-            settings_calls.append(("themePreview", theme_name)) or {"success": True}
+            settings_calls.append(("themePreview", theme_name)) or SimpleNamespace(success=True)
         ),
     )
 
