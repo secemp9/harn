@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import errno as errno_module
 import json
+import os
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,7 +31,7 @@ from harnify_coding_agent.core.tools.edit_diff import (
 )
 from harnify_coding_agent.core.tools.file_mutation_queue import with_file_mutation_queue
 from harnify_coding_agent.core.tools.path_utils import resolve_to_cwd
-from harnify_coding_agent.core.tools.render_utils import invalid_arg_text, shorten_path
+from harnify_coding_agent.core.tools.render_utils import invalid_arg_text
 from harnify_coding_agent.core.tools.tool_definition_wrapper import wrap_tool_definition
 from harnify_tui import Box, Container, Spacer, Text
 
@@ -192,6 +193,15 @@ def _string_arg(value: object) -> str | None:
     return None
 
 
+def _shorten_path(path: object) -> str:
+    if not isinstance(path, str):
+        return ""
+    home = os.path.expanduser("~")
+    if path.startswith(home):
+        return f"~{path[len(home):]}"
+    return path
+
+
 def _create_abort_wait_task(signal: Any | None) -> tuple[asyncio.Task[None] | None, Callable[[], None]]:
     if signal is None:
         return None, lambda: None
@@ -289,7 +299,7 @@ def _preview_args_key(path: str, edits: list[Edit]) -> str:
 def _format_edit_call(args: RenderableEditArgs | None, theme_obj: Any) -> str:
     invalid_arg = invalid_arg_text(theme_obj)
     raw_path = _string_arg(_value(args, "file_path", _value(args, "path")))
-    shortened = shorten_path(raw_path) if raw_path is not None else None
+    shortened = _shorten_path(raw_path) if raw_path is not None else None
     if shortened is None:
         path_display = invalid_arg
     elif shortened:
