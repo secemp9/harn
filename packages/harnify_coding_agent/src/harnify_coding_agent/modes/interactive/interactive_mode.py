@@ -4973,13 +4973,10 @@ class InteractiveMode:
 
     def _on_editor_change(self, text: str) -> None:
         self._handleClearCount = 0
-        if hasattr(self.editor, "borderColor"):
-            self.editor.borderColor = (
-                interactive_theme.theme.getBashModeBorderColor()
-                if text.lstrip().startswith("!")
-                else interactive_theme.theme.getThinkingBorderColor(self._get_session_thinking_level())
-            )
-        self._request_render()
+        was_bash_mode = self.isBashMode
+        self.isBashMode = text.lstrip().startswith("!")
+        if was_bash_mode != self.isBashMode:
+            self.updateEditorBorderColor()
 
     def _schedule_task(self, awaitable: Awaitable[Any]) -> None:
         try:
