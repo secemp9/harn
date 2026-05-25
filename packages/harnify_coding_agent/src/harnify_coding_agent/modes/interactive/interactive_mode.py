@@ -3620,6 +3620,7 @@ class InteractiveMode:
             self.defaultEditor.onAction("app.model.select", lambda: self.showModelSelector())
             self.defaultEditor.onAction("app.tools.expand", self.toggleToolOutputExpansion)
             self.defaultEditor.onAction("app.thinking.toggle", self.toggleThinkingBlockVisibility)
+            self.defaultEditor.onAction("app.editor.external", lambda: self._schedule_task(self.openExternalEditor()))
             self.defaultEditor.onAction("app.message.followUp", lambda: self._schedule_task(self.handleFollowUp()))
             self.defaultEditor.onAction("app.message.dequeue", self.handleDequeue)
             self.defaultEditor.onAction("app.session.fork", self.showUserMessageSelector)
@@ -3706,6 +3707,44 @@ class InteractiveMode:
             if setter is not None:
                 setter(self.hideThinkingBlock)
         self._request_render()
+
+    async def openExternalEditor(self) -> None:
+        editor_cmd = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        if not editor_cmd:
+            self.showWarning("No editor configured. Set $VISUAL or $EDITOR environment variable.")
+            return
+
+        current_text = self._get_editor_text()
+        tmp_file = Path(tempfile.gettempdir()) / f"pi-editor-{int(time.time() * 1000)}.pi.md"
+
+        try:
+            tmp_file.write_text(current_text, encoding="utf-8")
+
+            stop = _callable_attr(self.ui, "stop")
+            if stop is not None:
+                stop()
+
+            parts = [part for part in editor_cmd.split(" ") if part]
+            editor = parts[0]
+            editor_args = parts[1:]
+            sys.stdout.write(f"Launching external editor: {editor_cmd}\nPi will resume when the editor exits.\n")
+            status = await asyncio.to_thread(
+                subprocess.run,
+                [editor, *editor_args, str(tmp_file)],
+                check=False,
+            )
+
+            if status.returncode == 0:
+                new_content = re.sub(r"\n$", "", tmp_file.read_text(encoding="utf-8"))
+                self._set_editor_text(new_content)
+        finally:
+            with contextlib.suppress(OSError):
+                tmp_file.unlink()
+
+            start = _callable_attr(self.ui, "start")
+            if start is not None:
+                start()
+            self._request_render(True)
 
     def handleCtrlC(self) -> None:
         current_text = _callable_attr(self.editor, "getText")
