@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat as stat_module
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -654,7 +655,11 @@ class DefaultResourceLoader:
                 return SourceInfo(path=file_path, source="local", scope="project", origin="top-level", baseDir=root)
 
         stats = os.stat(normalized_path)
-        base_dir = normalized_path if os.path.isdir(normalized_path) else os.path.abspath(os.path.join(normalized_path, ".."))
+        base_dir = (
+            normalized_path
+            if stat_module.S_ISDIR(stats.st_mode)
+            else os.path.abspath(os.path.join(normalized_path, ".."))
+        )
         return SourceInfo(
             path=file_path,
             source="local",
