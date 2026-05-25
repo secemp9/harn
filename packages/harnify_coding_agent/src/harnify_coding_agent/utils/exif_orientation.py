@@ -148,16 +148,4 @@ readOrientationFromTiff = read_orientation_from_tiff
 
 __all__ = [
     "applyExifOrientation",
-    "apply_exif_orientation",
-    "findJpegTiffOffset",
-    "findWebpTiffOffset",
-    "find_jpeg_tiff_offset",
-    "find_webp_tiff_offset",
-    "getExifOrientation",
-    "get_exif_orientation",
-    "hasExifHeader",
-    "has_exif_header",
-    "load_image_bytes",
-    "readOrientationFromTiff",
-    "read_orientation_from_tiff",
 ]
