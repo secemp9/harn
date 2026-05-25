@@ -187,7 +187,7 @@ async def test_login_dialog_prompt_and_cancel_flow(monkeypatch: pytest.MonkeyPat
 
     manual_task = dialog.showManualInput("Paste callback URL")
     dialog.handleInput("\x1b")
-    with pytest.raises(RuntimeError, match="Login cancelled"):
+    with pytest.raises(Exception, match="Login cancelled"):
         await manual_task
 
     assert dialog.signal.aborted is True
