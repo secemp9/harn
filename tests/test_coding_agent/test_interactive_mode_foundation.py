@@ -2575,6 +2575,27 @@ async def test_handle_model_command_prefers_exact_match_before_selector() -> Non
     assert shown == ["missing"]
 
 
+@pytest.mark.asyncio
+async def test_handle_model_command_tolerates_model_registry_get_available_errors() -> None:
+    shown: list[str | None] = []
+    mode = InteractiveMode(
+        session=SimpleNamespace(
+            scopedModels=[],
+            modelRegistry=SimpleNamespace(
+                refresh=lambda: None,
+                getAvailable=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+            ),
+        ),
+        footer=SimpleNamespace(invalidate=lambda: None),
+        ui=FakeUi(),
+    )
+    mode.showModelSelector = lambda search=None: shown.append(search)  # type: ignore[method-assign]
+
+    await mode.handleModelCommand("missing")
+
+    assert shown == ["missing"]
+
+
 def test_setup_key_handlers_registers_session_fork_action() -> None:
     editor = FakeEditor()
     calls: list[str] = []
