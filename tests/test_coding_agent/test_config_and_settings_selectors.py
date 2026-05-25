@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 from harnify_coding_agent.core.keybindings import KeybindingsManager
@@ -13,6 +14,10 @@ from harnify_coding_agent.modes.interactive.components.settings_selector import 
 )
 from harnify_coding_agent.modes.interactive.theme.theme import init_theme
 from harnify_tui import setCapabilities, setKeybindings
+
+config_selector_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.config_selector"
+)
 
 
 def setup_function() -> None:
@@ -59,13 +64,14 @@ def test_config_selector_toggles_package_and_top_level_resources(tmp_path: Path)
     )
 
     render_calls: list[bool] = []
+    close_calls: list[bool] = []
     exit_calls: list[bool] = []
     component = ConfigSelectorComponent(
         resolved,
         settings,
         str(cwd),
         str(agent_dir),
-        lambda: None,
+        lambda: close_calls.append(True),
         lambda: exit_calls.append(True),
         lambda: render_calls.append(True),
         terminalHeight=24,
@@ -84,7 +90,12 @@ def test_config_selector_toggles_package_and_top_level_resources(tmp_path: Path)
     assert render_calls == [True, True]
 
     resource_list.handleInput("\x03")
-    assert exit_calls == [True]
+    assert close_calls == [True]
+    assert exit_calls == []
+
+
+def test_config_selector_module_exports_match_ts_surface() -> None:
+    assert config_selector_module.__all__ == ["ConfigSelectorComponent"]
 
 
 def test_settings_selector_supports_theme_preview_and_image_settings() -> None:
