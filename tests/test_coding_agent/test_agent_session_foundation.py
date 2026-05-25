@@ -453,11 +453,11 @@ async def test_agent_session_exposes_slash_commands_and_exports_jsonl(tmp_path: 
 
         assert session.getSlashCommands() == []
 
-        exported = session.exportToJsonl(str(tmp_path / "exports" / "session.jsonl"))
-        content = Path(exported).read_text(encoding="utf-8").splitlines()
-        assert len(content) == 3
-        assert '"type": "session"' in content[0]
-        assert '"parentId": null' in content[1]
+            exported = session.exportToJsonl(str(tmp_path / "exports" / "session.jsonl"))
+            content = Path(exported).read_text(encoding="utf-8").splitlines()
+            assert len(content) == 3
+            assert '"type":"session"' in content[0]
+            assert '"parentId":null' in content[1]
         assert '"parentId": "' in content[2]
     finally:
         session.dispose()
