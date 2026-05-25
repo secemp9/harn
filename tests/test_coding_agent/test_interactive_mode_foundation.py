@@ -22,6 +22,9 @@ from harnify_coding_agent.modes.interactive.interactive_mode import (
     ANTHROPIC_SUBSCRIPTION_AUTH_WARNING,
     InteractiveMode,
 )
+from harnify_coding_agent.modes.interactive.components.assistant_message import AssistantMessageComponent
+from harnify_coding_agent.modes.interactive.components.tool_execution import ToolExecutionComponent
+from harnify_coding_agent.modes.interactive.components.user_message import UserMessageComponent
 from harnify_coding_agent.modes.interactive.theme.theme import init_theme
 from harnify_coding_agent.utils.changelog import ChangelogEntry
 from harnify_coding_agent.utils.version_check import LatestPiRelease
