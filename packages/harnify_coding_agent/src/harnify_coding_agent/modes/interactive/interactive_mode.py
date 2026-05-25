@@ -67,7 +67,11 @@ from harnify_coding_agent.core.agent_session_runtime import SessionImportFileNot
 from harnify_coding_agent.core.footer_data_provider import FooterDataProvider
 from harnify_coding_agent.core.keybindings import KEYBINDINGS, KeybindingsManager
 from harnify_coding_agent.core.messages import createCompactionSummaryMessage
-from harnify_coding_agent.core.model_resolver import findExactModelReferenceMatch, resolveModelScope
+from harnify_coding_agent.core.model_resolver import (
+    defaultModelPerProvider,
+    findExactModelReferenceMatch,
+    resolveModelScope,
+)
 from harnify_coding_agent.core.package_manager import DefaultPackageManager
 from harnify_coding_agent.core.provider_display_names import BUILT_IN_PROVIDER_DISPLAY_NAMES
 from harnify_coding_agent.core.session_cwd import MissingSessionCwdError, format_missing_session_cwd_prompt
@@ -195,6 +199,15 @@ def isApiKeyLoginProvider(
     if providerId in builtInProviderIds:
         return False
     return providerId not in oauthProviderIds
+
+
+def _is_unknown_model(model: Any) -> bool:
+    return (
+        model is not None
+        and _value(model, "provider") == "unknown"
+        and _value(model, "id") == "unknown"
+        and _value(model, "api") == "unknown"
+    )
 
 
 async def _noop_async(*_args: Any, **_kwargs: Any) -> Any:
@@ -3220,10 +3233,7 @@ class InteractiveMode:
         try:
             self.session.modelRegistry.authStorage.logout(provider.id)
             self.session.modelRegistry.refresh()
-            self.setupAutocompleteProvider()
             self.updateAvailableProviderCount()
-            self.footer.invalidate()
-            self.updateEditorBorderColor()
             message = (
                 f"Logged out of {provider.name}"
                 if provider.authType == "oauth"
@@ -3238,18 +3248,66 @@ class InteractiveMode:
 
     async def completeProviderAuthentication(
         self,
-        _provider_id: str,
+        provider_id: str,
         provider_name: str,
         auth_type: str,
+        previous_model: Any = None,
     ) -> None:
         self.session.modelRegistry.refresh()
-        self.setupAutocompleteProvider()
+        action_label = f"Logged in to {provider_name}" if auth_type == "oauth" else f"Saved API key for {provider_name}"
+
+        selected_model = None
+        selection_error: str | None = None
+        if _is_unknown_model(previous_model):
+            available_models = list(await _maybe_await(self.session.modelRegistry.getAvailable()))
+            provider_models = [model for model in available_models if _value(model, "provider") == provider_id]
+            if provider_id not in defaultModelPerProvider:
+                selection_error = (
+                    f'{action_label}, but no default model is configured for provider "{provider_id}". '
+                    "Use /model to select a model."
+                )
+            elif not provider_models:
+                selection_error = (
+                    f"{action_label}, but no models are available for that provider. "
+                    "Use /model to select a model."
+                )
+            else:
+                default_model_id = defaultModelPerProvider[provider_id]
+                selected_model = next(
+                    (model for model in provider_models if _value(model, "id") == default_model_id),
+                    None,
+                )
+                if selected_model is None:
+                    selection_error = (
+                        f'{action_label}, but its default model "{default_model_id}" is not available. '
+                        "Use /model to select a model."
+                    )
+                else:
+                    try:
+                        await _maybe_await(self.session.setModel(selected_model))
+                    except Exception as error:  # noqa: BLE001
+                        selected_model = None
+                        selection_error = (
+                            f"{action_label}, but selecting its default model failed: {error}. "
+                            "Use /model to select a model."
+                        )
+
         self.updateAvailableProviderCount()
         self.footer.invalidate()
         self.updateEditorBorderColor()
-        action_label = f"Logged in to {provider_name}" if auth_type == "oauth" else f"Saved API key for {provider_name}"
+        if selected_model is not None:
+            self.showStatus(
+                f"{action_label}. Selected {_value(selected_model, 'id')}. Credentials saved to {get_auth_path()}"
+            )
+            await self.maybeWarnAboutAnthropicSubscriptionAuth(selected_model)
+            self.checkDaxnutsEasterEgg(selected_model)
+            return
+
         self.showStatus(f"{action_label}. Credentials saved to {get_auth_path()}")
-        await self.maybeWarnAboutAnthropicSubscriptionAuth()
+        if selection_error is not None:
+            self.showError(selection_error)
+        else:
+            await self.maybeWarnAboutAnthropicSubscriptionAuth()
 
     def showBedrockSetupDialog(self, providerId: str, providerName: str) -> None:
         set_focus = _callable_attr(self.ui, "setFocus")
@@ -3288,6 +3346,7 @@ class InteractiveMode:
         self._request_render()
 
     async def showApiKeyLoginDialog(self, providerId: str, providerName: str) -> None:
+        previous_model = getattr(self.session, "model", None)
         dialog = LoginDialogComponent(self.ui, providerId, lambda _success, _message: None, providerName)
         self.editorContainer.clear()
         self.editorContainer.addChild(dialog)
@@ -3309,7 +3368,7 @@ class InteractiveMode:
                 raise RuntimeError("API key cannot be empty.")
             self.session.modelRegistry.authStorage.set(providerId, {"type": "api_key", "key": api_key})
             restore_editor()
-            await self.completeProviderAuthentication(providerId, providerName, "api_key")
+            await self.completeProviderAuthentication(providerId, providerName, "api_key", previous_model)
         except Exception as error:  # noqa: BLE001
             restore_editor()
             if str(error) != "Login cancelled":
@@ -3355,6 +3414,7 @@ class InteractiveMode:
         return future
 
     async def showLoginDialog(self, providerId: str, providerName: str) -> None:
+        previous_model = getattr(self.session, "model", None)
         dialog = LoginDialogComponent(self.ui, providerId, lambda _success, _message: None, providerName)
         self.editorContainer.clear()
         self.editorContainer.addChild(dialog)
@@ -3410,7 +3470,7 @@ class InteractiveMode:
                 },
             )
             restore_editor()
-            await self.completeProviderAuthentication(providerId, providerName, "oauth")
+            await self.completeProviderAuthentication(providerId, providerName, "oauth", previous_model)
         except Exception as error:  # noqa: BLE001
             restore_editor()
             if str(error) != "Login cancelled":
