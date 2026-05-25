@@ -462,7 +462,7 @@ class DefaultResourceLoader:
     def _update_skills_from_paths(
         self,
         skill_paths: list[str],
-        metadata_source_infos: dict[str, SourceInfo] | None = None,
+        metadata_by_path: dict[str, PathMetadata] | None = None,
     ) -> None:
         if self.noSkills and not skill_paths:
             skills_result = LoadSkillsResult(skills=[], diagnostics=[])
@@ -477,17 +477,17 @@ class DefaultResourceLoader:
             )
 
         resolved = self.skillsOverride(skills_result) if callable(self.skillsOverride) else skills_result
-        combined_source_infos = {
-            **(metadata_source_infos or {}),
-            **self.extensionSkillSourceInfos,
-        }
         self.skills = [
             Skill(
                 name=skill.name,
                 description=skill.description,
                 filePath=skill.filePath,
                 baseDir=skill.baseDir,
-                sourceInfo=self._find_source_info_for_path(skill.filePath, combined_source_infos)
+                sourceInfo=self._find_source_info_for_path(
+                    skill.filePath,
+                    self.extensionSkillSourceInfos,
+                    metadata_by_path,
+                )
                 or skill.sourceInfo
                 or self._get_default_source_info_for_path(skill.filePath),
                 disableModelInvocation=skill.disableModelInvocation,
@@ -495,19 +495,11 @@ class DefaultResourceLoader:
             for skill in resolved.skills
         ]
         self.skillDiagnostics = list(resolved.diagnostics)
-        for path in skill_paths:
-            resolved_path = self._resolve_resource_path(path)
-            if not os.path.exists(resolved_path) and not any(
-                diagnostic.path == resolved_path for diagnostic in self.skillDiagnostics
-            ):
-                self.skillDiagnostics.append(
-                    ResourceDiagnostic(type="error", message="Skill path does not exist", path=resolved_path)
-                )
 
     def _update_prompts_from_paths(
         self,
         prompt_paths: list[str],
-        metadata_source_infos: dict[str, SourceInfo] | None = None,
+        metadata_by_path: dict[str, PathMetadata] | None = None,
     ) -> None:
         if self.noPromptTemplates and not prompt_paths:
             prompts_result = {"prompts": [], "diagnostics": []}
@@ -524,16 +516,16 @@ class DefaultResourceLoader:
             )
 
         resolved = self.promptsOverride(prompts_result) if callable(self.promptsOverride) else prompts_result
-        combined_source_infos = {
-            **(metadata_source_infos or {}),
-            **self.extensionPromptSourceInfos,
-        }
         self.prompts = [
             PromptTemplate(
                 name=prompt.name,
                 description=prompt.description,
                 content=prompt.content,
-                sourceInfo=self._find_source_info_for_path(prompt.filePath, combined_source_infos)
+                sourceInfo=self._find_source_info_for_path(
+                    prompt.filePath,
+                    self.extensionPromptSourceInfos,
+                    metadata_by_path,
+                )
                 or prompt.sourceInfo
                 or self._get_default_source_info_for_path(prompt.filePath),
                 filePath=prompt.filePath,
@@ -542,28 +534,16 @@ class DefaultResourceLoader:
             for prompt in resolved["prompts"]
         ]
         self.promptDiagnostics = list(resolved["diagnostics"])
-        for path in prompt_paths:
-            resolved_path = self._resolve_resource_path(path)
-            if not os.path.exists(resolved_path) and not any(
-                diagnostic.path == resolved_path for diagnostic in self.promptDiagnostics
-            ):
-                self.promptDiagnostics.append(
-                    ResourceDiagnostic(
-                        type="error",
-                        message="Prompt template path does not exist",
-                        path=resolved_path,
-                    )
-                )
 
     def _update_themes_from_paths(
         self,
         theme_paths: list[str],
-        metadata_source_infos: dict[str, SourceInfo] | None = None,
+        metadata_by_path: dict[str, PathMetadata] | None = None,
     ) -> None:
         if self.noThemes and not theme_paths:
             themes_result = {"themes": [], "diagnostics": []}
         else:
-            loaded = self._load_themes(theme_paths)
+            loaded = self._load_themes(theme_paths, False)
             deduped = self._dedupe_themes(loaded["themes"])
             themes_result = {
                 "themes": deduped["themes"],
@@ -571,30 +551,22 @@ class DefaultResourceLoader:
             }
 
         resolved = self.themesOverride(themes_result) if callable(self.themesOverride) else themes_result
-        combined_source_infos = {
-            **(metadata_source_infos or {}),
-            **self.extensionThemeSourceInfos,
-        }
-        self.themes = [
-            ThemeResource(
-                name=theme.name,
-                data=theme.data,
-                sourcePath=theme.sourcePath,
-                sourceInfo=self._find_source_info_for_path(theme.sourcePath, combined_source_infos)
-                or theme.sourceInfo
-                or self._get_default_source_info_for_path(theme.sourcePath),
-            )
-            for theme in resolved["themes"]
-        ]
-        self.themeDiagnostics = list(resolved["diagnostics"])
-        for path in theme_paths:
-            resolved_path = self._resolve_resource_path(path)
-            if not os.path.exists(resolved_path) and not any(
-                diagnostic.path == resolved_path for diagnostic in self.themeDiagnostics
-            ):
-                self.themeDiagnostics.append(
-                    ResourceDiagnostic(type="error", message="Theme path does not exist", path=resolved_path)
+        self.themes = []
+        for theme in resolved["themes"]:
+            source_path = theme.sourcePath
+            theme.sourceInfo = (
+                self._find_source_info_for_path(
+                    source_path,
+                    self.extensionThemeSourceInfos,
+                    metadata_by_path,
                 )
+                if source_path
+                else None
+            ) or theme.sourceInfo
+            if source_path and theme.sourceInfo is None:
+                theme.sourceInfo = self._get_default_source_info_for_path(source_path)
+            self.themes.append(theme)
+        self.themeDiagnostics = list(resolved["diagnostics"])
 
     def _apply_extension_source_info(
         self,
