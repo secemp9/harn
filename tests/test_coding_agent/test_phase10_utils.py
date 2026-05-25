@@ -9,6 +9,7 @@ import pytest
 from harnify_agent.agent import AbortController
 import harnify_coding_agent.utils.changelog as changelog_module
 import harnify_coding_agent.utils.child_process as child_process_module
+import harnify_coding_agent.utils.frontmatter as frontmatter_module
 from harnify_coding_agent.utils.changelog import ChangelogEntry, compare_versions, get_new_entries, parse_changelog
 from harnify_coding_agent.utils.child_process import spawn_process, spawn_process_sync, wait_for_child_process
 from harnify_coding_agent.utils.frontmatter import parse_frontmatter, strip_frontmatter
@@ -85,6 +86,10 @@ def test_parse_frontmatter_matches_upstream_contract() -> None:
 
     with pytest.raises(YAMLError):
         parse_frontmatter("---\nfoo: [bar\n---\nBody")
+
+
+def test_frontmatter_module_exports_match_ts_surface() -> None:
+    assert frontmatter_module.__all__ == ["parseFrontmatter", "stripFrontmatter"]
 
 
 def test_parse_git_url_matches_upstream_contract() -> None:
