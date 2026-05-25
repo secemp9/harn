@@ -135,7 +135,7 @@ def _ignore_background_task_result(task: asyncio.Task[Any]) -> None:
     task.add_done_callback(_consume)
 
 
-def _ensure_write_call_render_component(component: Text) -> WriteCallRenderComponent:
+def _ensure_write_call_render_component(component: Any) -> WriteCallRenderComponent:
     if not hasattr(component, "cache"):
         component.cache = None
     return component  # type: ignore[return-value]
@@ -354,7 +354,7 @@ def create_write_tool_definition(
         file_content = str_value(_value(args, "content"))
         component = (
             _ensure_write_call_render_component(context.lastComponent)
-            if isinstance(context.lastComponent, Text)
+            if context.lastComponent is not None
             else WriteCallRenderComponent()
         )
         if file_content is not None:
