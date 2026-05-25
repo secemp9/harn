@@ -26,6 +26,7 @@ from harnify_tui import Text, setKeybindings, visibleWidth
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*m|\]8;;.*?\x07)", re.DOTALL)
 interactive_theme_module = importlib.import_module("harnify_coding_agent.modes.interactive.theme.theme")
+bordered_loader_module = importlib.import_module("harnify_coding_agent.modes.interactive.components.bordered_loader")
 
 
 def _strip_ansi(text: str) -> str:
@@ -115,6 +116,10 @@ def test_bordered_loader_exposes_abort_signal() -> None:
     loader.handleInput("\x1b")
     assert loader.signal.aborted is True
     assert called == [True]
+
+
+def test_bordered_loader_module_exports_match_ts_surface() -> None:
+    assert bordered_loader_module.__all__ == ["BorderedLoader"]
 
 
 def test_render_diff_highlights_single_line_replacement() -> None:
