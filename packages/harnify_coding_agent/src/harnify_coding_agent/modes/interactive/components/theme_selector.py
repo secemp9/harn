@@ -13,8 +13,6 @@ THEME_SELECT_LIST_LAYOUT = SelectListLayoutOptions(minPrimaryColumnWidth=12, max
 
 
 class ThemeSelectorComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(
         self,
         currentTheme: str,
@@ -51,4 +49,4 @@ class ThemeSelectorComponent(Container):
         return self.selectList
 
 
-__all__ = ["THEME_SELECT_LIST_LAYOUT", "ThemeSelectorComponent"]
+__all__ = ["ThemeSelectorComponent"]
