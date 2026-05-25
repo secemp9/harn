@@ -1218,7 +1218,7 @@ class InteractiveMode:
         self._request_render()
 
     def setHiddenThinkingLabel(self, label: str | None = None) -> None:
-        self.hiddenThinkingLabel = label or self.defaultHiddenThinkingLabel
+        self.hiddenThinkingLabel = label if label is not None else self.defaultHiddenThinkingLabel
         for child in getattr(self.chatContainer, "children", []):
             set_hidden_label = _callable_attr(child, "setHiddenThinkingLabel")
             if set_hidden_label is not None:
