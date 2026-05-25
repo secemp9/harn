@@ -3552,7 +3552,16 @@ class InteractiveMode:
         return future
 
     async def showLoginDialog(self, providerId: str, providerName: str) -> None:
+        provider_info = next(
+            (
+                provider
+                for provider in self.session.modelRegistry.authStorage.getOAuthProviders()
+                if provider.id == providerId
+            ),
+            None,
+        )
         previous_model = getattr(self.session, "model", None)
+        uses_callback_server = bool(_value(provider_info, "usesCallbackServer", False))
         dialog = LoginDialogComponent(self.ui, providerId, lambda _success, _message: None, providerName)
         self.editorContainer.clear()
         self.editorContainer.addChild(dialog)
@@ -3577,6 +3586,9 @@ class InteractiveMode:
                     _value(info, "instructions"),
                 )
 
+                if not uses_callback_server:
+                    return
+
                 async def _collect_manual_code() -> None:
                     try:
                         value = await dialog.showManualInput(
@@ -3592,11 +3604,15 @@ class InteractiveMode:
 
                 self._schedule_task(_collect_manual_code())
 
+            def _handle_device_code(info: Any) -> None:
+                dialog.showDeviceCode(info)
+                dialog.showWaiting("Waiting for authentication...")
+
             await self.session.modelRegistry.authStorage.login(
                 providerId,
                 {
                     "onAuth": _handle_auth,
-                    "onDeviceCode": dialog.showDeviceCode,
+                    "onDeviceCode": _handle_device_code,
                     "onPrompt": lambda prompt: dialog.showPrompt(
                         str(_value(prompt, "message", "")),
                         _value(prompt, "placeholder"),
