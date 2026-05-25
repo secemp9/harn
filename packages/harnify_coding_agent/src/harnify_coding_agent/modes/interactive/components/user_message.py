@@ -35,9 +35,4 @@ class UserMessageComponent(Container):
         return lines
 
 
-__all__ = [
-    "OSC133_ZONE_END",
-    "OSC133_ZONE_FINAL",
-    "OSC133_ZONE_START",
-    "UserMessageComponent",
-]
+__all__ = ["UserMessageComponent"]
