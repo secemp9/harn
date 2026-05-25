@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from harnify_agent.types import AgentToolResult
-from harnify_coding_agent.config import ENV_AGENT_DIR
+from harnify_coding_agent.config import CONFIG_DIR_NAME, ENV_AGENT_DIR
 from harnify_coding_agent.core.extensions.loader import create_extension_runtime, discover_and_load_extensions
 from harnify_coding_agent.core.extensions.runner import ExtensionRunner
 from harnify_coding_agent.core.extensions.wrapper import wrap_registered_tools
@@ -59,7 +59,7 @@ def test_prompt_templates_load_defaults_and_expand(tmp_path: Path) -> None:
     cwd = tmp_path / "project"
     agent_dir = tmp_path / "agent"
     (agent_dir / "prompts").mkdir(parents=True)
-    (cwd / ".harnify" / "prompts").mkdir(parents=True)
+    (cwd / CONFIG_DIR_NAME / "prompts").mkdir(parents=True)
     extra_dir = tmp_path / "extra-prompts"
     extra_dir.mkdir()
 
@@ -67,7 +67,7 @@ def test_prompt_templates_load_defaults_and_expand(tmp_path: Path) -> None:
         "---\ndescription: Global template\nargument-hint: <name>\n---\nHello $1 from $ARGUMENTS",
         encoding="utf-8",
     )
-    (cwd / ".harnify" / "prompts" / "project.md").write_text("Project prompt body", encoding="utf-8")
+    (cwd / CONFIG_DIR_NAME / "prompts" / "project.md").write_text("Project prompt body", encoding="utf-8")
     (extra_dir / "extra.md").write_text("---\n---\nExtra template", encoding="utf-8")
 
     templates = load_prompt_templates(
@@ -85,6 +85,16 @@ def test_prompt_templates_load_defaults_and_expand(tmp_path: Path) -> None:
     assert templates[0].sourceInfo.scope == "user"
     assert templates[1].sourceInfo.scope == "project"
     assert templates[2].sourceInfo.scope == "temporary"
+    from harnify_coding_agent.core import prompt_templates as prompt_templates_module
+
+    assert prompt_templates_module.__all__ == [
+        "LoadPromptTemplatesOptions",
+        "PromptTemplate",
+        "expandPromptTemplate",
+        "loadPromptTemplates",
+        "parseCommandArgs",
+        "substituteArgs",
+    ]
     assert parse_command_args('alpha "beta gamma" delta') == ["alpha", "beta gamma", "delta"]
     assert substitute_args("one=$1 rest=${@:2} all=$@", ["a", "b", "c"]) == "one=a rest=b c all=a b c"
     assert expand_prompt_template("/global world", templates) == "Hello world from world"
@@ -94,7 +104,7 @@ def test_skills_load_with_collisions_and_prompt_formatting(tmp_path: Path) -> No
     cwd = tmp_path / "project"
     agent_dir = tmp_path / "agent"
     (agent_dir / "skills" / "global-skill").mkdir(parents=True)
-    (cwd / ".harnify" / "skills" / "project-skill").mkdir(parents=True)
+    (cwd / CONFIG_DIR_NAME / "skills" / "project-skill").mkdir(parents=True)
     extra_dir = tmp_path / "extra-skills"
     extra_dir.mkdir()
 
@@ -102,7 +112,7 @@ def test_skills_load_with_collisions_and_prompt_formatting(tmp_path: Path) -> No
         "---\ndescription: Global description\n---\n# global",
         encoding="utf-8",
     )
-    (cwd / ".harnify" / "skills" / "project-skill" / "SKILL.md").write_text(
+    (cwd / CONFIG_DIR_NAME / "skills" / "project-skill" / "SKILL.md").write_text(
         "---\nname: project-skill\ndescription: Project description\n---\n# project",
         encoding="utf-8",
     )
@@ -140,9 +150,9 @@ async def test_extensions_and_resource_loader_compose_session_start_resources(tm
     (agent_dir / "AGENTS.md").write_text("global context", encoding="utf-8")
     (cwd.parent / "AGENTS.md").write_text("parent context", encoding="utf-8")
     (cwd / "AGENTS.md").write_text("cwd context", encoding="utf-8")
-    (cwd / ".harnify").mkdir()
-    (cwd / ".harnify" / "SYSTEM.md").write_text("system body", encoding="utf-8")
-    (cwd / ".harnify" / "APPEND_SYSTEM.md").write_text("append body", encoding="utf-8")
+    (cwd / CONFIG_DIR_NAME).mkdir()
+    (cwd / CONFIG_DIR_NAME / "SYSTEM.md").write_text("system body", encoding="utf-8")
+    (cwd / CONFIG_DIR_NAME / "APPEND_SYSTEM.md").write_text("append body", encoding="utf-8")
 
     extension_dir = agent_dir / "extensions" / "demo"
     extension_dir.mkdir()
@@ -353,7 +363,7 @@ async def test_resource_loader_supports_inline_extension_factories_dynamic_exten
     inline_theme_dir.mkdir()
     (inline_theme_dir / "inline.json").write_text('{"name":"Inline Theme","accent":"red"}', encoding="utf-8")
 
-    extra_skill_dir = cwd / ".harnify" / "skills" / "extra-skill"
+    extra_skill_dir = cwd / CONFIG_DIR_NAME / "skills" / "extra-skill"
     extra_skill_dir.mkdir(parents=True)
     (extra_skill_dir / "SKILL.md").write_text("---\ndescription: Extra skill\n---\n# extra", encoding="utf-8")
 
