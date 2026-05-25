@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 import harnify_tui.components.cancellable_loader as cancellable_loader_module
+import harnify_tui.components.image as image_module
 from harnify_tui import (
     AbortSignal,
     CancellableLoader,
@@ -262,3 +263,35 @@ def test_image_component_places_kitty_sequence_on_first_line_with_padding_rows()
     assert f",i={image_id}" in lines[0]
     assert lines[0].endswith("\x1b\\")
     assert lines[1:] == [""]
+
+
+def test_image_component_uses_ts_nullish_width_and_height_defaults(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(image_module, "getCapabilities", lambda: type("Caps", (), {"images": "kitty"})())
+    monkeypatch.setattr(image_module, "getCellDimensions", lambda: ImageDimensions(widthPx=10, heightPx=10))
+    monkeypatch.setattr(image_module, "allocateImageId", lambda: 7)
+
+    def fake_render_image(base64_data: str, dimensions: ImageDimensions, options: dict[str, object]) -> object:
+        captured["base64"] = base64_data
+        captured["dimensions"] = dimensions
+        captured["options"] = options
+        return type("Rendered", (), {"sequence": "\x1b_Gfake\x1b\\", "rows": 1, "imageId": 7})()
+
+    monkeypatch.setattr(image_module, "renderImage", fake_render_image)
+
+    image = Image(
+        "AAAA",
+        "image/png",
+        ImageTheme(fallbackColor=lambda text: text),
+        ImageOptions(maxWidthCells=0, maxHeightCells=0),
+        ImageDimensions(widthPx=20, heightPx=20),
+    )
+
+    assert image.render(4) == ["\x1b_Gfake\x1b\\"]
+    assert captured["options"] == {
+        "maxWidthCells": 1,
+        "maxHeightCells": 0,
+        "imageId": 7,
+        "moveCursor": False,
+    }
