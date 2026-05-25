@@ -5396,19 +5396,51 @@ class InteractiveMode:
                     clear_status()
                 self._request_render()
 
+    async def _new_session_from_command_context(
+        self,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if self.loadingAnimation is not None:
+            stop = _callable_attr(self.loadingAnimation, "stop")
+            if stop is not None:
+                stop()
+            self.loadingAnimation = None
+        clear = _callable_attr(self.statusContainer, "clear")
+        if clear is not None:
+            clear()
+        try:
+            result = await self.runtimeHost.newSession(options)
+            if not bool(_value(result, "cancelled", False)):
+                self.renderCurrentSessionState()
+                self._request_render()
+            return dict(result) if isinstance(result, dict) else {"cancelled": False}
+        except Exception as error:  # noqa: BLE001
+            await self.handleFatalRuntimeError("Failed to create session", error)
+            return {"cancelled": True}
+
+    async def _fork_from_command_context(
+        self,
+        entryId: str,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            result = await self.runtimeHost.fork(entryId, options)
+            if not bool(_value(result, "cancelled", False)):
+                self.renderCurrentSessionState()
+                self._set_editor_text(str(_value(result, "selectedText", "") or ""))
+                self.showStatus("Forked to new session")
+            return {"cancelled": bool(_value(result, "cancelled", False))}
+        except Exception as error:  # noqa: BLE001
+            await self.handleFatalRuntimeError("Failed to fork session", error)
+            return {"cancelled": True}
+
     def _build_command_context_actions(self) -> dict[str, Any]:
         return {
             "waitForIdle": lambda: self.session.agent.waitForIdle() if getattr(self.session, "agent", None) else None,
-            "newSession": lambda new_session_options=None: self.runtimeHost.newSession(new_session_options),
-            "fork": lambda entry_id, fork_options=None: self.runtimeHost.fork(entry_id, fork_options),
-            "navigateTree": lambda target_id, tree_options=None: self._navigate_tree_from_command_context(
-                target_id,
-                tree_options,
-            ),
-            "switchSession": lambda session_path, switch_options=None: self.runtimeHost.switchSession(
-                session_path,
-                switch_options,
-            ),
+            "newSession": self._new_session_from_command_context,
+            "fork": self._fork_from_command_context,
+            "navigateTree": self._navigate_tree_from_command_context,
+            "switchSession": self.handleResumeSession,
             "reload": self.handleReloadCommand,
         }
 
@@ -5421,11 +5453,22 @@ class InteractiveMode:
         if navigate_tree is None:
             return {"cancelled": True}
 
-        result = await navigate_tree(targetId, options or None)
+        result = await navigate_tree(
+            targetId,
+            {
+                "summarize": _value(options, "summarize"),
+                "customInstructions": _value(options, "customInstructions"),
+                "replaceInstructions": _value(options, "replaceInstructions"),
+                "label": _value(options, "label"),
+            },
+        )
         if _value(result, "cancelled", False):
             return dict(result) if isinstance(result, dict) else {"cancelled": True}
 
-        self.renderCurrentSessionState()
+        clear = _callable_attr(self.chatContainer, "clear")
+        if clear is not None:
+            clear()
+        self.renderInitialMessages()
         get_text = _callable_attr(self.editor, "getText")
         current_text = str(get_text() or "") if get_text is not None else ""
         editor_text = _value(result, "editorText")
