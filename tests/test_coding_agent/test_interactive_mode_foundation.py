@@ -479,7 +479,7 @@ async def test_handle_reload_command_matches_ts_banner_copy_and_reset_loader_mes
     async def fake_reload() -> None:
         reload_box = mode.editorContainer.children[0]
         text_child = next(child for child in reload_box.children if isinstance(child, Text))
-        banner_texts.append(_strip_ansi("\n".join(text_child.render(200))))
+        banner_texts.append(_strip_ansi("\n".join(text_child.render(200))).strip())
 
     mode = InteractiveMode(
         ui=ui,
