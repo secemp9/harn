@@ -10,10 +10,12 @@ from harnify_coding_agent.core.tools import (
     create_find_tool,
     create_find_tool_definition,
     create_grep_tool,
+    create_grep_tool_definition,
     create_ls_tool,
     get_text_output,
 )
 from harnify_coding_agent.core.tools import find as find_module
+from harnify_coding_agent.core.tools import grep as grep_module
 
 
 def _text(result: object) -> str:
@@ -100,6 +102,26 @@ def test_find_module_exports_match_ts_surface() -> None:
         "FindToolOptions",
         "createFindTool",
         "createFindToolDefinition",
+    ]
+
+
+def test_grep_tool_definition_surface_matches_ts(tmp_path: Path) -> None:
+    definition = create_grep_tool_definition(str(tmp_path))
+
+    assert definition.promptSnippet == "Search file contents for patterns (respects .gitignore)"
+    assert definition.renderCall is not None
+    assert definition.renderResult is not None
+    assert definition.description.endswith(f"Long lines are truncated to {GREP_MAX_LINE_LENGTH} chars.")
+
+
+def test_grep_module_exports_match_ts_surface() -> None:
+    assert grep_module.__all__ == [
+        "GrepOperations",
+        "GrepToolDetails",
+        "GrepToolInput",
+        "GrepToolOptions",
+        "createGrepTool",
+        "createGrepToolDefinition",
     ]
 
 
