@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import secrets
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Protocol, TypedDict
 
@@ -24,6 +27,10 @@ from harnify_tui.utils import (
 
 KITTY_SEQUENCE_PREFIX = "\x1b_G"
 CURSOR_MARKER = "\x1b_pi:c\x07"
+
+
+def _utc_iso_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _extract_kitty_image_ids(line: str) -> list[int]:
@@ -201,8 +208,10 @@ class Container:
         self.children.append(component)
 
     def removeChild(self, component: Component) -> None:
-        if component in self.children:
-            self.children.remove(component)
+        for index, child in enumerate(self.children):
+            if child is component:
+                del self.children[index]
+                break
 
     def clear(self) -> None:
         self.children.clear()
@@ -348,6 +357,16 @@ class TUI(Container):
     def removeInputListener(self, listener: Any) -> None:
         self.inputListeners.pop(listener, None)
 
+    def _iter_input_listeners(self) -> list[Any]:
+        visited: set[Any] = set()
+        ordered: list[Any] = []
+        while True:
+            next_listener = next((listener for listener in self.inputListeners if listener not in visited), None)
+            if next_listener is None:
+                return ordered
+            visited.add(next_listener)
+            ordered.append(next_listener)
+
     def queryCellSize(self) -> None:
         if not getCapabilities().images:
             return
@@ -426,15 +445,13 @@ class TUI(Container):
     def handleInput(self, data: str) -> None:
         if self.inputListeners:
             current = data
-            for listener in list(self.inputListeners):
+            for listener in self._iter_input_listeners():
                 result = listener(current)
                 if isinstance(result, dict):
                     if result.get("consume"):
                         return
                     if "data" in result:
                         current = result["data"]
-                elif result is False:
-                    return
             if current == "":
                 return
             data = current
@@ -497,7 +514,9 @@ class TUI(Container):
         avail_width = max(1, termWidth - margin_left - margin_right)
         avail_height = max(1, termHeight - margin_top - margin_bottom)
 
-        width = _parse_size_value(opt.get("width"), termWidth) or min(80, avail_width)
+        width = _parse_size_value(opt.get("width"), termWidth)
+        if width is None:
+            width = min(80, avail_width)
         if opt.get("minWidth") is not None:
             width = max(width, int(opt["minWidth"]))
         width = max(1, min(width, avail_width))
@@ -515,7 +534,7 @@ class TUI(Container):
                     max_row = max(0, avail_height - effective_height)
                     row = margin_top + int(max_row * (float(match.group(1)) / 100))
                 else:
-                    row = self.resolveAnchorRow(opt.get("anchor", "center"), effective_height, avail_height, margin_top)
+                    row = self.resolveAnchorRow("center", effective_height, avail_height, margin_top)
             else:
                 row = int(row_value)
         else:
@@ -529,7 +548,7 @@ class TUI(Container):
                     max_col = max(0, avail_width - width)
                     col = margin_left + int(max_col * (float(match.group(1)) / 100))
                 else:
-                    col = self.resolveAnchorCol(opt.get("anchor", "center"), width, avail_width, margin_left)
+                    col = self.resolveAnchorCol("center", width, avail_width, margin_left)
             else:
                 col = int(col_value)
         else:
@@ -710,6 +729,19 @@ class TUI(Container):
         cursor_pos = self.extractCursorPosition(new_lines, height)
         new_lines = self.applyLineResets(new_lines)
 
+        debug_redraw = os.environ.get("PI_DEBUG_REDRAW") == "1"
+
+        def log_redraw(reason: str) -> None:
+            if not debug_redraw:
+                return
+            log_path = Path.home() / ".pi" / "agent" / "pi-debug.log"
+            message = (
+                f"[{_utc_iso_timestamp()}] fullRender: {reason} "
+                f"(prev={len(self.previousLines)}, new={len(new_lines)}, height={height})\n"
+            )
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write(message)
+
         def full_render(clear: bool) -> None:
             self.fullRedrawCount += 1
             buffer = "\x1b[?2026h"
@@ -734,15 +766,19 @@ class TUI(Container):
             self.previousHeight = height
 
         if not self.previousLines and not width_changed and not height_changed:
+            log_redraw("first render")
             full_render(False)
             return
         if width_changed:
+            log_redraw(f"terminal width changed ({self.previousWidth} -> {width})")
             full_render(True)
             return
         if height_changed and not _is_termux_session():
+            log_redraw(f"terminal height changed ({self.previousHeight} -> {height})")
             full_render(True)
             return
         if self.clearOnShrink and len(new_lines) < self.maxLinesRendered and not self.overlayStack:
+            log_redraw(f"clearOnShrink (maxLinesRendered={self.maxLinesRendered})")
             full_render(True)
             return
 
@@ -778,6 +814,7 @@ class TUI(Container):
                 buffer += self.deleteChangedKittyImages(first_changed, last_changed)
                 target_row = max(0, len(new_lines) - 1)
                 if target_row < prev_viewport_top:
+                    log_redraw(f"deleted lines moved viewport up ({target_row} < {prev_viewport_top})")
                     full_render(True)
                     return
                 line_diff = compute_line_diff(target_row)
@@ -788,6 +825,7 @@ class TUI(Container):
                 buffer += "\r"
                 extra_lines = len(self.previousLines) - len(new_lines)
                 if extra_lines > height:
+                    log_redraw(f"extraLines > height ({extra_lines} > {height})")
                     full_render(True)
                     return
                 if extra_lines > 0:
@@ -811,6 +849,7 @@ class TUI(Container):
             return
 
         if first_changed < prev_viewport_top:
+            log_redraw(f"firstChanged < viewportTop ({first_changed} < {prev_viewport_top})")
             full_render(True)
             return
 
@@ -845,11 +884,11 @@ class TUI(Container):
             if not isImageLine(line) and visibleWidth(line) > width:
                 crash_log_path = Path.home() / ".pi" / "agent" / "pi-crash.log"
                 crash_log_path.parent.mkdir(parents=True, exist_ok=True)
-                crash_data = [
-                    f"Crash at {time.strftime('%Y-%m-%dT%H:%M:%S')}",
-                    f"Terminal width: {width}",
-                    f"Line {index} visible width: {visibleWidth(line)}",
-                    "",
+                    crash_data = [
+                        f"Crash at {_utc_iso_timestamp()}",
+                        f"Terminal width: {width}",
+                        f"Line {index} visible width: {visibleWidth(line)}",
+                        "",
                     "=== All rendered lines ===",
                     *[f"[{idx}] (w={visibleWidth(value)}) {value}" for idx, value in enumerate(new_lines)],
                     "",
@@ -882,6 +921,34 @@ class TUI(Container):
             buffer += f"\x1b[{extra_lines}A"
 
         buffer += "\x1b[?2026l"
+
+        if os.environ.get("PI_TUI_DEBUG") == "1":
+            debug_dir = Path("/tmp/tui")
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            debug_path = debug_dir / f"render-{int(time.time() * 1000)}-{secrets.token_hex(6)}.log"
+            debug_data = [
+                f"firstChanged: {first_changed}",
+                f"viewportTop: {viewport_top}",
+                f"cursorRow: {self.cursorRow}",
+                f"height: {height}",
+                f"lineDiff: {line_diff}",
+                f"hardwareCursorRow: {hardware_cursor_row}",
+                f"renderEnd: {render_end}",
+                f"finalCursorRow: {final_cursor_row}",
+                f"cursorPos: {json.dumps(cursor_pos, ensure_ascii=False)}",
+                f"newLines.length: {len(new_lines)}",
+                f"previousLines.length: {len(self.previousLines)}",
+                "",
+                "=== newLines ===",
+                json.dumps(new_lines, indent=2, ensure_ascii=False),
+                "",
+                "=== previousLines ===",
+                json.dumps(self.previousLines, indent=2, ensure_ascii=False),
+                "",
+                "=== buffer ===",
+                json.dumps(buffer, ensure_ascii=False),
+            ]
+            debug_path.write_text("\n".join(debug_data), encoding="utf-8")
         self.terminal.write(buffer)
         self.cursorRow = max(0, len(new_lines) - 1)
         self.hardwareCursorRow = final_cursor_row
