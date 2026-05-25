@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from harnify_agent.types import AgentToolResult
 from harnify_ai.types import ImageContent, TextContent
+from harnify_coding_agent.core import tools as tools_module
 from harnify_coding_agent.core.extensions.types import ToolDefinition
 from harnify_coding_agent.core.tools import (
     OutputAccumulator,
@@ -277,8 +278,79 @@ def test_tool_index_factories_preserve_upstream_tool_sets(tmp_path: Path) -> Non
 
 
 def test_tool_index_rejects_unknown_tool_name(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="Unknown tool name: unknown"):
+    with pytest.raises(RuntimeError, match="Unknown tool name: unknown"):
         create_tool_definition("unknown", str(tmp_path))  # type: ignore[arg-type]
 
-    with pytest.raises(ValueError, match="Unknown tool name: unknown"):
+    with pytest.raises(RuntimeError, match="Unknown tool name: unknown"):
         create_tool("unknown", str(tmp_path))  # type: ignore[arg-type]
+
+
+def test_tools_barrel_exports_match_ts_surface() -> None:
+    assert tools_module.__all__ == [
+        "BashOperations",
+        "BashSpawnContext",
+        "BashSpawnHook",
+        "BashToolDetails",
+        "BashToolInput",
+        "BashToolOptions",
+        "createBashTool",
+        "createBashToolDefinition",
+        "createLocalBashOperations",
+        "createEditTool",
+        "createEditToolDefinition",
+        "EditOperations",
+        "EditToolDetails",
+        "EditToolInput",
+        "EditToolOptions",
+        "withFileMutationQueue",
+        "createFindTool",
+        "createFindToolDefinition",
+        "FindOperations",
+        "FindToolDetails",
+        "FindToolInput",
+        "FindToolOptions",
+        "createGrepTool",
+        "createGrepToolDefinition",
+        "GrepOperations",
+        "GrepToolDetails",
+        "GrepToolInput",
+        "GrepToolOptions",
+        "createLsTool",
+        "createLsToolDefinition",
+        "LsOperations",
+        "LsToolDetails",
+        "LsToolInput",
+        "LsToolOptions",
+        "createReadTool",
+        "createReadToolDefinition",
+        "ReadOperations",
+        "ReadToolDetails",
+        "ReadToolInput",
+        "ReadToolOptions",
+        "DEFAULT_MAX_BYTES",
+        "DEFAULT_MAX_LINES",
+        "formatSize",
+        "TruncationOptions",
+        "TruncationResult",
+        "truncateHead",
+        "truncateLine",
+        "truncateTail",
+        "createWriteTool",
+        "createWriteToolDefinition",
+        "WriteOperations",
+        "WriteToolInput",
+        "WriteToolOptions",
+        "Tool",
+        "ToolDef",
+        "ToolName",
+        "allToolNames",
+        "ToolsOptions",
+        "createToolDefinition",
+        "createTool",
+        "createCodingToolDefinitions",
+        "createReadOnlyToolDefinitions",
+        "createAllToolDefinitions",
+        "createCodingTools",
+        "createReadOnlyTools",
+        "createAllTools",
+    ]
