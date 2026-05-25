@@ -34,6 +34,7 @@ from harnify_coding_agent.core.tools import (
     wrap_tool_definition,
 )
 from harnify_coding_agent.core.tools import file_mutation_queue as file_mutation_queue_module
+from harnify_coding_agent.core.tools import output_accumulator as output_accumulator_module
 
 
 def test_truncate_head_honors_line_and_byte_limits() -> None:
@@ -123,6 +124,16 @@ async def test_output_accumulator_persists_full_output_when_truncated(
     assert snapshot.truncation.truncated is True
     assert snapshot.fullOutputPath == str(tmp_path / "shared.log")
     assert Path(snapshot.fullOutputPath).read_text(encoding="utf-8") == "line1\nline2\nline3\n"
+
+
+def test_output_accumulator_module_exports_match_ts_surface() -> None:
+    assert output_accumulator_module.__all__ == [
+        "OutputAccumulator",
+        "OutputAccumulatorOptions",
+        "OutputSnapshot",
+        "byteLength",
+        "defaultTempFilePath",
+    ]
 
 
 @pytest.mark.asyncio
