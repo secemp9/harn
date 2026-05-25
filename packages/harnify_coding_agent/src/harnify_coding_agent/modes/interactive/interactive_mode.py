@@ -83,6 +83,7 @@ from harnify_coding_agent.modes.interactive.components.branch_summary_message im
 from harnify_coding_agent.modes.interactive.components.compaction_summary_message import (
     CompactionSummaryMessageComponent,
 )
+from harnify_coding_agent.modes.interactive.components.countdown_timer import CountdownTimer
 from harnify_coding_agent.modes.interactive.components.custom_editor import CustomEditor
 from harnify_coding_agent.modes.interactive.components.custom_message import CustomMessageComponent
 from harnify_coding_agent.modes.interactive.components.dynamic_border import DynamicBorder
