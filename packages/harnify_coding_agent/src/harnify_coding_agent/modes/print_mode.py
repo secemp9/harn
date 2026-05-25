@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import signal
 import sys
 from dataclasses import dataclass, field
 from typing import Any
@@ -10,11 +13,10 @@ from harnify_ai.types import ImageContent
 
 from harnify_coding_agent.core.output_guard import (
     flushRawStdout,
-    restoreStdout,
-    takeOverStdout,
     writeRawStdout,
 )
-from harnify_coding_agent.modes.rpc.jsonl import serialize_json_line
+from harnify_coding_agent.modes.rpc.jsonl import to_jsonable
+from harnify_coding_agent.utils.shell import killTrackedDetachedChildren
 
 
 @dataclass(slots=True)
@@ -45,12 +47,16 @@ def _content_type(block: Any) -> str | None:
     return block_type if isinstance(block_type, str) else None
 
 
+def _serialize_json_line(value: Any) -> str:
+    return json.dumps(to_jsonable(value), ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
 async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str, Any]) -> int:
     resolved = options if isinstance(options, PrintModeOptions) else PrintModeOptions(**dict(options or {}))
     session = runtime_host.session
     unsubscribe = None
     disposed = False
-    takeOverStdout()
+    signal_cleanup_handlers: list[tuple[int, Any]] = []
 
     async def dispose_runtime() -> None:
         nonlocal disposed, unsubscribe
@@ -65,18 +71,38 @@ async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str
     async def rebind_session() -> None:
         nonlocal session, unsubscribe
         session = runtime_host.session
+
+        async def _fork(entry_id: str, fork_options: Any = None) -> dict[str, Any]:
+            result = await runtime_host.fork(entry_id, fork_options)
+            return {"cancelled": _value(result, "cancelled")}
+
+        async def _navigate_tree(target_id: str, navigate_options: Any = None) -> dict[str, Any]:
+            result = await session.navigateTree(
+                target_id,
+                {
+                    "summarize": _value(navigate_options, "summarize"),
+                    "customInstructions": _value(navigate_options, "customInstructions"),
+                    "replaceInstructions": _value(navigate_options, "replaceInstructions"),
+                    "label": _value(navigate_options, "label"),
+                },
+            )
+            return {"cancelled": _value(result, "cancelled")}
+
+        async def _reload() -> None:
+            await session.reload()
+
         await session.bindExtensions(
             {
                 "commandContextActions": {
                     "waitForIdle": lambda: session.agent.waitForIdle(),
                     "newSession": lambda new_session_options=None: runtime_host.newSession(new_session_options),
-                    "fork": lambda entry_id, fork_options=None: runtime_host.fork(entry_id, fork_options),
-                    "navigateTree": lambda _target_id, _options=None: {"cancelled": False},
+                    "fork": _fork,
+                    "navigateTree": _navigate_tree,
                     "switchSession": lambda session_path, switch_options=None: runtime_host.switchSession(
                         session_path,
                         switch_options,
                     ),
-                    "reload": lambda: None,
+                    "reload": _reload,
                 },
                 "onError": lambda error: print(
                     f"Extension error ({_value(error, 'extensionPath', '<unknown>')}): "
@@ -87,24 +113,45 @@ async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str
         )
         if callable(unsubscribe):
             unsubscribe()
-        if resolved.mode == "json":
-            unsubscribe = session.subscribe(lambda event: writeRawStdout(serialize_json_line(event)))
+        unsubscribe = session.subscribe(
+            lambda event: writeRawStdout(_serialize_json_line(event)) if resolved.mode == "json" else None
+        )
+
+    def register_signal_handlers() -> None:
+        loop = asyncio.get_running_loop()
+        signals = [signal.SIGTERM]
+        sighup = getattr(signal, "SIGHUP", None)
+        if sys.platform != "win32" and sighup is not None:
+            signals.append(sighup)
+
+        for current_signal in signals:
+            previous_handler = signal.getsignal(current_signal)
+
+            def _handler(_signum: int, _frame: Any, *, current_signal: int = current_signal) -> None:
+                killTrackedDetachedChildren()
+                exit_code = 129 if sighup is not None and current_signal == sighup else 143
+                task = loop.create_task(dispose_runtime())
+                task.add_done_callback(lambda _task, exit_code=exit_code: sys.exit(exit_code))
+
+            signal.signal(current_signal, _handler)
+            signal_cleanup_handlers.append((current_signal, previous_handler))
 
     try:
+        register_signal_handlers()
+        runtime_host.setRebindSession(rebind_session)
+
         if resolved.mode == "json":
             header = session.sessionManager.getHeader()
             if header:
-                writeRawStdout(serialize_json_line(header))
+                writeRawStdout(_serialize_json_line(header))
 
-        if hasattr(runtime_host, "setRebindSession"):
-            runtime_host.setRebindSession(rebind_session)
         await rebind_session()
 
         if resolved.initialMessage:
             await session.prompt(
                 resolved.initialMessage,
                 {
-                    "images": list(resolved.initialImages or []),
+                    "images": resolved.initialImages,
                 },
             )
 
@@ -127,10 +174,11 @@ async def run_print_mode(runtime_host: Any, options: PrintModeOptions | dict[str
         print(str(error), file=sys.stderr)
         return 1
     finally:
+        for current_signal, previous_handler in signal_cleanup_handlers:
+            signal.signal(current_signal, previous_handler)
         await dispose_runtime()
         await flushRawStdout()
-        restoreStdout()
 
 runPrintMode = run_print_mode
 
-__all__ = ["PrintModeOptions", "runPrintMode", "run_print_mode"]
+__all__ = ["PrintModeOptions", "runPrintMode"]
