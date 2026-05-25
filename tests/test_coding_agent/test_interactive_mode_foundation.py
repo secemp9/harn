@@ -15,7 +15,8 @@ from harnify_ai.types import Model
 from harnify_coding_agent.core.agent_session_runtime import SessionImportFileNotFoundError
 from harnify_coding_agent.core.keybindings import KeybindingsManager
 from harnify_coding_agent.core.session_cwd import MissingSessionCwdError, SessionCwdIssue
-from harnify_coding_agent.config import APP_TITLE
+from harnify_coding_agent.config import APP_NAME, APP_TITLE
+import harnify_coding_agent.modes.interactive.interactive_mode as interactive_mode_module
 from harnify_coding_agent.modes.interactive.interactive_mode import (
     ANTHROPIC_SUBSCRIPTION_AUTH_WARNING,
     InteractiveMode,
@@ -1065,6 +1066,42 @@ async def test_check_for_package_updates_returns_display_names(monkeypatch: pyte
     assert constructed and constructed[0]["cwd"] == "/tmp/project"
 
 
+def test_interactive_mode_module_exports_match_ts_surface() -> None:
+    assert interactive_mode_module.__all__ == [
+        "InteractiveMode",
+        "InteractiveModeOptions",
+        "isApiKeyLoginProvider",
+    ]
+
+
+def test_is_api_key_login_provider_matches_ts_semantics() -> None:
+    assert interactive_mode_module.isApiKeyLoginProvider("anthropic", set()) is True
+    assert interactive_mode_module.isApiKeyLoginProvider("custom-built-in", set(), {"custom-built-in"}) is False
+    assert interactive_mode_module.isApiKeyLoginProvider("custom-oauth", {"custom-oauth"}) is False
+    assert interactive_mode_module.isApiKeyLoginProvider("custom-api-key", {"custom-oauth"}) is True
+
+
+def test_show_package_update_notification_matches_ts_copy() -> None:
+    mode = InteractiveMode(ui=FakeUi(), chatContainer=Container())
+
+    mode.showPackageUpdateNotification(["pkg-a", "pkg-b"])
+
+    rendered = "\n".join(
+        line
+        for child in mode.chatContainer.children
+        if isinstance(child, Text)
+        for line in child.render(120)
+    )
+    stripped = _strip_ansi(rendered)
+    assert "Package Updates Available" in stripped
+    assert "Package updates are available. Run" in stripped
+    assert f"{APP_NAME} update" in stripped
+    assert "Configured package updates are available" not in stripped
+    assert "Packages:" in stripped
+    assert "- pkg-a" in stripped
+    assert "- pkg-b" in stripped
+
+
 @pytest.mark.asyncio
 async def test_check_tmux_keyboard_setup_warns_for_xterm(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TMUX", "1")
@@ -1096,6 +1133,64 @@ async def test_check_tmux_keyboard_setup_warns_for_xterm(monkeypatch: pytest.Mon
     warning = await mode.checkTmuxKeyboardSetup()
     assert warning is not None
     assert "extended-keys-format is xterm" in warning
+
+
+@pytest.mark.asyncio
+async def test_check_tmux_keyboard_setup_warns_for_disabled_extended_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TMUX", "1")
+    responses = {
+        "extended-keys": "off",
+        "extended-keys-format": "csi-u",
+    }
+
+    class FakeProcess:
+        def __init__(self, option: str) -> None:
+            self.option = option
+            self.returncode = 0
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return responses[self.option].encode("utf-8"), b""
+
+        async def wait(self) -> int:
+            return self.returncode
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    async def fake_create_subprocess_exec(*args: Any, **_kwargs: Any) -> FakeProcess:
+        return FakeProcess(str(args[-1]))
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    mode = InteractiveMode()
+    warning = await mode.checkTmuxKeyboardSetup()
+    assert warning == (
+        "tmux extended-keys is off. Modified Enter keys may not work. "
+        "Add `set -g extended-keys on` to ~/.tmux.conf and restart tmux."
+    )
+
+
+@pytest.mark.asyncio
+async def test_prompt_for_missing_session_cwd_uses_ts_title() -> None:
+    prompts: list[tuple[str, str]] = []
+    issue = SessionCwdIssue(
+        sessionCwd="/missing/project",
+        fallbackCwd="/current/project",
+        sessionFile="/tmp/session.jsonl",
+    )
+
+    async def confirm(title: str, message: str, _opts: dict[str, Any] | None = None) -> bool:
+        prompts.append((title, message))
+        return True
+
+    mode = InteractiveMode()
+    mode.showExtensionConfirm = confirm  # type: ignore[method-assign]
+
+    assert await mode.promptForMissingSessionCwd(MissingSessionCwdError(issue)) == "/current/project"
+    assert prompts and prompts[0][0] == "Session cwd not found"
+    assert "/missing/project" in prompts[0][1]
 
 
 @pytest.mark.asyncio
