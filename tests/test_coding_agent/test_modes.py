@@ -56,6 +56,40 @@ def test_rpc_client_module_exports_match_ts_surface() -> None:
     assert rpc_client_module.__all__ == ["ModelInfo", "RpcClient", "RpcClientOptions", "RpcEventListener"]
 
 
+def test_rpc_client_camel_method_surface_matches_ts() -> None:
+    expected_aliases = {
+        "onEvent": "on_event",
+        "getStderr": "get_stderr",
+        "followUp": "follow_up",
+        "newSession": "new_session",
+        "getState": "get_state",
+        "setModel": "set_model",
+        "cycleModel": "cycle_model",
+        "getAvailableModels": "get_available_models",
+        "setThinkingLevel": "set_thinking_level",
+        "cycleThinkingLevel": "cycle_thinking_level",
+        "setSteeringMode": "set_steering_mode",
+        "setFollowUpMode": "set_follow_up_mode",
+        "setAutoCompaction": "set_auto_compaction",
+        "setAutoRetry": "set_auto_retry",
+        "abortRetry": "abort_retry",
+        "abortBash": "abort_bash",
+        "getSessionStats": "get_session_stats",
+        "exportHtml": "export_html",
+        "switchSession": "switch_session",
+        "getForkMessages": "get_fork_messages",
+        "getLastAssistantText": "get_last_assistant_text",
+        "setSessionName": "set_session_name",
+        "getMessages": "get_messages",
+        "getCommands": "get_commands",
+        "waitForIdle": "wait_for_idle",
+        "collectEvents": "collect_events",
+        "promptAndWait": "prompt_and_wait",
+    }
+    for camel_name, snake_name in expected_aliases.items():
+        assert getattr(RpcClient, camel_name) is getattr(RpcClient, snake_name)
+
+
 def test_modes_package_exports_match_ts_surface() -> None:
     expected = [
         "InteractiveMode",
@@ -652,13 +686,50 @@ async def test_rpc_client_routes_responses_and_events() -> None:
     client._pending_requests["req_1"] = future
 
     events: list[dict[str, Any]] = []
-    unsubscribe = client.on_event(events.append)
+    unsubscribe = client.onEvent(events.append)
     client._handle_line(json.dumps({"type": "response", "id": "req_1", "command": "get_state", "success": True}))
     assert await future == {"type": "response", "id": "req_1", "command": "get_state", "success": True}
 
     client._handle_line(json.dumps({"type": "agent_end", "messages": []}))
     unsubscribe()
     assert events == [{"type": "agent_end", "messages": []}]
+
+
+@pytest.mark.asyncio
+async def test_rpc_client_wait_helpers_match_ts_timeout_messages() -> None:
+    client = RpcClient()
+    client._stderr = "debug stderr"
+
+    with pytest.raises(RuntimeError) as idle_error:
+        await client.waitForIdle(timeout=0.001)
+    assert str(idle_error.value) == "Timeout waiting for agent to become idle. Stderr: debug stderr"
+    assert client._event_listeners == []
+
+    with pytest.raises(RuntimeError) as collect_error:
+        await client.collectEvents(timeout=0.001)
+    assert str(collect_error.value) == "Timeout collecting events. Stderr: debug stderr"
+    assert client._event_listeners == []
+
+
+@pytest.mark.asyncio
+async def test_rpc_client_stderr_passthrough_matches_ts(monkeypatch) -> None:
+    client = RpcClient()
+
+    class _Reader:
+        def __init__(self) -> None:
+            self._chunks = [b"one", b"two", b""]
+
+        async def read(self, _size: int) -> bytes:
+            return self._chunks.pop(0)
+
+    client.process = type("Proc", (), {"stderr": _Reader()})()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    await client._consume_stderr()
+
+    assert client.getStderr() == "onetwo"
+    assert stderr.getvalue() == "onetwo"
 
 
 async def _fake_create_session_manager(*_args: Any, **_kwargs: Any) -> Any:
