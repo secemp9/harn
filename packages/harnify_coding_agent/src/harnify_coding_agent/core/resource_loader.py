@@ -89,13 +89,14 @@ class ResourceLoader(Protocol):
     async def reload(self) -> None: ...
 
 
-def resolve_prompt_input(input_value: str | None, _description: str) -> str | None:
+def resolve_prompt_input(input_value: str | None, description: str) -> str | None:
     if not input_value:
         return None
     if os.path.exists(input_value):
         try:
             return Path(input_value).read_text(encoding="utf-8")
-        except OSError:
+        except OSError as error:
+            _warn(f"Warning: Could not read {description} file {input_value}: {error}")
             return input_value
     return input_value
 
@@ -148,7 +149,7 @@ class DefaultResourceLoader:
     noThemes: bool = False
     noContextFiles: bool = False
     systemPromptSource: str | None = None
-    appendSystemPromptSource: list[str] = field(default_factory=list)
+    appendSystemPromptSource: list[str] | None = None
     extensionsOverride: Any = None
     skillsOverride: Any = None
     promptsOverride: Any = None
@@ -163,7 +164,7 @@ class DefaultResourceLoader:
     skillDiagnostics: list[ResourceDiagnostic] = field(default_factory=list)
     prompts: list[PromptTemplate] = field(default_factory=list)
     promptDiagnostics: list[ResourceDiagnostic] = field(default_factory=list)
-    themes: list[ThemeResource] = field(default_factory=list)
+    themes: list[Theme] = field(default_factory=list)
     themeDiagnostics: list[ResourceDiagnostic] = field(default_factory=list)
     agentsFiles: list[dict[str, str]] = field(default_factory=list)
     systemPrompt: str | None = None
@@ -177,7 +178,7 @@ class DefaultResourceLoader:
 
     def __init__(self, options: DefaultResourceLoaderOptions) -> None:
         self.cwd = resolve_path(options["cwd"])
-        self.agentDir = resolve_path(options.get("agentDir") or _default_agent_dir())
+        self.agentDir = resolve_path(options["agentDir"])
         self.settingsManager = options.get("settingsManager") or SettingsManager.create(self.cwd, self.agentDir)
         self.packageManager = DefaultPackageManager(
             {"cwd": self.cwd, "agentDir": self.agentDir, "settingsManager": self.settingsManager}
@@ -188,13 +189,13 @@ class DefaultResourceLoader:
         self.additionalPromptTemplatePaths = list(options.get("additionalPromptTemplatePaths", []))
         self.additionalThemePaths = list(options.get("additionalThemePaths", []))
         self.extensionFactories = list(options.get("extensionFactories", []))
-        self.noExtensions = bool(options.get("noExtensions", False))
-        self.noSkills = bool(options.get("noSkills", False))
-        self.noPromptTemplates = bool(options.get("noPromptTemplates", False))
-        self.noThemes = bool(options.get("noThemes", False))
-        self.noContextFiles = bool(options.get("noContextFiles", False))
+        self.noExtensions = options.get("noExtensions", False)
+        self.noSkills = options.get("noSkills", False)
+        self.noPromptTemplates = options.get("noPromptTemplates", False)
+        self.noThemes = options.get("noThemes", False)
+        self.noContextFiles = options.get("noContextFiles", False)
         self.systemPromptSource = options.get("systemPrompt")
-        self.appendSystemPromptSource = list(options.get("appendSystemPrompt", []))
+        self.appendSystemPromptSource = options.get("appendSystemPrompt")
         self.extensionsOverride = options.get("extensionsOverride")
         self.skillsOverride = options.get("skillsOverride")
         self.promptsOverride = options.get("promptsOverride")
@@ -238,7 +239,7 @@ class DefaultResourceLoader:
         return self.systemPrompt
 
     def getAppendSystemPrompt(self) -> list[str]:
-        return list(self.appendSystemPrompt)
+        return self.appendSystemPrompt
 
     def extendResources(self, paths: ResourceExtensionPaths) -> None:
         skill_paths = self._normalize_extension_paths(paths.get("skillPaths", []))
