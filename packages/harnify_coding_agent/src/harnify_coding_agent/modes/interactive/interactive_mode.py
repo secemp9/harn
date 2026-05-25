@@ -86,6 +86,7 @@ from harnify_coding_agent.modes.interactive.components.compaction_summary_messag
 from harnify_coding_agent.modes.interactive.components.countdown_timer import CountdownTimer
 from harnify_coding_agent.modes.interactive.components.custom_editor import CustomEditor
 from harnify_coding_agent.modes.interactive.components.custom_message import CustomMessageComponent
+from harnify_coding_agent.modes.interactive.components.daxnuts import DaxnutsComponent
 from harnify_coding_agent.modes.interactive.components.dynamic_border import DynamicBorder
 from harnify_coding_agent.modes.interactive.components.earendil_announcement import EarendilAnnouncementComponent
 from harnify_coding_agent.modes.interactive.components.extension_editor import ExtensionEditorComponent
