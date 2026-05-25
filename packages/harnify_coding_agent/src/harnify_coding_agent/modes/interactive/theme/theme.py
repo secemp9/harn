@@ -737,7 +737,7 @@ def get_settings_list_theme() -> SettingsListTheme:
         label=lambda text, selected: theme.fg("accent", text) if selected else text,
         value=lambda text, selected: theme.fg("accent", text) if selected else theme.fg("muted", text),
         description=lambda text: theme.fg("dim", text),
-        cursor=theme.fg("accent", "-> " if sys.platform == "win32" else "→ "),
+        cursor=theme.fg("accent", "→ "),
         hint=lambda text: theme.fg("dim", text),
     )
 
