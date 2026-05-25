@@ -1882,6 +1882,57 @@ def test_is_api_key_login_provider_matches_ts_semantics() -> None:
     assert interactive_mode_module.isApiKeyLoginProvider("custom-api-key", {"custom-oauth"}) is True
 
 
+def test_get_login_provider_options_uses_ts_api_key_provider_filter() -> None:
+    mode = InteractiveMode(
+        session=SimpleNamespace(
+            modelRegistry=SimpleNamespace(
+                authStorage=SimpleNamespace(
+                    getOAuthProviders=lambda: [SimpleNamespace(id="custom-oauth", name="OAuth Z")]
+                ),
+                getAll=lambda: [
+                    SimpleNamespace(provider="custom-oauth"),
+                    SimpleNamespace(provider="anthropic"),
+                    SimpleNamespace(provider="custom-api-key"),
+                ],
+                getProviderDisplayName=lambda provider_id: {
+                    "anthropic": "Anthropic",
+                    "custom-api-key": "Custom API Key",
+                }[provider_id],
+            )
+        )
+    )
+
+    options = mode.getLoginProviderOptions()
+
+    assert [(option.id, option.authType) for option in options] == [
+        ("anthropic", "api_key"),
+        ("custom-api-key", "api_key"),
+        ("custom-oauth", "oauth"),
+    ]
+
+
+def test_get_logout_provider_options_accepts_non_dict_credentials_like_ts() -> None:
+    mode = InteractiveMode(
+        session=SimpleNamespace(
+            modelRegistry=SimpleNamespace(
+                authStorage=SimpleNamespace(
+                    list=lambda: ["oauth-provider", "missing"],
+                    get=lambda provider_id: (
+                        SimpleNamespace(type="oauth") if provider_id == "oauth-provider" else None
+                    ),
+                ),
+                getProviderDisplayName=lambda provider_id: {
+                    "oauth-provider": "OAuth Provider"
+                }[provider_id],
+            )
+        )
+    )
+
+    options = mode.getLogoutProviderOptions()
+
+    assert [(option.id, option.authType) for option in options] == [("oauth-provider", "oauth")]
+
+
 def test_show_package_update_notification_matches_ts_copy() -> None:
     mode = InteractiveMode(ui=FakeUi(), chatContainer=Container())
 
