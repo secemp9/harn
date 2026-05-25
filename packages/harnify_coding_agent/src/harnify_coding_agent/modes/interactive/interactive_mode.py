@@ -3146,6 +3146,7 @@ class InteractiveMode:
                     add_history(text)
                 self._set_editor_text("")
                 await self.handleBashCommand(command, is_excluded)
+                self.isBashMode = False
                 self.updateEditorBorderColor()
             return
 
