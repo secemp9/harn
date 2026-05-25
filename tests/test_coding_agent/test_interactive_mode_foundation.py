@@ -256,6 +256,57 @@ def test_render_current_session_state_resets_pending_and_streaming_before_render
     assert ui.render_calls == [None]
 
 
+def test_render_session_context_matches_ts_footer_history_and_tool_results() -> None:
+    ui = FakeUi()
+    editor = FakeEditor()
+    footer_calls: list[str] = []
+    mode = InteractiveMode(
+        ui=ui,
+        chatContainer=Container(),
+        defaultEditor=editor,
+        editor=editor,
+        footer=SimpleNamespace(invalidate=lambda: footer_calls.append("footer")),
+        session=SimpleNamespace(
+            retryAttempt=0,
+            extensionRunner=SimpleNamespace(get_message_renderer=lambda _custom_type: None),
+            getToolDefinition=lambda _name: None,
+            state=SimpleNamespace(thinkingLevel="off"),
+        ),
+        sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project"),
+        settingsManager=SimpleNamespace(
+            getShowImages=lambda: True,
+            getImageWidthCells=lambda: 40,
+            getCodeBlockIndent=lambda: "  ",
+        ),
+    )
+    context = SimpleNamespace(
+        messages=[
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": [{"type": "toolCall", "id": "tool-1", "name": "read", "arguments": {"path": "x"}}],
+                "stopReason": "end",
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "tool-1",
+                "content": [{"type": "text", "text": "done"}],
+                "isError": False,
+            },
+        ]
+    )
+
+    mode.renderSessionContext(context, {"updateFooter": True, "populateHistory": True})
+
+    assert editor.history == ["hello"]
+    assert footer_calls == ["footer"]
+    assert mode._toolComponentsById == {}
+    assert any(isinstance(child, UserMessageComponent) for child in mode.chatContainer.children)
+    assert any(isinstance(child, AssistantMessageComponent) for child in mode.chatContainer.children)
+    assert any(isinstance(child, ToolExecutionComponent) for child in mode.chatContainer.children)
+    assert ui.render_calls
+
+
 def test_update_editor_border_color_matches_ts_and_requests_render() -> None:
     ui = FakeUi()
     editor = FakeEditor()
@@ -1433,6 +1484,50 @@ async def test_run_seeds_initial_messages_and_starts_ui(monkeypatch: pytest.Monk
         ("second", None),
     ]
     assert warnings == ["fallback"]
+
+
+@pytest.mark.asyncio
+async def test_init_ensures_tools_and_logs_scoped_model_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    tool_calls: list[str] = []
+    printed: list[str] = []
+    ui = FakeUi()
+    mode = InteractiveMode(
+        ui=ui,
+        session=SimpleNamespace(
+            resourceLoader=SimpleNamespace(getThemes=lambda: {"themes": []}),
+            scopedModels=[{"model": _model("anthropic", "claude-scope"), "thinkingLevel": "high"}],
+        ),
+        settingsManager=SimpleNamespace(
+            getQuietStartup=lambda: False,
+            getTheme=lambda: "dark",
+        ),
+        options={"verbose": True},
+    )
+    mode.keybindings.getKeys = lambda action: ["ctrl+k"] if action == "app.model.cycleForward" else []  # type: ignore[method-assign]
+    mode.registerSignalHandlers = lambda: None  # type: ignore[method-assign]
+    mode.updateEditorBorderColor = lambda: None  # type: ignore[method-assign]
+    mode.setupAutocompleteProvider = lambda: None  # type: ignore[method-assign]
+    mode.renderWidgets = lambda: None  # type: ignore[method-assign]
+    mode.setupKeyHandlers = lambda: None  # type: ignore[method-assign]
+    mode.setupEditorSubmitHandler = lambda: None  # type: ignore[method-assign]
+    mode.updateAvailableProviderCount = lambda: None  # type: ignore[method-assign]
+    mode.rebindCurrentSession = _noop_async  # type: ignore[method-assign]
+    mode.renderInitialMessages = lambda: None  # type: ignore[method-assign]
+
+    async def fake_ensure_tool(name: str, *args: Any, **kwargs: Any) -> str:
+        tool_calls.append(name)
+        return f"/tmp/{name}"
+
+    monkeypatch.setattr(interactive_mode_module, "ensureTool", fake_ensure_tool)
+    monkeypatch.setattr(interactive_mode_module, "print", lambda message: printed.append(str(message)))
+    monkeypatch.setattr(interactive_mode_module.interactive_theme, "on_theme_change", lambda _callback: None)
+
+    await mode.init()
+
+    assert tool_calls == ["fd", "rg"]
+    assert mode.fdPath == "/tmp/fd"
+    assert printed and "Model scope: claude-scope:high" in _strip_ansi(printed[0])
+    assert "to cycle" in _strip_ansi(printed[0])
 
 
 @pytest.mark.asyncio
