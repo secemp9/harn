@@ -582,7 +582,7 @@ class InteractiveMode:
             self.footerDataProvider = FooterDataProvider(self.sessionManager.getCwd())
         self.footer = getattr(self, "footer", None)
         if self.footer is None:
-            self.footer = FooterComponent(self.session, self.footerDataProvider, interactive_theme.theme)
+            self.footer = FooterComponent(self.session, self.footerDataProvider)
         self.lastStatusSpacer = getattr(self, "lastStatusSpacer", None)
         self.lastStatusText = getattr(self, "lastStatusText", None)
         self.autocompleteProviderWrappers = list(getattr(self, "autocompleteProviderWrappers", []))
