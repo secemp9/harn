@@ -415,11 +415,17 @@ def test_extension_ui_context_status_widget_and_terminal_helpers() -> None:
 def test_set_hidden_thinking_label_preserves_explicit_empty_string_like_ts() -> None:
     ui = FakeUi()
     applied: list[str] = []
+    non_assistant_applied: list[str] = []
     streaming_applied: list[str] = []
+    assistant_child = object.__new__(interactive_mode_module.AssistantMessageComponent)
+    assistant_child.setHiddenThinkingLabel = lambda label: applied.append(label)  # type: ignore[attr-defined]
     mode = InteractiveMode(
         ui=ui,
         chatContainer=SimpleNamespace(
-            children=[SimpleNamespace(setHiddenThinkingLabel=lambda label: applied.append(label))]
+            children=[
+                assistant_child,
+                SimpleNamespace(setHiddenThinkingLabel=lambda label: non_assistant_applied.append(label)),
+            ]
         ),
         streamingComponent=SimpleNamespace(setHiddenThinkingLabel=lambda label: streaming_applied.append(label)),
     )
@@ -428,6 +434,7 @@ def test_set_hidden_thinking_label_preserves_explicit_empty_string_like_ts() -> 
 
     assert mode.hiddenThinkingLabel == ""
     assert applied == [""]
+    assert non_assistant_applied == []
     assert streaming_applied == [""]
     assert ui.render_calls == [None]
 
