@@ -1574,13 +1574,12 @@ class Editor:
         if self.autocompleteProvider is None:
             return
 
-        try:
-            suggestions = await self.autocompleteProvider.getSuggestions(
-                self.state.lines,
-                self.state.cursorLine,
-                self.state.cursorCol,
-                {"signal": controller.signal, "force": force},
-            )
+        suggestions = await self.autocompleteProvider.getSuggestions(
+            self.state.lines,
+            self.state.cursorLine,
+            self.state.cursorCol,
+            {"signal": controller.signal, "force": force},
+        )
 
         if not self.isAutocompleteRequestCurrent(
             requestId=request_id,
