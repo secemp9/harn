@@ -1001,7 +1001,7 @@ def parseKey(data: str) -> str | None:
     return None
 
 
-def decode_kitty_printable(data: str) -> str | None:
+def decodeKittyPrintable(data: str) -> str | None:
     match = KITTY_CSI_U_REGEX.match(data)
     if match is None:
         return None
@@ -1041,18 +1041,8 @@ def decode_modify_other_keys_printable(data: str) -> str | None:
         return None
 
 
-def decode_printable_key(data: str) -> str | None:
-    return decode_kitty_printable(data) or decode_modify_other_keys_printable(data)
-
-
-setKittyProtocolActive = set_kitty_protocol_active
-isKittyProtocolActive = is_kitty_protocol_active
-matchesKey = matches_key
-parseKey = parse_key
-isKeyRelease = is_key_release
-isKeyRepeat = is_key_repeat
-decodeKittyPrintable = decode_kitty_printable
-decodePrintableKey = decode_printable_key
+def decodePrintableKey(data: str) -> str | None:
+    return decodeKittyPrintable(data) or decode_modify_other_keys_printable(data)
 
 __all__ = [
     "Key",
