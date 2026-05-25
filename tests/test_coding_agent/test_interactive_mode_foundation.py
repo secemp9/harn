@@ -1479,6 +1479,7 @@ async def test_run_seeds_initial_messages_and_starts_ui(monkeypatch: pytest.Monk
 
     run_task = asyncio.create_task(mode.run())
     await asyncio.sleep(0)
+    await asyncio.sleep(0)
     mode.requestShutdown()
     exit_code = await run_task
 
