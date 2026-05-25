@@ -1400,6 +1400,10 @@ class InteractiveMode:
         self.workingMessage = None
         self.setWorkingIndicator(None)
         self.setWorkingVisible(True)
+        if self.loadingAnimation is not None:
+            set_message = _callable_attr(self.loadingAnimation, "setMessage")
+            if set_message is not None:
+                set_message(f"{self.defaultWorkingMessage} ({key_text('app.interrupt')} to interrupt)")
         self.setHiddenThinkingLabel(None)
 
     def setCustomEditorComponent(self, factory: Any) -> None:
@@ -3129,7 +3133,7 @@ class InteractiveMode:
             Text(
                 interactive_theme.theme.fg(
                     "muted",
-                    "Reloading keybindings, extensions, skills, prompts, and themes...",
+                    "Reloading keybindings, extensions, skills, prompts, themes...",
                 ),
                 1,
                 0,
