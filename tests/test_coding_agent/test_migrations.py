@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import harnify_coding_agent.migrations as migrations_module
 from harnify_coding_agent.config import APP_NAME
 from harnify_coding_agent.migrations import (
@@ -86,6 +87,29 @@ def test_run_migrations_collects_deprecation_warnings(tmp_path: Path, monkeypatc
     assert result["migratedAuthProviders"] == []
     assert any("hooks/" in warning for warning in result["deprecationWarnings"])
     assert any("custom tools" in warning for warning in result["deprecationWarnings"])
+
+
+@pytest.mark.asyncio
+async def test_show_deprecation_warnings_matches_ts_colored_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
+
+    await migrations_module.show_deprecation_warnings(["Old hooks directory"])
+
+    assert capsys.readouterr().out == (
+        "\x1b[33mWarning: Old hooks directory\x1b[0m\n"
+        "\x1b[33m\nMove your extensions to the extensions/ directory.\x1b[0m\n"
+        "\x1b[33mMigration guide: "
+        "https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md#extensions-migration"
+        "\x1b[0m\n"
+        "\x1b[33mDocumentation: "
+        "https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/extensions.md"
+        "\x1b[0m\n"
+        "\x1b[2m\nPress any key to continue...\x1b[0m\n"
+        "\n"
+    )
 
 
 def test_migrations_module_exports_match_ts_surface() -> None:
