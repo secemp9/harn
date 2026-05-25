@@ -486,7 +486,7 @@ def create_read_tool_definition(
         description=(
             "Read the contents of a file. Supports text files and images (jpg, png, gif, webp). "
             f"Images are sent as attachments. For text files, output is truncated to {DEFAULT_MAX_LINES} "
-            f"lines or {DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. "
+            f"lines or {DEFAULT_MAX_BYTES // 1024}KB (whichever is hit first). Use offset/limit for large files. "
             "When you need the full file, continue with offset until complete."
         ),
         promptSnippet="Read file contents",
