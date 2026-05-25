@@ -4242,6 +4242,6 @@ async def test_handle_resume_session_accepts_object_shaped_runtime_result() -> N
 
     result = await mode.handleResumeSession("/tmp/session.pi.jsonl")
 
-    assert _value(result, "cancelled", None) is False
+    assert getattr(result, "cancelled", None) is False
     assert rendered == [True]
     assert statuses == ["Resumed session"]
