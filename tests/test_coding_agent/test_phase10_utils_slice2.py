@@ -7,9 +7,12 @@ import pytest
 import harnify_coding_agent.utils.exif_orientation as exif_orientation_module
 import harnify_coding_agent.utils.image_convert as image_convert_module
 import harnify_coding_agent.utils.image_resize as image_resize_module
+import harnify_coding_agent.utils.pi_user_agent as pi_user_agent_module
 import harnify_coding_agent.utils.syntax_highlight as syntax_highlight_module
+import harnify_coding_agent.utils.version_check as version_check_module
 from harnify_coding_agent.utils.exif_orientation import get_exif_orientation
 from harnify_coding_agent.utils.image_convert import convert_to_png
+from harnify_coding_agent.utils.pi_user_agent import get_pi_user_agent
 from harnify_coding_agent.utils.syntax_highlight import highlight, render_highlighted_html, supports_language
 from harnify_coding_agent.utils.version_check import (
     check_for_new_pi_version,
@@ -91,6 +94,24 @@ def test_syntax_highlight_module_exports_match_ts_surface() -> None:
         "highlight",
         "renderHighlightedHtml",
         "supportsLanguage",
+    ]
+
+
+def test_pi_user_agent_module_exports_match_ts_surface() -> None:
+    assert pi_user_agent_module.__all__ == ["getPiUserAgent"]
+    user_agent = get_pi_user_agent("1.2.3")
+    assert user_agent.startswith("pi/1.2.3 (")
+    assert "; python/" in user_agent
+
+
+def test_version_check_module_exports_match_ts_surface() -> None:
+    assert version_check_module.__all__ == [
+        "LatestPiRelease",
+        "comparePackageVersions",
+        "isNewerPackageVersion",
+        "getLatestPiRelease",
+        "getLatestPiVersion",
+        "checkForNewPiVersion",
     ]
 
 
