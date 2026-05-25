@@ -2929,6 +2929,7 @@ async def test_handle_bash_command_uses_extension_returned_result_and_records_se
     chat = Container()
     emitted: list[dict[str, Any]] = []
     recorded: list[tuple[str, BashResult, dict[str, Any] | None]] = []
+    render_calls: list[bool | None] = []
     returned = BashResult(
         output="done",
         exitCode=0,
@@ -2957,6 +2958,7 @@ async def test_handle_bash_command_uses_extension_returned_result_and_records_se
         session=session,
         sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project"),
     )
+    mode._request_render = lambda force=None: render_calls.append(force)  # type: ignore[method-assign]
 
     await mode.handleBashCommand("pwd", True)
 
@@ -2976,7 +2978,7 @@ async def test_handle_bash_command_uses_extension_returned_result_and_records_se
     assert component.truncationResult is not None
     assert component.truncationResult.truncated is True
     assert mode.bashComponent is None
-    assert ui.render_calls == [None]
+    assert render_calls == [None]
 
 
 @pytest.mark.asyncio
@@ -2988,6 +2990,7 @@ async def test_handle_bash_command_passes_operations_and_rerenders_chunks_withou
     editor.onEscape = original_escape
     operations = object()
     captured: dict[str, Any] = {}
+    render_calls: list[bool | None] = []
 
     async def emit_user_bash(_event: dict[str, Any]) -> dict[str, Any]:
         return {"operations": operations}
@@ -3020,6 +3023,7 @@ async def test_handle_bash_command_passes_operations_and_rerenders_chunks_withou
         session=session,
         sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project"),
     )
+    mode._request_render = lambda force=None: render_calls.append(force)  # type: ignore[method-assign]
 
     await mode.handleBashCommand("pwd")
 
@@ -3034,13 +3038,14 @@ async def test_handle_bash_command_passes_operations_and_rerenders_chunks_withou
     assert component.truncationResult is not None
     assert component.truncationResult.truncated is True
     assert mode.bashComponent is None
-    assert ui.render_calls == [None, None, None]
+    assert render_calls == [None, None, None]
 
 
 @pytest.mark.asyncio
 async def test_handle_bash_command_error_uses_unknown_error_fallback() -> None:
     errors: list[str] = []
     ui = FakeUi()
+    render_calls: list[bool | None] = []
 
     async def execute_bash(*_args: Any, **_kwargs: Any) -> BashResult:
         raise Exception()
@@ -3056,12 +3061,13 @@ async def test_handle_bash_command_error_uses_unknown_error_fallback() -> None:
         sessionManager=SimpleNamespace(getCwd=lambda: "/tmp/project"),
     )
     mode.showError = errors.append  # type: ignore[method-assign]
+    mode._request_render = lambda force=None: render_calls.append(force)  # type: ignore[method-assign]
 
     await mode.handleBashCommand("pwd")
 
     assert errors == ["Bash command failed: Unknown error"]
     assert mode.bashComponent is None
-    assert ui.render_calls == [None, None]
+    assert render_calls == [None, None]
 
 
 @pytest.mark.asyncio
