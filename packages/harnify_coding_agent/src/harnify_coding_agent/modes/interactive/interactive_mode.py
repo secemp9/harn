@@ -3119,9 +3119,12 @@ class InteractiveMode:
             self.showWarning("Wait for compaction to finish before reloading.")
             return
 
+        self.resetExtensionUI()
+
         previous_editor = self.editor
         reload_box = Container()
-        reload_box.addChild(DynamicBorder())
+        border_color = lambda text: interactive_theme.theme.fg("border", text)
+        reload_box.addChild(DynamicBorder(border_color))
         reload_box.addChild(Spacer(1))
         reload_box.addChild(
             Text(
@@ -3134,7 +3137,7 @@ class InteractiveMode:
             )
         )
         reload_box.addChild(Spacer(1))
-        reload_box.addChild(DynamicBorder())
+        reload_box.addChild(DynamicBorder(border_color))
 
         self.editorContainer.clear()
         self.editorContainer.addChild(reload_box)
@@ -3153,9 +3156,54 @@ class InteractiveMode:
 
         try:
             await self.session.reload()
+            configureHttpDispatcher(_safe_call_int(self.settingsManager, "getHttpIdleTimeoutMs", 300_000))
             self.keybindings.reload()
-            setKeybindings(self.keybindings)
-            await self.rebindCurrentSession(showLoadedResourcesAndStartup=False)
+            active_header = self.customHeader or self.builtInHeader
+            set_expanded = _callable_attr(active_header, "setExpanded")
+            if set_expanded is not None:
+                set_expanded(self.toolOutputExpanded)
+            resource_loader = getattr(self.session, "resourceLoader", None)
+            get_themes = _callable_attr(resource_loader, "getThemes")
+            themes_result = get_themes() if get_themes is not None else {}
+            interactive_theme.set_registered_themes(_value(themes_result, "themes", []))
+            self.hideThinkingBlock = _safe_call_bool(
+                self.settingsManager,
+                "getHideThinkingBlock",
+                self.hideThinkingBlock,
+            )
+            theme_name = _safe_call_str(self.settingsManager, "getTheme")
+            theme_result = (
+                interactive_theme.set_theme(theme_name, True)
+                if theme_name
+                else {"success": True}
+            )
+            if not bool(_value(theme_result, "success", False)):
+                self.showError(
+                    f'Failed to load theme "{theme_name}": {_value(theme_result, "error")}\nFell back to dark theme.'
+                )
+            editor_padding_x = _safe_call_int(self.settingsManager, "getEditorPaddingX", 0)
+            autocomplete_max_visible = _safe_call_int(self.settingsManager, "getAutocompleteMaxVisible", 5)
+            set_default_padding = _callable_attr(self.defaultEditor, "setPaddingX")
+            if set_default_padding is not None:
+                set_default_padding(editor_padding_x)
+            set_default_autocomplete = _callable_attr(self.defaultEditor, "setAutocompleteMaxVisible")
+            if set_default_autocomplete is not None:
+                set_default_autocomplete(autocomplete_max_visible)
+            if self.editor is not self.defaultEditor:
+                set_padding = _callable_attr(self.editor, "setPaddingX")
+                if set_padding is not None:
+                    set_padding(editor_padding_x)
+                set_autocomplete = _callable_attr(self.editor, "setAutocompleteMaxVisible")
+                if set_autocomplete is not None:
+                    set_autocomplete(autocomplete_max_visible)
+            set_show_hardware_cursor = _callable_attr(self.ui, "setShowHardwareCursor")
+            if set_show_hardware_cursor is not None:
+                set_show_hardware_cursor(_safe_call_bool(self.settingsManager, "getShowHardwareCursor", False))
+            set_clear_on_shrink = _callable_attr(self.ui, "setClearOnShrink")
+            if set_clear_on_shrink is not None:
+                set_clear_on_shrink(_safe_call_bool(self.settingsManager, "getClearOnShrink", False))
+            self.setupAutocompleteProvider()
+            self.setupExtensionShortcuts(self.session.extensionRunner)
             self.rebuildChatFromMessages()
             dismiss(self.editor)
             self.showLoadedResources({"force": False, "showDiagnosticsWhenQuiet": True})
