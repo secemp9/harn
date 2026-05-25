@@ -208,7 +208,7 @@ def test_show_error_and_warning_match_ts_prefix_and_spacing() -> None:
     mode.showWarning("careful")
 
     rendered = [
-        _strip_ansi("\n".join(child.render(120)))
+        _strip_ansi("\n".join(child.render(120))).strip()
         for child in mode.chatContainer.children
         if isinstance(child, Text)
     ]
