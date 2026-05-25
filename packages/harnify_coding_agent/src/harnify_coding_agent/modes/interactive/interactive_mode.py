@@ -58,6 +58,7 @@ from harnify_coding_agent.config import (
     get_auth_path,
     get_changelog_path,
     get_debug_log_path,
+    get_docs_path,
     get_share_viewer_url,
     get_update_instruction,
 )
@@ -148,6 +149,7 @@ ANTHROPIC_SUBSCRIPTION_AUTH_WARNING = (
 )
 
 _BUILT_IN_MODEL_PROVIDERS = frozenset(getProviders())
+_BEDROCK_PROVIDER_ID = "amazon-bedrock"
 
 
 @dataclass(slots=True)
@@ -3172,6 +3174,9 @@ class InteractiveMode:
         if provider.authType == "oauth":
             await self.showLoginDialog(provider.id, provider.name)
             return
+        if provider.id == _BEDROCK_PROVIDER_ID:
+            self.showBedrockSetupDialog(provider.id, provider.name)
+            return
         await self.showApiKeyLoginDialog(provider.id, provider.name)
 
     async def showOAuthSelector(self, mode: str) -> None:
@@ -3245,6 +3250,42 @@ class InteractiveMode:
         action_label = f"Logged in to {provider_name}" if auth_type == "oauth" else f"Saved API key for {provider_name}"
         self.showStatus(f"{action_label}. Credentials saved to {get_auth_path()}")
         await self.maybeWarnAboutAnthropicSubscriptionAuth()
+
+    def showBedrockSetupDialog(self, providerId: str, providerName: str) -> None:
+        set_focus = _callable_attr(self.ui, "setFocus")
+
+        def restore_editor() -> None:
+            self.editorContainer.clear()
+            self.editorContainer.addChild(self.editor)
+            if set_focus is not None:
+                set_focus(self.editor)
+            self._request_render()
+
+        dialog = LoginDialogComponent(
+            self.ui,
+            providerId,
+            lambda _success, _message: restore_editor(),
+            providerName,
+            "Amazon Bedrock setup",
+        )
+        dialog.showInfo(
+            [
+                interactive_theme.theme.fg(
+                    "text", "Amazon Bedrock uses AWS credentials instead of a single API key."
+                ),
+                interactive_theme.theme.fg(
+                    "text", "Configure an AWS profile, IAM keys, bearer token, or role-based credentials."
+                ),
+                interactive_theme.theme.fg("muted", "See:"),
+                interactive_theme.theme.fg("accent", f"  {os.path.join(get_docs_path(), 'providers.md')}"),
+            ]
+        )
+
+        self.editorContainer.clear()
+        self.editorContainer.addChild(dialog)
+        if set_focus is not None:
+            set_focus(dialog)
+        self._request_render()
 
     async def showApiKeyLoginDialog(self, providerId: str, providerName: str) -> None:
         dialog = LoginDialogComponent(self.ui, providerId, lambda _success, _message: None, providerName)
