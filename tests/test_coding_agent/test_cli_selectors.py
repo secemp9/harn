@@ -584,6 +584,111 @@ async def test_handle_package_command_update_self_unavailable_sets_exit_code(
 
 
 @pytest.mark.asyncio
+async def test_handle_package_command_update_all_reports_extension_and_self_success(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
+        lambda _version: _return_latest_release(None),
+    )
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    update_calls: list[str | None] = []
+    self_update_calls: list[tuple[str, str]] = []
+
+    class FakePackageManager:
+        def __init__(self, _options: object) -> None:
+            return None
+
+        def setProgressCallback(self, _callback) -> None:
+            return None
+
+        async def update(self, source: str | None = None) -> None:
+            update_calls.append(source)
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_self_update_command",
+        lambda *_args, **_kwargs: SimpleNamespace(command="uv", args=("tool", "upgrade"), display="uv tool upgrade pi", steps=None),
+    )
+
+    async def fake_run_self_update(command) -> None:
+        self_update_calls.append((command.command, command.display))
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli._run_self_update", fake_run_self_update)
+
+    handled = await handle_package_command(["update"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 0
+    assert update_calls == [None]
+    assert self_update_calls == [("uv", "uv tool upgrade pi")]
+    assert stdout.getvalue() == "Updated packages\nUpdated pi\n"
+    assert stderr.getvalue() == ""
+
+
+@pytest.mark.asyncio
+async def test_handle_package_command_update_self_failure_prints_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
+        lambda _version: _return_latest_release(None),
+    )
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    class FakePackageManager:
+        def __init__(self, _options: object) -> None:
+            return None
+
+        def setProgressCallback(self, _callback) -> None:
+            return None
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
+    monkeypatch.setattr(
+        "harnify_coding_agent.package_manager_cli.get_self_update_command",
+        lambda *_args, **_kwargs: SimpleNamespace(command="uv", args=("tool", "upgrade"), display="uv tool upgrade pi", steps=None),
+    )
+
+    async def fake_run_self_update(_command) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("harnify_coding_agent.package_manager_cli._run_self_update", fake_run_self_update)
+
+    handled = await handle_package_command(["update", "--self"])
+
+    assert handled is True
+    assert package_manager_cli_module._take_command_exit_code() == 1
+    assert stdout.getvalue() == ""
+    assert "Error: boom" in stderr.getvalue()
+    assert "If this keeps failing, run this command yourself: uv tool upgrade pi" in stderr.getvalue()
+
+
+@pytest.mark.asyncio
 async def test_prompt_for_missing_session_cwd_returns_fallback_and_sets_keybindings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
