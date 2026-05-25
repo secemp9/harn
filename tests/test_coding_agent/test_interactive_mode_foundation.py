@@ -2094,6 +2094,35 @@ async def test_open_external_editor_warns_when_editor_env_is_missing(
     assert warnings == ["No editor configured. Set $VISUAL or $EDITOR environment variable."]
 
 
+@pytest.mark.asyncio
+async def test_open_external_editor_ignores_launch_failure_and_restores_ui(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("EDITOR", "missing-editor")
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.tempfile.gettempdir",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        "harnify_coding_agent.modes.interactive.interactive_mode.subprocess.run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError("missing-editor")),
+    )
+
+    ui = FakeUi()
+    editor = FakeEditor()
+    editor.setText("original text")
+    mode = InteractiveMode(ui=ui, editor=editor, defaultEditor=editor)
+
+    await mode.openExternalEditor()
+
+    assert editor.text == "original text"
+    assert ui.stopped == 1
+    assert ui.started == 1
+    assert ui.render_calls == [True]
+
+
 def test_handle_debug_command_writes_log_and_renders_status(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
