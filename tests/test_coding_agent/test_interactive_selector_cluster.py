@@ -11,6 +11,7 @@ from harnify_coding_agent.core.model_registry import ModelRegistry
 from harnify_coding_agent.core.settings_manager import SettingsManager
 from harnify_coding_agent.modes.interactive.components.login_dialog import LoginDialogComponent
 import harnify_coding_agent.modes.interactive.components.login_dialog as login_dialog_module
+import harnify_coding_agent.modes.interactive.components.model_selector as model_selector_module
 from harnify_coding_agent.modes.interactive.components.model_selector import ModelSelectorComponent, ScopedModelItem
 from harnify_coding_agent.modes.interactive.components.oauth_selector import (
     AuthSelectorProvider,
@@ -214,3 +215,7 @@ def test_login_dialog_device_code_renders_and_opens_url(monkeypatch: pytest.Monk
 
 def test_login_dialog_module_exports_match_ts_surface() -> None:
     assert login_dialog_module.__all__ == ["LoginDialogComponent"]
+
+
+def test_model_selector_module_exports_match_ts_surface() -> None:
+    assert model_selector_module.__all__ == ["ModelSelectorComponent"]
