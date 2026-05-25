@@ -6,6 +6,7 @@ import json
 import os
 import inspect
 import signal
+import typing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ import harnify_coding_agent.modes as modes_package
 import harnify_coding_agent.modes.print_mode as print_mode_module
 import harnify_coding_agent.modes.rpc.jsonl as rpc_jsonl_module
 import harnify_coding_agent.modes.rpc.rpc_mode as rpc_mode_module
+import harnify_coding_agent.modes.rpc.rpc_types as rpc_types_module
 from harnify_coding_agent.modes.print_mode import run_print_mode
 from harnify_coding_agent.modes.rpc import JsonlLineBuffer, RpcClient, run_rpc_mode
 import harnify_coding_agent.modes.rpc.rpc_client as rpc_client_module
@@ -141,6 +143,38 @@ def test_rpc_mode_module_exports_match_ts_surface() -> None:
         "runRpcMode",
     ]
     assert list(inspect.signature(rpc_mode_module.run_rpc_mode).parameters) == ["runtime_host"]
+
+
+def test_rpc_types_module_exports_match_ts_surface() -> None:
+    assert rpc_types_module.__all__ == [
+        "RpcCommand",
+        "RpcCommandType",
+        "RpcExtensionUIRequest",
+        "RpcExtensionUIResponse",
+        "RpcResponse",
+        "RpcSessionState",
+        "RpcSlashCommand",
+    ]
+
+
+def test_rpc_types_optional_shapes_match_ts() -> None:
+    slash_hints = typing.get_type_hints(rpc_types_module.RpcSlashCommand, include_extras=True)
+    assert typing.get_origin(slash_hints["description"]) is typing.NotRequired
+    assert typing.get_args(slash_hints["description"]) == (str,)
+
+    state_hints = typing.get_type_hints(rpc_types_module.RpcSessionState, include_extras=True)
+    for name in ("model", "sessionFile", "sessionName"):
+        assert typing.get_origin(state_hints[name]) is typing.NotRequired
+    assert typing.get_args(state_hints["sessionFile"]) == (str,)
+    assert typing.get_args(state_hints["sessionName"]) == (str,)
+
+    status_hints = typing.get_type_hints(rpc_types_module.RpcExtensionUISetStatusRequest, include_extras=True)
+    assert typing.get_origin(status_hints["statusText"]) is typing.NotRequired
+    assert typing.get_args(status_hints["statusText"]) == (str,)
+
+    widget_hints = typing.get_type_hints(rpc_types_module.RpcExtensionUISetWidgetRequest, include_extras=True)
+    assert typing.get_origin(widget_hints["widgetLines"]) is typing.NotRequired
+    assert typing.get_args(widget_hints["widgetLines"]) == (list[str],)
 
 
 def _fake_model(provider: str, model_id: str) -> Model[Any]:
