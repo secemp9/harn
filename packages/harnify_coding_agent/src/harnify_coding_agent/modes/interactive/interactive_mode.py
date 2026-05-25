@@ -4253,8 +4253,9 @@ class InteractiveMode:
                 abort_bash = _callable_attr(self.session, "abortBash")
                 if abort_bash is not None:
                     abort_bash()
-            elif _is_bash_mode(self.editor):
+            elif self.isBashMode:
                 self._set_editor_text("")
+                self.isBashMode = False
                 self.updateEditorBorderColor()
             elif not self._get_editor_text().strip():
                 action = _safe_call_str(self.settingsManager, "getDoubleEscapeAction", "none")
