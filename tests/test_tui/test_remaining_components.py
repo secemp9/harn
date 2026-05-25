@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
+import harnify_tui.components.cancellable_loader as cancellable_loader_module
 from harnify_tui import (
     AbortSignal,
     CancellableLoader,
@@ -107,6 +108,10 @@ def test_cancellable_loader_aborts_on_escape() -> None:
         assert aborted is True
     finally:
         loader.dispose()
+
+
+def test_cancellable_loader_module_exports_match_ts_surface() -> None:
+    assert cancellable_loader_module.__all__ == ["CancellableLoader"]
 
 
 def test_settings_list_renders_empty_state_and_search_hint() -> None:
