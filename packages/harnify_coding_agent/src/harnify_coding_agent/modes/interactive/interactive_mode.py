@@ -5277,6 +5277,7 @@ class InteractiveMode:
                 current_enabled_ids = None
 
         async def _update_session_models(enabled_ids: list[str] | None) -> None:
+            nonlocal current_enabled_ids
             current_enabled_ids = None if enabled_ids is None else [*enabled_ids]
             if enabled_ids and len(enabled_ids) < len(all_models):
                 resolved = await resolveModelScope(enabled_ids, getattr(self.session, "modelRegistry", None))
