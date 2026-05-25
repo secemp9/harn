@@ -3437,7 +3437,7 @@ class InteractiveMode:
             self.showStatus(
                 f"{action_label}. Selected {_value(selected_model, 'id')}. Credentials saved to {get_auth_path()}"
             )
-            await self.maybeWarnAboutAnthropicSubscriptionAuth(selected_model)
+            self._schedule_task(self.maybeWarnAboutAnthropicSubscriptionAuth(selected_model))
             self.checkDaxnutsEasterEgg(selected_model)
             return
 
@@ -3445,7 +3445,7 @@ class InteractiveMode:
         if selection_error is not None:
             self.showError(selection_error)
         else:
-            await self.maybeWarnAboutAnthropicSubscriptionAuth()
+            self._schedule_task(self.maybeWarnAboutAnthropicSubscriptionAuth())
 
     def showBedrockSetupDialog(self, providerId: str, providerName: str) -> None:
         set_focus = _callable_attr(self.ui, "setFocus")
