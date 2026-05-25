@@ -10,6 +10,9 @@ from harnify_coding_agent.core.session_manager import SessionInfo
 from harnify_coding_agent.modes.interactive.components.countdown_timer import CountdownTimer
 from harnify_coding_agent.modes.interactive.components.daxnuts import DaxnutsComponent
 from harnify_coding_agent.modes.interactive.components.dynamic_border import DynamicBorder
+from harnify_coding_agent.modes.interactive.components.earendil_announcement import (
+    EarendilAnnouncementComponent,
+)
 from harnify_coding_agent.modes.interactive.components.keybinding_hints import (
     KeyTextFormatOptions,
     format_key_text,
@@ -39,6 +42,9 @@ countdown_timer_module = importlib.import_module(
 daxnuts_module = importlib.import_module("harnify_coding_agent.modes.interactive.components.daxnuts")
 dynamic_border_module = importlib.import_module(
     "harnify_coding_agent.modes.interactive.components.dynamic_border"
+)
+earendil_announcement_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.earendil_announcement"
 )
 
 
@@ -225,6 +231,21 @@ def test_daxnuts_component_advances_tick_and_requests_render(monkeypatch) -> Non
 
 def test_daxnuts_module_exports_match_ts_surface() -> None:
     assert daxnuts_module.__all__ == ["DaxnutsComponent"]
+
+
+def test_earendil_announcement_renders_banner_without_image(monkeypatch) -> None:
+    monkeypatch.setattr(earendil_announcement_module, "_load_image_base64", lambda: None)
+    component = EarendilAnnouncementComponent()
+
+    rendered = _strip_ansi("\n".join(component.render(80)))
+
+    assert "pi has joined Earendil" in rendered
+    assert "Read the blog post:" in rendered
+    assert "https://mariozechner.at/posts/2026-04-08-ive-sold-out/" in rendered
+
+
+def test_earendil_announcement_module_exports_match_ts_surface() -> None:
+    assert earendil_announcement_module.__all__ == ["EarendilAnnouncementComponent"]
 
 
 def test_theme_selector_previews_and_confirms() -> None:
