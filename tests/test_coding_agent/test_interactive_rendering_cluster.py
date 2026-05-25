@@ -8,6 +8,7 @@ import pytest
 from harnify_agent.types import AgentToolResult
 from harnify_ai.types import AssistantMessage, TextContent, ToolCall, Usage, UsageCost
 from harnify_coding_agent.core.extensions.types import ToolDefinition
+from harnify_coding_agent.core.tools.edit_diff import EditDiffResult
 from harnify_coding_agent.core.keybindings import KeybindingsManager
 from harnify_coding_agent.core.tools.truncate import TruncationResult
 from harnify_coding_agent.modes.interactive.components import (
@@ -272,3 +273,66 @@ def test_builtin_bash_renderer_dedupes_truncation_footer() -> None:
 
     assert rendered.count("Full output: /tmp/full.log") == 1
     assert "Truncated: showing 2 of 10 lines" in rendered
+
+
+@pytest.mark.asyncio
+async def test_tool_execution_uses_builtin_edit_preview_renderer(tmp_path) -> None:
+    target = tmp_path / "demo.txt"
+    target.write_text("hello\nworld\n", encoding="utf-8")
+
+    component = ToolExecutionComponent(
+        "edit",
+        "tool-edit-1",
+        {"path": str(target), "edits": [{"oldText": "world\n", "newText": "WORLD\n"}]},
+        {},
+        None,
+        FakeUi(),
+        str(tmp_path),
+    )
+    component.setArgsComplete()
+    component.render(120)
+    await asyncio.sleep(0.05)
+    rendered = _strip_ansi("\n".join(component.render(120)))
+
+    assert "edit" in rendered
+    assert str(target) in rendered
+    assert "-2 world" in rendered
+    assert "+2 WORLD" in rendered
+
+
+@pytest.mark.asyncio
+async def test_tool_execution_edit_result_dedupes_preview_diff(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    preview = EditDiffResult(diff="-2 world\n+2 WORLD", firstChangedLine=2)
+
+    async def fake_compute_edits_diff(_path, _edits, _cwd):
+        return preview
+
+    monkeypatch.setattr(
+        "harnify_coding_agent.core.tools.edit.compute_edits_diff",
+        fake_compute_edits_diff,
+    )
+
+    component = ToolExecutionComponent(
+        "edit",
+        "tool-edit-2",
+        {"path": str(tmp_path / "demo.txt"), "edits": [{"oldText": "world\n", "newText": "WORLD\n"}]},
+        {},
+        None,
+        FakeUi(),
+        str(tmp_path),
+    )
+    component.setArgsComplete()
+    component.render(120)
+    await asyncio.sleep(0)
+    component.updateResult(
+        {
+            "content": [{"type": "text", "text": "Successfully replaced 1 block(s) in demo.txt."}],
+            "details": {"diff": "-2 world\n+2 WORLD", "patch": "--- demo\n+++ demo", "firstChangedLine": 2},
+            "isError": False,
+        },
+        False,
+    )
+    rendered = _strip_ansi("\n".join(component.render(120)))
+
+    assert rendered.count("-2 world") == 1
+    assert rendered.count("+2 WORLD") == 1
