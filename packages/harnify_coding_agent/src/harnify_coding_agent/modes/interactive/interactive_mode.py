@@ -5057,19 +5057,6 @@ class InteractiveMode:
             done()
             self.showError(str(error))
 
-    async def _handle_theme_select(self, theme_name: str, done: Callable[[], None]) -> None:
-        result = interactive_theme.set_theme(theme_name, True)
-        if not result.get("success"):
-            self.showError(str(result.get("error", f"Theme not found: {theme_name}")))
-            return
-        set_theme = _callable_attr(self.settingsManager, "setTheme")
-        if set_theme is not None:
-            set_theme(theme_name)
-        self.updateEditorBorderColor()
-        done()
-        self._request_render()
-        self.showStatus(f"Theme: {theme_name}")
-
     async def _handle_session_select(self, sessionPath: str, done: Callable[[], None]) -> None:
         done()
         await self.handleResumeSession(sessionPath)
