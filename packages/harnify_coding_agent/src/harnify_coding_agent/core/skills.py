@@ -10,11 +10,11 @@ from typing import Any, TypedDict
 from pathspec import GitIgnoreSpec
 from ruamel.yaml import YAML
 
+from harnify_coding_agent.config import CONFIG_DIR_NAME
 from harnify_coding_agent.core.diagnostics import ResourceCollision, ResourceDiagnostic
 from harnify_coding_agent.core.source_info import SourceInfo, create_synthetic_source_info
 from harnify_coding_agent.utils.paths import canonicalize_path, resolve_path
 
-CONFIG_DIR_NAME = ".harnify"
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
 IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"]
