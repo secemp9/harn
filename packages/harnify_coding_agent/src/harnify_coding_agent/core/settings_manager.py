@@ -117,7 +117,7 @@ class FileSettingsStorage(SettingsStorage):
                 handle.write(next_value)
         finally:
             if release_lock is not None:
-                release_lock.release()
+                release_lock()
 
 
 class InMemorySettingsStorage(SettingsStorage):
