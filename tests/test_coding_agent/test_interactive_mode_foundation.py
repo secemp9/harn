@@ -4348,3 +4348,31 @@ async def test_handle_resume_session_accepts_object_shaped_runtime_result() -> N
     assert getattr(result, "cancelled", None) is False
     assert rendered == [True]
     assert statuses == ["Resumed session"]
+
+
+@pytest.mark.asyncio
+async def test_handle_resume_session_accepts_object_shaped_options() -> None:
+    calls: list[tuple[str, dict[str, Any] | None]] = []
+
+    async def switch_session(session_path: str, options: dict[str, Any] | None = None) -> Any:
+        calls.append((session_path, options))
+        return SimpleNamespace(cancelled=False)
+
+    mode = InteractiveMode(
+        runtimeHost=SimpleNamespace(switchSession=switch_session),
+        statusContainer=SimpleNamespace(clear=lambda: None),
+    )
+    mode.renderCurrentSessionState = lambda: None  # type: ignore[method-assign]
+    mode.showStatus = lambda _message: None  # type: ignore[method-assign]
+
+    await mode.handleResumeSession(
+        "/tmp/session.pi.jsonl",
+        SimpleNamespace(withSession=SimpleNamespace(id="session-2")),
+    )
+
+    assert calls == [
+        (
+            "/tmp/session.pi.jsonl",
+            {"withSession": SimpleNamespace(id="session-2")},
+        )
+    ]
