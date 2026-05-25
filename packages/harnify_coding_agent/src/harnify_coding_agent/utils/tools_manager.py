@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import secrets
 import shutil
 import stat
 import subprocess
@@ -197,7 +198,7 @@ async def download_tool(tool: ToolName, *, tools_dir: str | None = None) -> str:
     await download_file(download_url, str(archive_path))
 
     extract_dir = resolved_tools_dir / (
-        f"extract_tmp_{config.binaryName}_{os.getpid()}_{int(time.time() * 1000)}"
+        f"extract_tmp_{config.binaryName}_{os.getpid()}_{int(time.time() * 1000)}_{secrets.token_hex(4)}"
     )
     extract_dir.mkdir(parents=True, exist_ok=True)
 
@@ -221,13 +222,10 @@ async def download_tool(tool: ToolName, *, tools_dir: str | None = None) -> str:
                 f"Binary not found in archive: expected {binary_file_name} under {extract_dir}"
             )
 
-        if binary_path.exists():
-            binary_path.unlink()
         extracted_binary.replace(binary_path)
 
         if plat != "win32":
-            current_mode = stat.S_IMODE(binary_path.stat().st_mode)
-            binary_path.chmod(current_mode | 0o755)
+            binary_path.chmod(stat.S_IMODE(0o755))
     finally:
         archive_path.unlink(missing_ok=True)
         shutil.rmtree(extract_dir, ignore_errors=True)
@@ -330,32 +328,6 @@ getToolPath = get_tool_path
 isOfflineModeEnabled = is_offline_mode_enabled
 
 __all__ = [
-    "DOWNLOAD_TIMEOUT_MS",
-    "NETWORK_TIMEOUT_MS",
-    "TERMUX_PACKAGES",
-    "TOOLS",
-    "TOOLS_DIR",
-    "ToolConfig",
-    "ToolName",
-    "commandExists",
-    "command_exists",
-    "downloadFile",
-    "downloadTool",
-    "downloadTool",
-    "download_file",
-    "download_tool",
     "ensureTool",
-    "ensure_tool",
-    "extractTarGzArchive",
-    "extractZipArchive",
-    "extract_tar_gz_archive",
-    "extract_zip_archive",
-    "findBinaryRecursively",
-    "find_binary_recursively",
-    "getLatestVersion",
     "getToolPath",
-    "get_latest_version",
-    "get_tool_path",
-    "isOfflineModeEnabled",
-    "is_offline_mode_enabled",
 ]
