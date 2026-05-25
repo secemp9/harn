@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
