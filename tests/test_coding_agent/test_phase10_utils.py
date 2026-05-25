@@ -12,6 +12,7 @@ import harnify_coding_agent.utils.child_process as child_process_module
 import harnify_coding_agent.utils.fs_watch as fs_watch_module
 import harnify_coding_agent.utils.frontmatter as frontmatter_module
 import harnify_coding_agent.utils.git as git_module
+import harnify_coding_agent.utils.html as html_module
 from harnify_coding_agent.utils.changelog import ChangelogEntry, compare_versions, get_new_entries, parse_changelog
 from harnify_coding_agent.utils.child_process import spawn_process, spawn_process_sync, wait_for_child_process
 from harnify_coding_agent.utils.frontmatter import parse_frontmatter, strip_frontmatter
@@ -157,6 +158,14 @@ def test_decode_html_entity_helpers() -> None:
     assert decoded.text == '"'
     assert decoded.length == 6
     assert decode_html_entity_at("before &this_entity_name_is_too_long; after", 7) is None
+
+
+def test_html_module_exports_match_ts_surface() -> None:
+    assert html_module.__all__ == [
+        "DecodedHtmlEntity",
+        "decodeHtmlEntity",
+        "decodeHtmlEntityAt",
+    ]
 
 
 def test_get_shell_env_prepends_bin_dir_without_duplicating_and_preserves_path_key(
