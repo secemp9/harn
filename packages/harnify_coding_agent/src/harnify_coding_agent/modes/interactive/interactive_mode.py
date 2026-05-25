@@ -2711,6 +2711,15 @@ class InteractiveMode:
         self.chatContainer.addChild(EarendilAnnouncementComponent())
         self._request_render()
 
+    def handleDaxnuts(self) -> None:
+        self.chatContainer.addChild(Spacer(1))
+        self.chatContainer.addChild(DaxnutsComponent(self.ui))
+        self._request_render()
+
+    def checkDaxnutsEasterEgg(self, model: Any) -> None:
+        if str(_value(model, "provider", "")) == "opencode" and "kimi-k2.5" in str(_value(model, "id", "")).lower():
+            self.handleDaxnuts()
+
     async def handleResumeSession(
         self,
         sessionPath: str,
