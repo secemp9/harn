@@ -62,6 +62,7 @@ from harnify_coding_agent.config import (
     get_share_viewer_url,
     get_update_instruction,
 )
+from harnify_coding_agent.core.bash_executor import BashResult
 from harnify_coding_agent.core.agent_session import parse_skill_block
 from harnify_coding_agent.core.agent_session_runtime import SessionImportFileNotFoundError
 from harnify_coding_agent.core.footer_data_provider import FooterDataProvider
@@ -79,6 +80,7 @@ from harnify_coding_agent.core.session_cwd import MissingSessionCwdError, format
 from harnify_coding_agent.core.session_manager import SessionManager
 from harnify_coding_agent.core.slash_commands import BUILTIN_SLASH_COMMANDS, _LOCAL_ALIAS_SLASH_COMMANDS
 from harnify_coding_agent.core.telemetry import is_install_telemetry_enabled
+from harnify_coding_agent.core.tools.truncate import TruncationResult
 from harnify_coding_agent.modes.interactive.components.assistant_message import AssistantMessageComponent
 from harnify_coding_agent.modes.interactive.components.armin import ArminComponent
 from harnify_coding_agent.modes.interactive.components.bash_execution import BashExecutionComponent
@@ -3007,37 +3009,85 @@ class InteractiveMode:
             await self.handleFatalRuntimeError("Failed to create session", error)
 
     async def handleBashCommand(self, command: str, excludeFromContext: bool = False) -> None:
-        original_escape = getattr(self.defaultEditor, "onEscape", None)
-        bash_component = BashExecutionComponent(command, self.ui, excludeFromContext)
-        bash_component.setExpanded(self.toolOutputExpanded)
+        extension_runner = getattr(self.session, "extensionRunner", None)
+        emit_user_bash = _callable_attr(extension_runner, "emit_user_bash") or _callable_attr(
+            extension_runner, "emitUserBash"
+        )
+        event_result = (
+            await _maybe_await(
+                emit_user_bash(
+                    {
+                        "type": "user_bash",
+                        "command": command,
+                        "excludeFromContext": excludeFromContext,
+                        "cwd": self.sessionManager.getCwd(),
+                    }
+                )
+            )
+            if emit_user_bash is not None
+            else None
+        )
+        direct_result = _value(event_result, "result")
+        if direct_result:
+            result = _coerce_bash_result(direct_result)
+            self.bashComponent = BashExecutionComponent(command, self.ui, excludeFromContext)
+            if bool(getattr(self.session, "isStreaming", False)):
+                self.pendingMessagesContainer.addChild(self.bashComponent)
+                self.pendingBashComponents.append(self.bashComponent)
+            else:
+                self.chatContainer.addChild(self.bashComponent)
+            if result.output:
+                self.bashComponent.appendOutput(result.output)
+            self.bashComponent.setComplete(
+                result.exitCode,
+                result.cancelled,
+                _make_bash_truncation_result(result.output) if result.truncated else None,
+                result.fullOutputPath,
+            )
+            record_bash_result = _callable_attr(self.session, "recordBashResult") or _callable_attr(
+                self.session, "record_bash_result"
+            )
+            if record_bash_result is not None:
+                record_bash_result(command, result, {"excludeFromContext": excludeFromContext})
+            self.bashComponent = None
+            self._request_render()
+            return
+
         is_deferred = bool(getattr(self.session, "isStreaming", False))
+        self.bashComponent = BashExecutionComponent(command, self.ui, excludeFromContext)
         if is_deferred:
-            self.pendingMessagesContainer.addChild(bash_component)
-            self.pendingBashComponents.append(bash_component)
+            self.pendingMessagesContainer.addChild(self.bashComponent)
+            self.pendingBashComponents.append(self.bashComponent)
         else:
-            self.chatContainer.addChild(bash_component)
-        self.bashComponent = bash_component
-        self.defaultEditor.onEscape = lambda: _callable_attr(self.session, "abortBash") and self.session.abortBash()
+            self.chatContainer.addChild(self.bashComponent)
         self._request_render()
+
+        def _on_chunk(chunk: str) -> None:
+            if self.bashComponent is not None:
+                self.bashComponent.appendOutput(chunk)
+                self._request_render()
+
         try:
             result = await self.session.executeBash(
                 command,
-                bash_component.appendOutput,
-                {"excludeFromContext": excludeFromContext},
+                _on_chunk,
+                {"excludeFromContext": excludeFromContext, "operations": _value(event_result, "operations")},
             )
-            bash_component.setComplete(
-                _value(result, "exitCode"),
-                bool(_value(result, "cancelled", False)),
-                None,
-                _value(result, "fullOutputPath"),
-            )
+            result = _coerce_bash_result(result)
+            if self.bashComponent is not None:
+                self.bashComponent.setComplete(
+                    result.exitCode,
+                    result.cancelled,
+                    _make_bash_truncation_result(result.output) if result.truncated else None,
+                    result.fullOutputPath,
+                )
         except Exception as error:  # noqa: BLE001
-            bash_component.setComplete(None, False)
-            self.showError(f"Bash command failed: {error}")
-        finally:
-            self.defaultEditor.onEscape = original_escape
-            self.bashComponent = None
-            self._request_render()
+            if self.bashComponent is not None:
+                self.bashComponent.setComplete(None, False)
+            self.showError(f"Bash command failed: {str(error) or 'Unknown error'}")
+
+        self.bashComponent = None
+        self._request_render()
 
     async def handleSubmittedText(self, text: str) -> None:
         text = text.strip()
