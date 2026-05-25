@@ -541,13 +541,14 @@ def create_edit_tool_definition(
         theme_obj: Any,
         context: Any,
     ) -> Container:
-        call_component = context.state.get("callComponent")
+        raw_call_component = context.state.get("callComponent")
+        call_component = _ensure_edit_call_render_component(raw_call_component) if isinstance(raw_call_component, Box) else None
         preview_input = _get_renderable_preview_input(context.args)
         args_key = _preview_args_key(*preview_input) if preview_input is not None else None
         result_diff = _value(_value(result, "details"), "diff") if not context.isError else None
 
         changed = False
-        if isinstance(call_component, _EditCallRenderComponent):
+        if call_component is not None:
             if isinstance(result_diff, str):
                 changed = _set_edit_preview(
                     call_component,
@@ -560,7 +561,13 @@ def create_edit_tool_definition(
             if changed:
                 _build_edit_call_component(call_component, context.args, theme_obj)
 
-        output = _format_edit_result(context.args, call_component.preview if isinstance(call_component, _EditCallRenderComponent) else None, result, theme_obj, context.isError)
+        output = _format_edit_result(
+            context.args,
+            call_component.preview if call_component is not None else None,
+            result,
+            theme_obj,
+            context.isError,
+        )
         component = context.lastComponent if context.lastComponent is not None else Container()
         component.clear()
         if not output:
