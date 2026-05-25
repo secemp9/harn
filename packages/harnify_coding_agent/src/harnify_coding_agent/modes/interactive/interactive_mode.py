@@ -5430,7 +5430,10 @@ class InteractiveMode:
             if _value(result, "cancelled", False):
                 self.showStatus("Navigation cancelled")
                 return
-            self.renderCurrentSessionState()
+            clear_chat = _callable_attr(self.chatContainer, "clear")
+            if clear_chat is not None:
+                clear_chat()
+            self.renderInitialMessages()
             get_text = _callable_attr(self.editor, "getText")
             current_text = str(get_text() or "") if get_text is not None else ""
             editor_text = _value(result, "editorText")
@@ -5439,7 +5442,7 @@ class InteractiveMode:
             self.showStatus("Navigated to selected point")
             flush_queue = _callable_attr(self, "flushCompactionQueue")
             if flush_queue is not None:
-                await _maybe_await(flush_queue({"willRetry": False}))
+                self._schedule_task(_maybe_await(flush_queue({"willRetry": False})))
         except Exception as error:  # noqa: BLE001
             self.showError(str(error))
         finally:
@@ -5533,7 +5536,7 @@ class InteractiveMode:
         self.showStatus("Navigated to selected point")
         flush_queue = _callable_attr(self, "flushCompactionQueue")
         if flush_queue is not None:
-            await _maybe_await(flush_queue({"willRetry": False}))
+            self._schedule_task(_maybe_await(flush_queue({"willRetry": False})))
         return dict(result) if isinstance(result, dict) else {"cancelled": False}
 
 
