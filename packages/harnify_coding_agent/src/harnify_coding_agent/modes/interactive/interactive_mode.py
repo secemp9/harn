@@ -2643,6 +2643,18 @@ class InteractiveMode:
             self._set_editor_text("")
             await self.handleReloadCommand()
             return
+        if text == "/debug":
+            self._set_editor_text("")
+            self.handleDebugCommand()
+            return
+        if text == "/arminsayshi":
+            self._set_editor_text("")
+            self.handleArminSaysHi()
+            return
+        if text == "/dementedelves":
+            self._set_editor_text("")
+            self.handleDementedDelves()
+            return
         if text == "/quit":
             self._set_editor_text("")
             await self.shutdown()
