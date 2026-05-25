@@ -5017,7 +5017,12 @@ class InteractiveMode:
         if refresh is not None:
             refresh()
         get_available = _callable_attr(model_registry, "getAvailable")
-        return list(get_available() or []) if get_available is not None else []
+        if get_available is None:
+            return []
+        try:
+            return list(get_available() or [])
+        except Exception:
+            return []
 
     def showSettingsSelector(self) -> None:
         available_themes = [
