@@ -646,7 +646,6 @@ def set_global_theme(theme_instance: Theme) -> None:
 
 
 def init_theme(theme_name: str | None = None, enableWatcher: bool = False) -> None:
-    stop_theme_watcher()
     name = theme_name or get_default_theme()
     global _CURRENT_THEME_NAME
     _CURRENT_THEME_NAME = name
@@ -660,7 +659,6 @@ def init_theme(theme_name: str | None = None, enableWatcher: bool = False) -> No
 
 
 def set_theme(name: str, enableWatcher: bool = False) -> dict[str, Any]:
-    stop_theme_watcher()
     global _CURRENT_THEME_NAME
     _CURRENT_THEME_NAME = name
     try:
