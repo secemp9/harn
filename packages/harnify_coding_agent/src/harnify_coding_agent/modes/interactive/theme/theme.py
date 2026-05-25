@@ -440,11 +440,13 @@ def _resolve_var_refs(
         return value
     if not isinstance(value, str):
         return str(value)
-    if value not in variables:
+    if value == "" or value.startswith("#"):
         return value
+    if value not in variables:
+        raise ValueError(f"Variable reference not found: {value}")
     trail = set(visited or set())
     if value in trail:
-        raise ValueError(f"Cyclic theme variable reference: {value}")
+        raise ValueError(f"Circular variable reference detected: {value}")
     trail.add(value)
     return _resolve_var_refs(variables[value], variables, trail)
 
