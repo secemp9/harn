@@ -132,7 +132,6 @@ def prepare_edit_arguments(input_value: Any) -> Any:
         return input_value
 
     args = input_value
-    changed = False
     edits_value = args.get("edits")
     if isinstance(edits_value, str):
         try:
@@ -140,15 +139,13 @@ def prepare_edit_arguments(input_value: Any) -> Any:
         except json.JSONDecodeError:
             parsed = None
         if isinstance(parsed, list):
-            args = dict(args)
             args["edits"] = parsed
-            changed = True
 
     legacy = args
     old_text = legacy.get("oldText")
     new_text = legacy.get("newText")
     if not isinstance(old_text, str) or not isinstance(new_text, str):
-        return args if not changed else dict(args)
+        return args
 
     edits = list(legacy.get("edits")) if isinstance(legacy.get("edits"), list) else []
     edits.append({"oldText": old_text, "newText": new_text})
@@ -335,7 +332,7 @@ def _format_edit_result(
     details = _value(result, "details")
     result_diff = _value(details, "diff")
     if isinstance(result_diff, str) and result_diff != preview_diff:
-        return render_diff(result_diff, {"filePath": raw_path or None})
+        return render_diff(result_diff, {"filePath": raw_path if raw_path is not None else None})
     return None
 
 
