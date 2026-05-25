@@ -36,6 +36,7 @@ from harnify_coding_agent.core.tools import (
 from harnify_coding_agent.core.tools import file_mutation_queue as file_mutation_queue_module
 from harnify_coding_agent.core.tools import output_accumulator as output_accumulator_module
 from harnify_coding_agent.core.tools import path_utils as path_utils_module
+from harnify_coding_agent.core.tools import render_utils as render_utils_module
 
 
 def test_truncate_head_honors_line_and_byte_limits() -> None:
@@ -104,6 +105,18 @@ def test_get_text_output_strips_ansi_and_renders_hidden_images(monkeypatch: pyte
     )
 
     assert get_text_output(result, show_images=False) == "hello\nworld\n[image image/png]"
+
+
+def test_render_utils_module_exports_match_ts_surface() -> None:
+    assert render_utils_module.__all__ == [
+        "ToolRenderResultLike",
+        "getTextOutput",
+        "invalidArgText",
+        "normalizeDisplayText",
+        "replaceTabs",
+        "shortenPath",
+        "str",
+    ]
 
 
 @pytest.mark.asyncio
