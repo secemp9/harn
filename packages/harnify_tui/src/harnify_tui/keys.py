@@ -414,13 +414,13 @@ def matches_legacy_modifier_sequence(data: str, key: str, modifier: int) -> bool
     return False
 
 
-def is_key_release(data: str) -> bool:
+def isKeyRelease(data: str) -> bool:
     if "\x1b[200~" in data:
         return False
     return any(token in data for token in (":3u", ":3~", ":3A", ":3B", ":3C", ":3D", ":3H", ":3F"))
 
 
-def is_key_repeat(data: str) -> bool:
+def isKeyRepeat(data: str) -> bool:
     if "\x1b[200~" in data:
         return False
     return any(token in data for token in (":2u", ":2~", ":2A", ":2B", ":2C", ":2D", ":2H", ":2F"))
