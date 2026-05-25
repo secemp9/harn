@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from typing import TextIO
-
 from harnify_tui.fuzzy import fuzzy_filter
 
 from harnify_coding_agent.core.auth_guidance import format_no_models_available_message
@@ -27,33 +24,20 @@ async def list_models(
     model_registry: object,
     search_pattern: str | None = None,
 ) -> None:
-    await _list_models(model_registry, search_pattern)
-
-
-async def _list_models(
-    model_registry: object,
-    search_pattern: str | None = None,
-    *,
-    stream: TextIO | None = None,
-    error_stream: TextIO | None = None,
-) -> None:
-    out = stream or sys.stdout
-    err = error_stream or sys.stderr
-
     load_error = getattr(model_registry, "getError", lambda: None)()
     if load_error:
-        err.write(f"{_YELLOW}Warning: errors loading models.json:\n{load_error}{_RESET}\n")
+        print(f"{_YELLOW}Warning: errors loading models.json:\n{load_error}{_RESET}")
 
     models = list(model_registry.getAvailable())
     if not models:
-        out.write(format_no_models_available_message() + "\n")
+        print(format_no_models_available_message())
         return
 
     filtered_models = (
         fuzzy_filter(models, search_pattern, lambda model: f"{model.provider} {model.id}") if search_pattern else models
     )
     if not filtered_models:
-        out.write(f'No models matching "{search_pattern}"\n')
+        print(f'No models matching "{search_pattern}"')
         return
 
     filtered_models = sorted(filtered_models, key=lambda model: (model.provider, model.id))
@@ -91,9 +75,9 @@ async def _list_models(
             headers["images"].ljust(widths["images"]),
         ]
     )
-    out.write(header_line + "\n")
+    print(header_line)
     for row in rows:
-        out.write(
+        print(
             "  ".join(
                 [
                     row["provider"].ljust(widths["provider"]),
@@ -104,11 +88,10 @@ async def _list_models(
                     row["images"].ljust(widths["images"]),
                 ]
             )
-            + "\n"
         )
 
 
 formatTokenCount = format_token_count
 listModels = list_models
 
-__all__ = ["listModels"]
+__all__ = ["formatTokenCount", "listModels"]
