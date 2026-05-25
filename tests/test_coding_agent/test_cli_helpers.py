@@ -168,7 +168,7 @@ def test_file_processor_module_exports_match_ts_surface() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_models_formats_rows_and_searches() -> None:
+async def test_list_models_formats_rows_and_searches(capsys: pytest.CaptureFixture[str]) -> None:
     class Registry:
         def getError(self):
             return None
@@ -179,19 +179,20 @@ async def test_list_models_formats_rows_and_searches() -> None:
                 _model("openai", "gpt-4o-mini", reasoning=False),
             ]
 
-    out = io.StringIO()
-    await list_models_module._list_models(Registry(), "sonnet", stream=out)
+    await list_models_module.list_models(Registry(), "sonnet")
 
-    rendered = out.getvalue()
+    rendered = capsys.readouterr().out
     assert "provider" in rendered
     assert "claude-sonnet-4-5" in rendered
     assert "200K" in rendered
     assert "gpt-4o-mini" not in rendered
-    assert list_models_module.__all__ == ["listModels"]
+    assert list_models_module.__all__ == ["formatTokenCount", "listModels"]
 
 
 @pytest.mark.asyncio
-async def test_list_models_warns_in_yellow_when_registry_load_fails() -> None:
+async def test_list_models_warns_in_yellow_when_registry_load_fails(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     class Registry:
         def getError(self):
             return "broken"
@@ -199,12 +200,10 @@ async def test_list_models_warns_in_yellow_when_registry_load_fails() -> None:
         def getAvailable(self):
             return [_model("anthropic", "claude-sonnet-4-5")]
 
-    out = io.StringIO()
-    err = io.StringIO()
+    await list_models_module.list_models(Registry())
 
-    await list_models_module._list_models(Registry(), stream=out, error_stream=err)
-
-    assert err.getvalue() == "\x1b[33mWarning: errors loading models.json:\nbroken\x1b[0m\n"
+    captured = capsys.readouterr()
+    assert captured.out.startswith("\x1b[33mWarning: errors loading models.json:\nbroken\x1b[0m\n")
 
 
 def test_config_helpers_point_at_bundled_assets() -> None:
