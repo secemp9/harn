@@ -230,6 +230,22 @@ def test_toggle_thinking_block_visibility_rebuilds_chat_and_reports_status() -> 
     assert statuses == ["rebuilt", "Thinking blocks: hidden"]
 
 
+def test_update_editor_border_color_matches_ts_and_requests_render() -> None:
+    ui = FakeUi()
+    editor = FakeEditor()
+    mode = InteractiveMode(
+        ui=ui,
+        editor=editor,
+        defaultEditor=editor,
+        session=SimpleNamespace(state=SimpleNamespace(thinkingLevel="high")),
+    )
+
+    mode.updateEditorBorderColor()
+
+    assert editor.borderColor == interactive_mode_module.interactive_theme.theme.getThinkingBorderColor("high")
+    assert ui.render_calls == [None]
+
+
 def test_extension_ui_context_persists_theme_and_rebuilds_autocomplete() -> None:
     current_theme = {"value": "dark"}
     settings = SimpleNamespace(
