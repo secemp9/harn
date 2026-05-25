@@ -8,6 +8,8 @@ import subprocess
 import sys
 from typing import Any, Protocol
 
+from harnify_coding_agent.utils.clipboard_native import clipboard as native_clipboard
+
 MAX_OSC52_ENCODED_LENGTH = 100_000
 _DEFAULT_TIMEOUT_MS = 5_000
 
@@ -150,7 +152,7 @@ def _platform() -> str:
 
 
 def _get_native_clipboard() -> _NativeClipboard | None:
-    return None
+    return native_clipboard
 
 
 copyToClipboard = copy_to_clipboard
