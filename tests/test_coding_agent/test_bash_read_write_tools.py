@@ -272,6 +272,15 @@ async def test_create_local_bash_operations_preserves_explicit_empty_env(
     assert b"".join(chunks) == b"ok"
 
 
+@pytest.mark.asyncio
+async def test_create_local_bash_operations_maps_signal_exit_to_none(tmp_path: Path) -> None:
+    operations = create_local_bash_operations()
+
+    result = await operations.exec("kill -9 $$", str(tmp_path), {"onData": lambda _chunk: None})
+
+    assert result["exitCode"] is None
+
+
 def test_bash_tool_definition_surface_matches_ts(tmp_path: Path) -> None:
     definition = create_bash_tool_definition(str(tmp_path))
 
