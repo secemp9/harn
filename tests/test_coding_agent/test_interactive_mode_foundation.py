@@ -329,7 +329,27 @@ def test_update_editor_border_color_matches_ts_and_requests_render() -> None:
     assert ui.render_calls == [None]
 
 
-def test_on_editor_change_uses_session_thinking_level_when_not_in_bash_mode() -> None:
+def test_update_editor_border_color_uses_tracked_bash_mode_state() -> None:
+    ui = FakeUi()
+    editor = FakeEditor()
+    editor.setText("plain text")
+    mode = InteractiveMode(
+        ui=ui,
+        editor=editor,
+        defaultEditor=editor,
+        session=SimpleNamespace(thinkingLevel="medium"),
+    )
+    mode.isBashMode = True
+
+    mode.updateEditorBorderColor()
+
+    expected = interactive_mode_module.interactive_theme.theme.getBashModeBorderColor()
+    assert callable(editor.borderColor)
+    assert editor.borderColor("sample") == expected("sample")
+    assert ui.render_calls == [None]
+
+
+def test_on_editor_change_only_updates_border_when_bash_mode_toggles() -> None:
     ui = FakeUi()
     editor = FakeEditor()
     mode = InteractiveMode(
@@ -339,6 +359,12 @@ def test_on_editor_change_uses_session_thinking_level_when_not_in_bash_mode() ->
         session=SimpleNamespace(thinkingLevel="medium"),
     )
 
+    mode._on_editor_change("plain text")
+
+    assert editor.borderColor is None
+    assert ui.render_calls == []
+
+    mode.isBashMode = True
     mode._on_editor_change("plain text")
 
     expected = interactive_mode_module.interactive_theme.theme.getThinkingBorderColor("medium")
@@ -3132,6 +3158,7 @@ def test_setup_key_handlers_escape_clears_bash_mode_input() -> None:
     editor.setText("! ls -la")
     border_updates: list[bool] = []
     mode = InteractiveMode(defaultEditor=editor, editor=editor)
+    mode.isBashMode = True
     mode.updateEditorBorderColor = lambda: border_updates.append(True)  # type: ignore[method-assign]
 
     mode.setupKeyHandlers()
@@ -3139,6 +3166,7 @@ def test_setup_key_handlers_escape_clears_bash_mode_input() -> None:
     editor.onEscape()
 
     assert editor.text == ""
+    assert mode.isBashMode is False
     assert border_updates == [True]
 
 
