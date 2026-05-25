@@ -92,8 +92,6 @@ async def list_models(
             )
         )
 
-
-formatTokenCount = format_token_count
 listModels = list_models
 
-__all__ = ["formatTokenCount", "listModels"]
+__all__ = ["listModels"]
