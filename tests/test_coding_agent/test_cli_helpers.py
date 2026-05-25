@@ -294,6 +294,39 @@ async def test_create_session_manager_handles_continue_and_fork(tmp_path: Path, 
 
 
 @pytest.mark.asyncio
+async def test_create_session_manager_fork_failures_exit_with_error_message(tmp_path: Path, monkeypatch) -> None:
+    agent_dir = tmp_path / "agent"
+    monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
+
+    current_project = tmp_path / "current"
+    current_project.mkdir()
+    source_project = tmp_path / "source"
+    source_project.mkdir()
+    source_manager = SessionManager.create(str(source_project))
+    _persist_session(source_manager)
+    settings = SettingsManager.inMemory()
+    err = io.StringIO()
+
+    monkeypatch.setattr(
+        SessionManager,
+        "forkFrom",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("fork boom")),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        await create_session_manager(
+            parse_args(["--fork", source_manager.getSessionId()]),
+            str(current_project),
+            None,
+            settings,
+            error_stream=err,
+        )
+
+    assert excinfo.value.code == 1
+    assert err.getvalue() == "Error: fork boom\n"
+
+
+@pytest.mark.asyncio
 async def test_create_session_manager_prompts_to_fork_global_sessions(tmp_path: Path, monkeypatch) -> None:
     agent_dir = tmp_path / "agent"
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
