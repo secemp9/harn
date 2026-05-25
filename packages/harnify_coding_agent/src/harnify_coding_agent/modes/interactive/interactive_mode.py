@@ -2308,40 +2308,79 @@ class InteractiveMode:
         self.stop()
         raise SystemExit(1)
 
-    def _renderSessionMessages(self, clearChat: bool) -> None:
-        if clearChat:
-            clear = _callable_attr(self.chatContainer, "clear")
-            if clear is not None:
-                clear()
+    def renderSessionContext(self, sessionContext: Any, options: dict[str, Any] | None = None) -> None:
+        rendered_pending_tools: dict[str, ToolExecutionComponent] = {}
+        self._toolComponentsById = {}
+
+        if bool(_value(options, "updateFooter", False)):
+            invalidate_footer = _callable_attr(self.footer, "invalidate")
+            if invalidate_footer is not None:
+                invalidate_footer()
+            self.updateEditorBorderColor()
+
+        messages = list(_value(sessionContext, "messages", getattr(self.session.state, "messages", [])) or [])
+        for message in messages:
+            role = _message_role(message)
+            if role == "assistant":
+                self.addMessageToChat(message, options=options)
+                for content in list(_value(message, "content", []) or []):
+                    if _value(content, "type") != "toolCall":
+                        continue
+                    tool_name = str(_value(content, "name", ""))
+                    tool_call_id = str(_value(content, "id", ""))
+                    component = ToolExecutionComponent(
+                        tool_name,
+                        tool_call_id,
+                        _value(content, "arguments", {}),
+                        {
+                            "showImages": _safe_call_bool(self.settingsManager, "getShowImages", True),
+                            "imageWidthCells": _safe_call_int(self.settingsManager, "getImageWidthCells", 40),
+                        },
+                        _tool_definition(self.session, tool_name),
+                        self.ui,
+                        self.sessionManager.getCwd(),
+                    )
+                    component.setExpanded(self.toolOutputExpanded)
+                    self.chatContainer.addChild(component)
+
+                    if _value(message, "stopReason") in {"aborted", "error"}:
+                        if _value(message, "stopReason") == "aborted":
+                            retry_attempt = int(_value(self.session, "retryAttempt", 0) or 0)
+                            error_message = (
+                                f"Aborted after {retry_attempt} retry attempt{'s' if retry_attempt > 1 else ''}"
+                                if retry_attempt > 0
+                                else "Operation aborted"
+                            )
+                        else:
+                            error_message = str(_value(message, "errorMessage", "") or "Error")
+                        component.updateResult(
+                            {"content": [{"type": "text", "text": error_message}], "isError": True}
+                        )
+                    else:
+                        rendered_pending_tools[tool_call_id] = component
+                continue
+
+            if role == "toolResult":
+                tool_call_id = str(_value(message, "toolCallId", ""))
+                component = rendered_pending_tools.get(tool_call_id)
+                if component is not None:
+                    component.updateResult(message)
+                    rendered_pending_tools.pop(tool_call_id, None)
+                continue
+
+            self.addMessageToChat(message, options=options)
+
+        self._toolComponentsById = rendered_pending_tools
+        self._request_render()
+
+    def renderInitialMessages(self) -> None:
         context_builder = _callable_attr(self.sessionManager, "buildSessionContext")
         context = (
             context_builder()
             if context_builder is not None
             else SimpleNamespace(messages=self.session.state.messages)
         )
-        messages = list(_value(context, "messages", getattr(self.session.state, "messages", [])) or [])
-        pending_tools: dict[str, ToolExecutionComponent] = {}
-        self._toolComponentsById = pending_tools
-
-        for message in messages:
-            role = _message_role(message)
-            if role == "toolResult":
-                tool_call_id = str(_value(message, "toolCallId", ""))
-                component = pending_tools.get(tool_call_id)
-                if component is not None:
-                    component.updateResult(
-                        {
-                            "content": list(_value(message, "content", []) or []),
-                            "details": _value(message, "details"),
-                            "isError": bool(_value(message, "isError", False)),
-                        },
-                        False,
-                    )
-                continue
-            self.addMessageToChat(message, pending_tools)
-
-    def renderInitialMessages(self) -> None:
-        self._renderSessionMessages(clearChat=False)
+        self.renderSessionContext(context, {"updateFooter": True, "populateHistory": True})
         get_entries = _callable_attr(self.sessionManager, "getEntries")
         all_entries = list(get_entries() or []) if get_entries is not None else []
         compaction_count = sum(1 for entry in all_entries if _value(entry, "type") == "compaction")
@@ -2350,7 +2389,16 @@ class InteractiveMode:
             self.showStatus(f"Session compacted {times}")
 
     def rebuildChatFromMessages(self) -> None:
-        self._renderSessionMessages(clearChat=True)
+        clear = _callable_attr(self.chatContainer, "clear")
+        if clear is not None:
+            clear()
+        context_builder = _callable_attr(self.sessionManager, "buildSessionContext")
+        context = (
+            context_builder()
+            if context_builder is not None
+            else SimpleNamespace(messages=self.session.state.messages)
+        )
+        self.renderSessionContext(context)
 
     def renderCurrentSessionState(self) -> None:
         clear = _callable_attr(self.chatContainer, "clear")
@@ -2372,6 +2420,7 @@ class InteractiveMode:
         self,
         message: Any,
         pendingTools: dict[str, ToolExecutionComponent] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> None:
         role = _message_role(message)
         markdown_theme = self.getMarkdownThemeWithSettings()
@@ -2380,7 +2429,22 @@ class InteractiveMode:
         if role == "user":
             text = _extract_user_text(message)
             if text:
-                self.chatContainer.addChild(UserMessageComponent(text, markdown_theme))
+                if getattr(self.chatContainer, "children", []):
+                    self.chatContainer.addChild(Spacer(1))
+                skill_block = parse_skill_block(text)
+                if skill_block is not None:
+                    component = SkillInvocationMessageComponent(skill_block, markdown_theme)
+                    component.setExpanded(self.toolOutputExpanded)
+                    self.chatContainer.addChild(component)
+                    user_message = _value(skill_block, "userMessage")
+                    if user_message:
+                        self.chatContainer.addChild(UserMessageComponent(str(user_message), markdown_theme))
+                else:
+                    self.chatContainer.addChild(UserMessageComponent(text, markdown_theme))
+                if bool(_value(options, "populateHistory", False)):
+                    add_history = _callable_attr(self.editor, "addToHistory")
+                    if add_history is not None:
+                        add_history(text)
             return
 
         if role == "assistant":
@@ -2391,25 +2455,6 @@ class InteractiveMode:
                 self.hiddenThinkingLabel,
             )
             self.chatContainer.addChild(assistant)
-            for block in list(_value(message, "content", []) or []):
-                if _value(block, "type") != "toolCall":
-                    continue
-                tool_call_id = str(_value(block, "id", ""))
-                tool_name = str(_value(block, "name", ""))
-                component = ToolExecutionComponent(
-                    tool_name,
-                    tool_call_id,
-                    _value(block, "arguments", {}),
-                    {"showImages": _safe_call_bool(self.settingsManager, "getShowImages", True)},
-                    _tool_definition(self.session, tool_name),
-                    self.ui,
-                    self.sessionManager.getCwd(),
-                )
-                component.markExecutionStarted()
-                component.setArgsComplete()
-                component.setExpanded(self.toolOutputExpanded)
-                pending_tools[tool_call_id] = component
-                self.chatContainer.addChild(component)
             return
 
         if role == "bashExecution":
@@ -2432,16 +2477,9 @@ class InteractiveMode:
             return
 
         if role == "custom":
-            if not bool(_value(message, "display", True)):
+            if not bool(_value(message, "display", False)):
                 return
             custom_type = str(_value(message, "customType", ""))
-            if custom_type == "skill":
-                parsed = parse_skill_block(_extract_custom_text(message))
-                if parsed is not None:
-                    component = SkillInvocationMessageComponent(parsed, markdown_theme)
-                    component.setExpanded(self.toolOutputExpanded)
-                    self.chatContainer.addChild(component)
-                    return
             runner = getattr(self.session, "extensionRunner", None)
             get_renderer = _callable_attr(runner, "get_message_renderer") or _callable_attr(
                 runner, "getMessageRenderer"
@@ -2453,15 +2491,20 @@ class InteractiveMode:
             return
 
         if role == "branchSummary":
+            self.chatContainer.addChild(Spacer(1))
             component = BranchSummaryMessageComponent(message, markdown_theme)
             component.setExpanded(self.toolOutputExpanded)
             self.chatContainer.addChild(component)
             return
 
         if role == "compactionSummary":
+            self.chatContainer.addChild(Spacer(1))
             component = CompactionSummaryMessageComponent(message, markdown_theme)
             component.setExpanded(self.toolOutputExpanded)
             self.chatContainer.addChild(component)
+            return
+
+        if role == "toolResult":
             return
 
     async def handleImportCommand(self, text: str) -> None:
