@@ -168,10 +168,10 @@ def test_rpc_types_optional_shapes_match_ts() -> None:
     assert str(state_annotations["sessionName"]) == "ForwardRef('NotRequired[str]', module='harnify_coding_agent.modes.rpc.rpc_types')"
 
     status_annotations = rpc_types_module.RpcExtensionUISetStatusRequest.__annotations__
-    assert str(status_annotations["statusText"]) == "ForwardRef('NotRequired[str]', module='harnify_coding_agent.modes.rpc.rpc_types')"
+    assert str(status_annotations["statusText"]) == "ForwardRef('str | None', module='harnify_coding_agent.modes.rpc.rpc_types')"
 
     widget_annotations = rpc_types_module.RpcExtensionUISetWidgetRequest.__annotations__
-    assert str(widget_annotations["widgetLines"]) == "ForwardRef('NotRequired[list[str]]', module='harnify_coding_agent.modes.rpc.rpc_types')"
+    assert str(widget_annotations["widgetLines"]) == "ForwardRef('list[str] | None', module='harnify_coding_agent.modes.rpc.rpc_types')"
 
 
 def _fake_model(provider: str, model_id: str) -> Model[Any]:
