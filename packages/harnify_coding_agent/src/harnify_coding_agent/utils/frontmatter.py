@@ -42,7 +42,7 @@ def _extract_frontmatter(content: str) -> tuple[str | None, str]:
     if end_index == -1:
         return None, normalized
 
-    return normalized[4:end_index], normalized[end_index + 4 :].strip()
+    return normalized[4 : end_index + 1], normalized[end_index + 4 :].strip()
 
 
 def _yaml_load(content: str) -> Any:
