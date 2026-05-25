@@ -32,7 +32,6 @@ from harnify_coding_agent.core.tools.file_mutation_queue import with_file_mutati
 from harnify_coding_agent.core.tools.path_utils import resolve_to_cwd
 from harnify_coding_agent.core.tools.render_utils import invalid_arg_text, shorten_path
 from harnify_coding_agent.core.tools.tool_definition_wrapper import wrap_tool_definition
-from harnify_coding_agent.modes.interactive.components.diff import render_diff
 from harnify_tui import Box, Container, Spacer, Text
 
 type EditPreview = EditDiffResult | EditDiffError
@@ -170,6 +169,8 @@ def _format_access_error(error: BaseException) -> str:
         code = errno_module.errorcode.get(error.errno)
         if code:
             return f"Error code: {code}"
+    if isinstance(error, Exception):
+        return f"Error: {error}"
     return str(error)
 
 
@@ -305,6 +306,8 @@ def _format_edit_result(
     theme_obj: Any,
     is_error: bool,
 ) -> str | None:
+    from harnify_coding_agent.modes.interactive.components.diff import render_diff
+
     raw_path = _string_arg(_value(args, "file_path", _value(args, "path")))
     preview_diff = preview.diff if isinstance(preview, EditDiffResult) else None
     preview_error = preview.error if isinstance(preview, EditDiffError) else None
@@ -341,6 +344,8 @@ def _build_edit_call_component(
     args: RenderableEditArgs | None,
     theme_obj: Any,
 ) -> _EditCallRenderComponent:
+    from harnify_coding_agent.modes.interactive.components.diff import render_diff
+
     component.setBgFn(_get_edit_header_bg(component.preview, component.settledError, theme_obj))
     component.clear()
     component.addChild(Text(_format_edit_call(args, theme_obj), 0, 0))
