@@ -20,17 +20,12 @@ _PUBLIC_EXPORTS: dict[str, tuple[str, str]] = {
     "RpcSessionState": ("harnify_coding_agent.modes.rpc.rpc_types", "RpcSessionState"),
 }
 
-_COMPAT_EXPORTS: dict[str, tuple[str, str]] = {
-    "run_print_mode": ("harnify_coding_agent.modes.print_mode", "run_print_mode"),
-    "run_rpc_mode": ("harnify_coding_agent.modes.rpc.rpc_mode", "run_rpc_mode"),
-}
-
 __all__ = list(_PUBLIC_EXPORTS)
 
 
 def __getattr__(name: str) -> Any:
     try:
-        module_name, attr_name = _PUBLIC_EXPORTS.get(name) or _COMPAT_EXPORTS[name]
+        module_name, attr_name = _PUBLIC_EXPORTS[name]
     except KeyError as error:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from error
     module = import_module(module_name)
