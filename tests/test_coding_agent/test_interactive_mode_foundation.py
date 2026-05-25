@@ -6,6 +6,7 @@ import re
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1216,9 +1217,8 @@ async def test_handle_submitted_text_routes_commands_and_prompts() -> None:
     async def handle_models() -> None:
         calls.append("models")
 
-    async def handle_new() -> dict[str, bool]:
+    async def handle_clear() -> None:
         calls.append("new")
-        return {"cancelled": False}
 
     async def handle_quit() -> int:
         calls.append("quit")
@@ -1269,7 +1269,7 @@ async def test_handle_submitted_text_routes_commands_and_prompts() -> None:
     mode.handleShareCommand = handle_share  # type: ignore[method-assign]
     mode.handleCopyCommand = handle_copy  # type: ignore[method-assign]
     mode.showOAuthSelector = handle_login  # type: ignore[method-assign]
-    mode.handleNewSession = handle_new  # type: ignore[method-assign]
+    mode.handleClearCommand = handle_clear  # type: ignore[method-assign]
     mode.handleCompactCommand = handle_compact  # type: ignore[method-assign]
     mode.handleReloadCommand = handle_reload  # type: ignore[method-assign]
     mode.shutdown = handle_quit  # type: ignore[method-assign]
@@ -1423,6 +1423,58 @@ def test_setup_key_handlers_registers_session_tree_action() -> None:
     assert calls == ["None"]
 
 
+def test_setup_key_handlers_escape_clears_bash_mode_input() -> None:
+    editor = FakeEditor()
+    editor.setText("! ls -la")
+    border_updates: list[bool] = []
+    mode = InteractiveMode(defaultEditor=editor, editor=editor)
+    mode.updateEditorBorderColor = lambda: border_updates.append(True)  # type: ignore[method-assign]
+
+    mode.setupKeyHandlers()
+    assert editor.onEscape is not None
+    editor.onEscape()
+
+    assert editor.text == ""
+    assert border_updates == [True]
+
+
+def test_setup_key_handlers_double_escape_opens_tree_selector() -> None:
+    editor = FakeEditor()
+    calls: list[Any] = []
+    mode = InteractiveMode(
+        defaultEditor=editor,
+        editor=editor,
+        settingsManager=SimpleNamespace(getDoubleEscapeAction=lambda: "tree"),
+    )
+    mode.showTreeSelector = lambda initialSelectedId=None: calls.append(initialSelectedId)  # type: ignore[method-assign]
+    mode.lastEscapeTime = time.monotonic() * 1000
+
+    mode.setupKeyHandlers()
+    assert editor.onEscape is not None
+    editor.onEscape()
+
+    assert calls == [None]
+    assert mode.lastEscapeTime == 0
+
+
+@pytest.mark.asyncio
+async def test_setup_key_handlers_registers_new_session_action_via_handle_clear_command() -> None:
+    editor = FakeEditor()
+    calls: list[str] = []
+    mode = InteractiveMode(defaultEditor=editor, editor=editor)
+
+    async def handle_clear() -> None:
+        calls.append("new")
+
+    mode.handleClearCommand = handle_clear  # type: ignore[method-assign]
+
+    mode.setupKeyHandlers()
+    editor.actions["app.session.new"]()
+    await asyncio.sleep(0)
+
+    assert calls == ["new"]
+
+
 def test_setup_key_handlers_registers_paste_image_handler() -> None:
     editor = FakeEditor()
     mode = InteractiveMode(defaultEditor=editor, editor=editor, ui=FakeUi())
@@ -1430,6 +1482,35 @@ def test_setup_key_handlers_registers_paste_image_handler() -> None:
     mode.setupKeyHandlers()
 
     assert editor.onPasteImage is not None
+
+
+@pytest.mark.asyncio
+async def test_handle_clear_command_renders_new_session_message() -> None:
+    started: list[str] = []
+    stopped: list[bool] = []
+    cleared: list[bool] = []
+    mode = InteractiveMode(
+        ui=FakeUi(),
+        chatContainer=Container(),
+        runtimeHost=SimpleNamespace(newSession=lambda: asyncio.sleep(0, result={"cancelled": False})),
+        statusContainer=SimpleNamespace(clear=lambda: cleared.append(True)),
+        loadingAnimation=SimpleNamespace(stop=lambda: stopped.append(True)),
+    )
+    mode.renderCurrentSessionState = lambda: started.append("rendered")  # type: ignore[method-assign]
+
+    await mode.handleClearCommand()
+
+    rendered = "\n".join(
+        line
+        for child in mode.chatContainer.children
+        if isinstance(child, Text)
+        for line in child.render(120)
+    )
+    stripped = _strip_ansi(rendered)
+    assert started == ["rendered"]
+    assert stopped == [True]
+    assert cleared == [True]
+    assert "✓ New session started" in stripped
 
 
 @pytest.mark.asyncio
