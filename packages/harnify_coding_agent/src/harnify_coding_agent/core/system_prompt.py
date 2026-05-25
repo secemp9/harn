@@ -20,16 +20,6 @@ class BuildSystemPromptOptions(TypedDict):
     skills: NotRequired[list[Skill]]
 
 
-class _BuildSystemPromptOptionsCompat(TypedDict, total=False):
-    customPrompt: str
-    selectedTools: list[str]
-    toolSnippets: dict[str, str]
-    promptGuidelines: list[str]
-    appendSystemPrompt: str
-    contextFiles: list[dict[str, str]]
-    skills: list[Skill]
-
-
 def build_system_prompt(options: BuildSystemPromptOptions) -> str:
     custom_prompt = options.get("customPrompt")
     selected_tools = options.get("selectedTools")
