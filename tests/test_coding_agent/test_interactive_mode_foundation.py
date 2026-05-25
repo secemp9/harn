@@ -30,7 +30,7 @@ from harnify_coding_agent.modes.interactive.components.user_message import UserM
 from harnify_coding_agent.modes.interactive.theme.theme import init_theme
 from harnify_coding_agent.utils.changelog import ChangelogEntry
 from harnify_coding_agent.utils.version_check import LatestPiRelease
-from harnify_tui import Container, Text, setKeybindings
+from harnify_tui import Container, Spacer, Text, setKeybindings
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*m|\]8;;.*?\x07)", re.DOTALL)
 
