@@ -539,6 +539,43 @@ async def test_setup_extension_shortcuts_wires_default_and_custom_editors() -> N
     assert shortcut_contexts == [{"source": "extension-shortcut"}, {"source": "extension-shortcut"}]
 
 
+@pytest.mark.asyncio
+async def test_setup_extension_shortcuts_overrides_shutdown_to_match_ts_context() -> None:
+    default_editor = FakeEditor()
+    mode = InteractiveMode(ui=FakeUi(), defaultEditor=default_editor, editor=default_editor)
+    fallback_shutdowns: list[str] = []
+    shortcut_contexts: list[Any] = []
+
+    class FakeShortcutContext:
+        def __init__(self) -> None:
+            self._extras: dict[str, Any] = {}
+
+        def shutdown(self) -> None:
+            shutdown = self._extras.get("shutdown")
+            if callable(shutdown):
+                shutdown()
+                return
+            fallback_shutdowns.append("fallback")
+
+    async def shortcut_handler(ctx: Any) -> None:
+        shortcut_contexts.append(ctx)
+        ctx.shutdown()
+
+    extension_runner = SimpleNamespace(
+        getShortcuts=lambda _config: {"k": SimpleNamespace(handler=shortcut_handler)},
+        createContext=lambda: FakeShortcutContext(),
+    )
+
+    mode.setupExtensionShortcuts(extension_runner)
+
+    assert default_editor.onExtensionShortcut("k") is True
+    await asyncio.sleep(0)
+
+    assert len(shortcut_contexts) == 1
+    assert mode.shutdownRequested is True
+    assert fallback_shutdowns == []
+
+
 def test_set_custom_editor_component_preserves_text_and_handlers() -> None:
     ui = FakeUi()
     default_editor = FakeEditor()
