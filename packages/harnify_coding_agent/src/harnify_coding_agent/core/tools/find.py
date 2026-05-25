@@ -168,9 +168,9 @@ def _format_find_result(result: Any, options: Any, theme_obj: Any, show_images: 
         remaining = len(lines) - max_lines
         text += "\n" + "\n".join(theme_obj.fg("toolOutput", line) for line in display_lines)
         if remaining > 0:
+            more_lines_text = theme_obj.fg("muted", f"\n... ({remaining} more lines,")
             text += (
-                f"{theme_obj.fg('muted', f'\n... ({remaining} more lines,')} "
-                f"{key_hint('app.tools.expand', 'to expand')})"
+                f"{more_lines_text} {key_hint('app.tools.expand', 'to expand')})"
             )
 
     details = _value(result, "details")
@@ -182,7 +182,8 @@ def _format_find_result(result: Any, options: Any, theme_obj: Any, show_images: 
             warnings.append(f"{result_limit} results limit")
         if bool(_value(truncation, "truncated")):
             warnings.append(f"{format_size(_value(truncation, 'maxBytes') or DEFAULT_MAX_BYTES)} limit")
-        text += f"\n{theme_obj.fg('warning', f'[Truncated: {', '.join(warnings)}]')}"
+        warning_text = f"[Truncated: {', '.join(warnings)}]"
+        text += "\n" + theme_obj.fg("warning", warning_text)
     return text
 
 
