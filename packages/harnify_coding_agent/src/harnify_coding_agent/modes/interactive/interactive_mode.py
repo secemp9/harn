@@ -4244,6 +4244,12 @@ class InteractiveMode:
         }
         self.footerDataProvider.setAvailableProviderCount(len(providers))
 
+    def _get_session_thinking_level(self) -> str:
+        thinking_level = getattr(self.session, "thinkingLevel", None)
+        if thinking_level is None:
+            thinking_level = _value(getattr(self.session, "state", None), "thinkingLevel", "off")
+        return str(thinking_level or "off")
+
     def getMarkdownThemeWithSettings(self) -> Any:
         markdown_theme = interactive_theme.get_markdown_theme()
         indent = _safe_call_str(self.settingsManager, "getCodeBlockIndent", "  ")
@@ -4257,9 +4263,7 @@ class InteractiveMode:
         border = (
             interactive_theme.theme.getBashModeBorderColor()
             if _is_bash_mode(self.editor)
-            else interactive_theme.theme.getThinkingBorderColor(
-                str(_value(self.session.state, "thinkingLevel", "off"))
-            )
+            else interactive_theme.theme.getThinkingBorderColor(self._get_session_thinking_level())
         )
         if hasattr(self.editor, "borderColor"):
             self.editor.borderColor = border
@@ -4876,9 +4880,7 @@ class InteractiveMode:
             self.editor.borderColor = (
                 interactive_theme.theme.getBashModeBorderColor()
                 if text.lstrip().startswith("!")
-                else interactive_theme.theme.getThinkingBorderColor(
-                    str(_value(self.session.state, "thinkingLevel", "off"))
-                )
+                else interactive_theme.theme.getThinkingBorderColor(self._get_session_thinking_level())
             )
         self._request_render()
 
@@ -5039,7 +5041,7 @@ class InteractiveMode:
                         followUpMode=str(getattr(self.session, "followUpMode", "one-at-a-time")),
                         transport=str(_safe_call_str(self.settingsManager, "getTransport", "sse")),
                         httpIdleTimeoutMs=_safe_call_int(self.settingsManager, "getHttpIdleTimeoutMs", 300_000),
-                        thinkingLevel=str(_value(self.session.state, "thinkingLevel", "off")),
+                        thinkingLevel=self._get_session_thinking_level(),
                         availableThinkingLevels=list(get_available_thinking_levels() or [])
                         if get_available_thinking_levels is not None
                         else [],
