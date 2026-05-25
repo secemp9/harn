@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 import harnify_tui.components.cancellable_loader as cancellable_loader_module
 import harnify_tui.components.image as image_module
+import harnify_tui.components.loader as loader_module
 from harnify_tui import (
     AbortSignal,
     CancellableLoader,
@@ -83,6 +84,10 @@ def test_loader_renders_message_and_updates_ui() -> None:
         assert "[msg:Done]" in loader.render(24)[1]
     finally:
         loader.stop()
+
+
+def test_loader_module_exports_match_ts_surface() -> None:
+    assert loader_module.__all__ == ["Loader", "LoaderIndicatorOptions"]
 
 
 def test_cancellable_loader_aborts_on_escape() -> None:
