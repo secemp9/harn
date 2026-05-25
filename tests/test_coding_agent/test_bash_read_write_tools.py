@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from harnify_coding_agent.core.tools import (
@@ -12,16 +13,55 @@ from harnify_coding_agent.core.tools import (
     create_read_tool,
     create_read_tool_definition,
     create_write_tool,
+    create_write_tool_definition,
     get_text_output,
 )
 from harnify_coding_agent.core.tools import bash as bash_module
 from harnify_coding_agent.core.tools import read as read_module
+from harnify_coding_agent.core.tools import write as write_module
+from harnify_tui import Text
 
 TINY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
 
 
 def _text(result: object) -> str:
     return get_text_output(result, show_images=True)
+
+
+def _fake_theme():
+    return SimpleNamespace(
+        fg=lambda _name, text: text,
+        bg=lambda _name, text: text,
+        bold=lambda text: text,
+    )
+
+
+class _AbortSignal:
+    def __init__(self) -> None:
+        self.aborted = False
+        self._listeners: list[Callable[[], None]] = []
+
+    def addEventListener(self, event: str, callback, _options=None) -> None:
+        if event != "abort":
+            return
+        if self.aborted:
+            callback()
+            return
+        self._listeners.append(callback)
+
+    def removeEventListener(self, event: str, callback) -> None:
+        if event != "abort":
+            return
+        self._listeners = [listener for listener in self._listeners if listener is not callback]
+
+    def abort(self) -> None:
+        if self.aborted:
+            return
+        self.aborted = True
+        listeners = list(self._listeners)
+        self._listeners.clear()
+        for callback in listeners:
+            callback()
 
 
 @pytest.mark.asyncio
@@ -136,6 +176,80 @@ async def test_write_tool_creates_parent_directories_and_writes_content(tmp_path
 
     assert "Successfully wrote" in _text(result)
     assert target.read_text(encoding="utf-8") == "Nested content"
+
+
+def test_write_tool_definition_matches_ts_surface() -> None:
+    definition = create_write_tool_definition(str(Path.cwd()))
+
+    assert definition.promptSnippet == "Create or overwrite files"
+    assert definition.promptGuidelines == ["Use write only for new files or complete rewrites."]
+    assert definition.renderCall is not None
+    assert definition.renderResult is not None
+    assert getattr(definition, "prepareArguments", None) is None
+    properties = definition.parameters.model_json_schema()["properties"]
+    assert "file_path" not in properties
+
+
+def test_write_module_exports_match_ts_surface() -> None:
+    assert write_module.__all__ == [
+        "WriteOperations",
+        "WriteToolInput",
+        "WriteToolOptions",
+        "createWriteTool",
+        "createWriteToolDefinition",
+    ]
+
+
+def test_write_render_call_and_result_match_ts_surface() -> None:
+    definition = create_write_tool_definition(str(Path.cwd()))
+    call_component = definition.renderCall(
+        {"path": "demo.py", "content": "print('hi')\n"},
+        _fake_theme(),
+        SimpleNamespace(lastComponent=None, argsComplete=False, expanded=False, isPartial=False),
+    )
+
+    assert "write" in call_component.text
+    assert "demo.py" in call_component.text
+    assert "print('hi')" in call_component.text
+
+    error_component = definition.renderResult(
+        SimpleNamespace(content=[SimpleNamespace(type="text", text="boom")]),
+        {},
+        _fake_theme(),
+        SimpleNamespace(lastComponent=None, isError=True),
+    )
+
+    assert isinstance(error_component, Text)
+    assert "boom" in error_component.text
+
+
+@pytest.mark.asyncio
+async def test_write_tool_rejects_immediately_on_abort_signal(tmp_path: Path) -> None:
+    class Ops:
+        async def mkdir(self, _directory: str) -> None:
+            await asyncio.sleep(0.05)
+
+        async def writeFile(self, _path: str, _content: str) -> None:
+            return None
+
+    signal = _AbortSignal()
+    tool = create_write_tool(str(tmp_path), {"operations": Ops()})
+
+    async def trigger_abort() -> None:
+        await asyncio.sleep(0.01)
+        signal.abort()
+
+    abort_task = asyncio.create_task(trigger_abort())
+    with pytest.raises(RuntimeError, match="Operation aborted"):
+        await tool.execute(
+            "write-abort",
+            {"path": "abort.txt", "content": "hello"},
+            signal,
+            None,
+        )
+
+    await abort_task
+    await asyncio.sleep(0.06)
 
 
 @pytest.mark.asyncio
