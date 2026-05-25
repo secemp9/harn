@@ -3188,21 +3188,6 @@ class InteractiveMode:
         if add_history is not None:
             add_history(text)
 
-    async def handleThemeCommand(self, themeName: str) -> None:
-        if not themeName:
-            self.showThemeSelector()
-            return
-        result = interactive_theme.set_theme(themeName, True)
-        if not result.get("success"):
-            self.showError(str(result.get("error", f"Theme not found: {themeName}")))
-            return
-        set_theme = _callable_attr(self.settingsManager, "setTheme")
-        if set_theme is not None:
-            set_theme(themeName)
-        self.updateEditorBorderColor()
-        self._request_render()
-        self.showStatus(f"Theme: {themeName}")
-
     async def handleReloadCommand(self) -> None:
         if bool(getattr(self.session, "isStreaming", False)):
             self.showWarning("Wait for the current response to finish before reloading.")
