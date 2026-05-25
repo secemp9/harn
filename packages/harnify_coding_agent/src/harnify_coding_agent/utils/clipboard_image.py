@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from PIL import Image
 
+from harnify_coding_agent.utils.clipboard_native import clipboard as native_clipboard
 from harnify_coding_agent.utils.exif_orientation import apply_exif_orientation
 
 SUPPORTED_IMAGE_MIME_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
@@ -316,7 +317,7 @@ def _platform() -> str:
 
 
 def _get_native_clipboard() -> _NativeClipboard | None:
-    return None
+    return native_clipboard
 
 extensionForImageMimeType = extension_for_image_mime_type
 isWaylandSession = is_wayland_session
