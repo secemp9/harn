@@ -4972,8 +4972,8 @@ class InteractiveMode:
             self.updateEditorBorderColor()
             done()
             self.showStatus(f"Model: {_value(model, 'id', model)}")
+            self._schedule_task(self.maybeWarnAboutAnthropicSubscriptionAuth(model))
             self.checkDaxnutsEasterEgg(model)
-            await self.maybeWarnAboutAnthropicSubscriptionAuth(model)
         except Exception as error:  # noqa: BLE001
             done()
             self.showError(str(error))
@@ -5010,8 +5010,8 @@ class InteractiveMode:
             self.footer.invalidate()
             self.updateEditorBorderColor()
             self.showStatus(f"Model: {_value(model, 'id', model)}")
+            self._schedule_task(self.maybeWarnAboutAnthropicSubscriptionAuth(model))
             self.checkDaxnutsEasterEgg(model)
-            await self.maybeWarnAboutAnthropicSubscriptionAuth(model)
         except Exception as error:  # noqa: BLE001
             self.showError(str(error))
 
