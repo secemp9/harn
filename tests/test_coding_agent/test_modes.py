@@ -721,6 +721,38 @@ async def test_rpc_mode_unknown_command_omits_id_like_ts(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_rpc_mode_registers_and_restores_signal_handlers(monkeypatch) -> None:
+    runtime = _FakeRuntime()
+    monkeypatch.setattr("sys.stdout", io.StringIO())
+    monkeypatch.setattr("sys.stderr", io.StringIO())
+
+    calls: list[tuple[int, Any]] = []
+
+    def fake_getsignal(sig: int) -> str:
+        return f"previous:{sig}"
+
+    def fake_signal(sig: int, handler: Any) -> None:
+        calls.append((sig, handler))
+
+    monkeypatch.setattr(rpc_mode_module.signal, "getsignal", fake_getsignal)
+    monkeypatch.setattr(rpc_mode_module.signal, "signal", fake_signal)
+
+    exit_code = await run_rpc_mode(runtime, input_stream=io.StringIO(""))
+    assert exit_code == 0
+
+    expected_signals = [signal.SIGTERM]
+    sighup = getattr(signal, "SIGHUP", None)
+    if os.name != "nt" and sighup is not None:
+        expected_signals.append(sighup)
+
+    registered = calls[: len(expected_signals)]
+    restored = calls[len(expected_signals) :]
+    assert [sig for sig, _handler in registered] == expected_signals
+    assert all(callable(handler) for _sig, handler in registered)
+    assert restored == [(sig, f"previous:{sig}") for sig in expected_signals]
+
+
+@pytest.mark.asyncio
 async def test_main_dispatches_print_and_rpc(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("harnify_coding_agent.main.run_migrations", lambda _cwd: None)
