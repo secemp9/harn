@@ -13,7 +13,7 @@ class FuzzyMatch:
     score: float
 
 
-def fuzzy_match(query: str, text: str) -> FuzzyMatch:
+def fuzzyMatch(query: str, text: str) -> FuzzyMatch:
     query_lower = query.lower()
     text_lower = text.lower()
 
@@ -82,7 +82,7 @@ def fuzzy_match(query: str, text: str) -> FuzzyMatch:
     return FuzzyMatch(matches=True, score=swapped_match.score + 5)
 
 
-def fuzzy_filter[T](items: list[T], query: str, get_text: Callable[[T], str]) -> list[T]:
+def fuzzyFilter[T](items: list[T], query: str, get_text: Callable[[T], str]) -> list[T]:
     if not query.strip():
         return items
 
@@ -96,7 +96,7 @@ def fuzzy_filter[T](items: list[T], query: str, get_text: Callable[[T], str]) ->
         total_score = 0.0
         all_match = True
         for token in tokens:
-            match = fuzzy_match(token, text)
+            match = fuzzyMatch(token, text)
             if not match.matches:
                 all_match = False
                 break
@@ -108,7 +108,4 @@ def fuzzy_filter[T](items: list[T], query: str, get_text: Callable[[T], str]) ->
     return [item for item, _score in results]
 
 
-fuzzyMatch = fuzzy_match
-fuzzyFilter = fuzzy_filter
-
-__all__ = ["FuzzyMatch", "fuzzyFilter", "fuzzyMatch", "fuzzy_filter", "fuzzy_match"]
+__all__ = ["FuzzyMatch", "fuzzyFilter", "fuzzyMatch"]
