@@ -9,6 +9,7 @@ from harnify_ai.utils.event_stream import AssistantMessageEventStream
 from harnify_coding_agent.core.auth_storage import AuthStorage
 from harnify_coding_agent.core.model_registry import ModelRegistry
 from harnify_coding_agent.core.resource_loader import DefaultResourceLoader
+from harnify_coding_agent.core import sdk as sdk_module
 from harnify_coding_agent.core.sdk import create_agent_session
 from harnify_coding_agent.core.session_manager import SessionManager
 from harnify_coding_agent.core.settings_manager import SettingsManager
@@ -46,6 +47,45 @@ def _done_stream(provider: str = "capture-provider", model_id: str = "capture-mo
         )
     )
     return stream
+
+
+def test_sdk_exports_match_ts_surface() -> None:
+    assert sdk_module.__all__ == [
+        "AgentSessionRuntime",
+        "AgentSessionRuntimeDiagnostic",
+        "AgentSessionServices",
+        "CreateAgentSessionOptions",
+        "CreateAgentSessionFromServicesOptions",
+        "CreateAgentSessionRuntimeFactory",
+        "CreateAgentSessionRuntimeResult",
+        "CreateAgentSessionResult",
+        "CreateAgentSessionServicesOptions",
+        "ExtensionAPI",
+        "ExtensionCommandContext",
+        "ExtensionFactory",
+        "ExtensionContext",
+        "PromptTemplate",
+        "SessionImportFileNotFoundError",
+        "Skill",
+        "SlashCommandInfo",
+        "SlashCommandSource",
+        "Tool",
+        "ToolDefinition",
+        "createAgentSession",
+        "createAgentSessionFromServices",
+        "createAgentSessionRuntime",
+        "createAgentSessionServices",
+        "createBashTool",
+        "createCodingTools",
+        "createEditTool",
+        "createFindTool",
+        "createGrepTool",
+        "createLsTool",
+        "createReadOnlyTools",
+        "createReadTool",
+        "createWriteTool",
+        "withFileMutationQueue",
+    ]
 
 
 @pytest.mark.asyncio
