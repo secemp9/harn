@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import signal
 import sys
 import uuid
 from typing import Any
 
 from harnify_coding_agent.core.output_guard import restoreStdout, takeOverStdout, writeRawStdout
+from harnify_coding_agent.utils.shell import killTrackedDetachedChildren
 from harnify_coding_agent.modes.interactive.theme.theme import theme
 from harnify_coding_agent.modes.rpc.jsonl import JsonlLineBuffer, serialize_json_line
 from harnify_coding_agent.modes.rpc.rpc_types import (
@@ -268,6 +270,8 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
     unsubscribe = None
     pending_extension_requests: dict[str, asyncio.Future[RpcExtensionUIResponse]] = {}
     shutdown_requested = False
+    shutdown_exit_code = 0
+    signal_cleanup_handlers: list[tuple[int, Any]] = []
 
     def output(obj: RpcResponse | RpcExtensionUIRequest | dict[str, Any]) -> None:
         writeRawStdout(serialize_json_line(obj))
@@ -338,12 +342,32 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
             unsubscribe()
         unsubscribe = session.subscribe(output)
 
-    def _request_shutdown() -> None:
-        nonlocal shutdown_requested
+    def _request_shutdown(exit_code: int = 0) -> None:
+        nonlocal shutdown_requested, shutdown_exit_code
         shutdown_requested = True
+        shutdown_exit_code = exit_code
+
+    def register_signal_handlers() -> None:
+        current_loop = asyncio.get_running_loop()
+        signals = [signal.SIGTERM]
+        sighup = getattr(signal, "SIGHUP", None)
+        if sys.platform != "win32" and sighup is not None:
+            signals.append(sighup)
+
+        for current_signal in signals:
+            previous_handler = signal.getsignal(current_signal)
+
+            def _handler(_signum: int, _frame: Any, *, current_signal: int = current_signal) -> None:
+                killTrackedDetachedChildren()
+                exit_code = 129 if sighup is not None and current_signal == sighup else 143
+                current_loop.call_soon_threadsafe(_request_shutdown, exit_code)
+
+            signal.signal(current_signal, _handler)
+            signal_cleanup_handlers.append((current_signal, previous_handler))
 
     runtime_host.setRebindSession(rebind_session)
     await rebind_session()
+    register_signal_handlers()
 
     async def handle_command(command: RpcCommand) -> RpcResponse | None:
         request_id = command.get("id")
@@ -479,11 +503,11 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
             return success(request_id, "compact", await session.compact(command.get("customInstructions")))
 
         if command_type == "set_auto_compaction":
-            session.setAutoCompactionEnabled(bool(command.get("enabled")))
+            session.setAutoCompactionEnabled(command.get("enabled"))
             return success(request_id, "set_auto_compaction")
 
         if command_type == "set_auto_retry":
-            session.setAutoRetryEnabled(bool(command.get("enabled")))
+            session.setAutoRetryEnabled(command.get("enabled"))
             return success(request_id, "set_auto_retry")
 
         if command_type == "abort_retry":
@@ -629,8 +653,10 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
                 await handle_input_line(line)
                 if shutdown_requested:
                     break
-        return 0
+        return shutdown_exit_code
     finally:
+        for current_signal, previous_handler in signal_cleanup_handlers:
+            signal.signal(current_signal, previous_handler)
         if callable(unsubscribe):
             unsubscribe()
         await runtime_host.dispose()
