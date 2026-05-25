@@ -37,7 +37,7 @@ type TransportSetting = Transport
 
 
 def deep_merge_settings(base: Settings, overrides: Settings) -> Settings:
-    result = copy.deepcopy(base)
+    result = dict(base)
     for key, override_value in overrides.items():
         base_value = base.get(key)
         if (
@@ -46,7 +46,7 @@ def deep_merge_settings(base: Settings, overrides: Settings) -> Settings:
         ):
             result[key] = {**base_value, **override_value}
         else:
-            result[key] = copy.deepcopy(override_value)
+            result[key] = override_value
     return result
 
 
