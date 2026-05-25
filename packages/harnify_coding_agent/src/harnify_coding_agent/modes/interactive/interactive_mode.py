@@ -5798,7 +5798,7 @@ class InteractiveMode:
             },
         )
         if _value(result, "cancelled", False):
-            return dict(result) if isinstance(result, dict) else {"cancelled": True}
+            return {"cancelled": True}
 
         clear = _callable_attr(self.chatContainer, "clear")
         if clear is not None:
@@ -5813,7 +5813,7 @@ class InteractiveMode:
         flush_queue = _callable_attr(self, "flushCompactionQueue")
         if flush_queue is not None:
             self._schedule_task(_maybe_await(flush_queue({"willRetry": False})))
-        return dict(result) if isinstance(result, dict) else {"cancelled": False}
+        return {"cancelled": False}
 
 
 def _safe_call_bool(obj: Any, name: str, default: bool = False) -> bool:
