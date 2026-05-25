@@ -4221,3 +4221,27 @@ async def test_show_session_selector_shutdown_callback_matches_ts_immediate_shut
     await asyncio.sleep(0)
 
     assert calls == ["shutdown"]
+
+
+@pytest.mark.asyncio
+async def test_handle_resume_session_accepts_object_shaped_runtime_result() -> None:
+    statuses: list[str] = []
+    rendered: list[bool] = []
+
+    async def switch_session(session_path: str, options: dict[str, Any] | None = None) -> Any:
+        assert session_path == "/tmp/session.pi.jsonl"
+        assert options == {"withSession": None}
+        return SimpleNamespace(cancelled=False)
+
+    mode = InteractiveMode(
+        runtimeHost=SimpleNamespace(switchSession=switch_session),
+        statusContainer=SimpleNamespace(clear=lambda: None),
+    )
+    mode.renderCurrentSessionState = lambda: rendered.append(True)  # type: ignore[method-assign]
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+
+    result = await mode.handleResumeSession("/tmp/session.pi.jsonl")
+
+    assert _value(result, "cancelled", None) is False
+    assert rendered == [True]
+    assert statuses == ["Resumed session"]
