@@ -4,26 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shlex
-import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 
-from harnify_tui import Container, Spacer, Text, getKeybindings
+from harnify_tui import Container, Editor, Spacer, Text, getKeybindings
 
 from harnify_coding_agent.core.keybindings import KeybindingsManager
 from harnify_coding_agent.modes.interactive.theme.theme import get_editor_theme, theme
 
-from .custom_editor import CustomEditor
 from .dynamic_border import DynamicBorder
 from .keybinding_hints import key_hint
 
 
 class ExtensionEditorComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(
         self,
         tui,
@@ -46,12 +42,10 @@ class ExtensionEditorComponent(Container):
         self.addChild(Text(theme.fg("accent", title), 1, 0))
         self.addChild(Spacer(1))
 
-        self.editor = CustomEditor(tui, get_editor_theme(), keybindings, options)
+        self.editor = Editor(tui, get_editor_theme(), options)
         if prefill:
             self.editor.setText(prefill)
-        self.editor.onSubmit = self.onSubmitCallback
-        self.editor.onEscape = self.onCancelCallback
-        self.editor.onAction("app.editor.external", self._schedule_external_editor)
+        self.editor.onSubmit = lambda text: self.onSubmitCallback(text)
         self.addChild(self.editor)
 
         self.addChild(Spacer(1))
@@ -82,6 +76,9 @@ class ExtensionEditorComponent(Container):
         if getKeybindings().matches(data, "tui.select.cancel"):
             self.onCancelCallback()
             return
+        if self.keybindings.matches(data, "app.editor.external"):
+            self._schedule_external_editor()
+            return
         self.editor.handleInput(data)
 
     def _schedule_external_editor(self) -> None:
@@ -97,7 +94,7 @@ class ExtensionEditorComponent(Container):
             return
 
         current_text = self.editor.getText()
-        temp_file = Path(tempfile.gettempdir()) / f"harnify-extension-editor-{os.getpid()}-{id(self)}.md"
+        temp_file = Path(tempfile.gettempdir()) / f"pi-extension-editor-{int(time.time() * 1000)}.md"
         temp_file.write_text(current_text, encoding="utf-8")
 
         stop = getattr(self.tui, "stop", None)
@@ -105,22 +102,31 @@ class ExtensionEditorComponent(Container):
             stop()
 
         try:
-            args = shlex.split(editor_cmd)
-            if not args:
+            args = editor_cmd.split(" ")
+            if not args or not args[0]:
                 return
-            editor = args[0]
-            editor_args = [*args[1:], str(temp_file)]
+            editor, *editor_args = args
+            sys.stdout.write(
+                f"Launching external editor: {editor_cmd}\nPi will resume when the editor exits.\n"
+            )
+
+            status: int | None
             if sys.platform == "win32":
-                command = subprocess.list2cmdline([editor, *editor_args])
-                return_code = await asyncio.to_thread(subprocess.run, command, check=False, shell=True)
+                command = " ".join([editor, *editor_args, str(temp_file)])
+                try:
+                    process = await asyncio.create_subprocess_shell(command)
+                except OSError:
+                    status = None
+                else:
+                    status = await process.wait()
             else:
-                return_code = await asyncio.to_thread(
-                    subprocess.run,
-                    [editor, *editor_args],
-                    check=False,
-                    shell=False,
-                )
-            if return_code.returncode == 0:
+                try:
+                    process = await asyncio.create_subprocess_exec(editor, *editor_args, str(temp_file))
+                except OSError:
+                    status = None
+                else:
+                    status = await process.wait()
+            if status == 0:
                 new_content = temp_file.read_text(encoding="utf-8").removesuffix("\n")
                 self.editor.setText(new_content)
         finally:
