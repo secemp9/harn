@@ -2739,6 +2739,8 @@ async def test_handle_model_command_prefers_exact_match_before_selector() -> Non
     refreshes: list[str] = []
     count_calls: list[str] = []
     render_calls: list[str] = []
+    scheduled: list[Any] = []
+    daxnuts: list[str] = []
     model = _model("openai", "gpt-4o-mini")
 
     async def set_model(next_model: Model) -> None:
@@ -2761,8 +2763,14 @@ async def test_handle_model_command_prefers_exact_match_before_selector() -> Non
     mode.showModelSelector = lambda search=None: shown.append(search)  # type: ignore[method-assign]
     mode.updateAvailableProviderCount = lambda: count_calls.append("count")  # type: ignore[method-assign]
     mode.updateEditorBorderColor = lambda: None  # type: ignore[method-assign]
-    mode.maybeWarnAboutAnthropicSubscriptionAuth = lambda _model=None: asyncio.sleep(0)  # type: ignore[method-assign]
     mode._request_render = lambda *args, **kwargs: render_calls.append("render")  # type: ignore[method-assign]
+    mode._schedule_task = lambda awaitable: scheduled.append(awaitable)  # type: ignore[method-assign]
+    mode.checkDaxnutsEasterEgg = lambda next_model: daxnuts.append(next_model.id)  # type: ignore[method-assign]
+
+    async def maybe_warn(_model: Any = None) -> None:
+        return None
+
+    mode.maybeWarnAboutAnthropicSubscriptionAuth = maybe_warn  # type: ignore[method-assign]
 
     await mode.handleModelCommand("openai/gpt-4o-mini")
     await mode.handleModelCommand("missing")
@@ -2773,6 +2781,9 @@ async def test_handle_model_command_prefers_exact_match_before_selector() -> Non
     assert refreshes == ["refresh", "refresh"]
     assert count_calls == []
     assert render_calls == []
+    assert daxnuts == ["gpt-4o-mini"]
+    assert len(scheduled) == 1
+    scheduled[0].close()
 
 
 @pytest.mark.asyncio
@@ -2836,6 +2847,39 @@ async def test_update_available_provider_count_tolerates_registry_get_available_
     await mode.updateAvailableProviderCount()
 
     assert counts == [0]
+
+
+@pytest.mark.asyncio
+async def test_handle_model_select_schedules_warning_check_before_daxnuts() -> None:
+    statuses: list[str] = []
+    done_calls: list[bool] = []
+    daxnuts: list[str] = []
+    scheduled: list[Any] = []
+    model = _model("openai", "gpt-4o-mini")
+
+    async def set_model(next_model: Model) -> None:
+        assert next_model is model
+
+    async def maybe_warn(_model: Any = None) -> None:
+        return None
+
+    mode = InteractiveMode(
+        session=SimpleNamespace(setModel=set_model),
+        footer=SimpleNamespace(invalidate=lambda: None),
+    )
+    mode.updateEditorBorderColor = lambda: None  # type: ignore[method-assign]
+    mode.showStatus = statuses.append  # type: ignore[method-assign]
+    mode._schedule_task = lambda awaitable: scheduled.append(awaitable)  # type: ignore[method-assign]
+    mode.checkDaxnutsEasterEgg = lambda next_model: daxnuts.append(next_model.id)  # type: ignore[method-assign]
+    mode.maybeWarnAboutAnthropicSubscriptionAuth = maybe_warn  # type: ignore[method-assign]
+
+    await mode._handle_model_select(model, lambda: done_calls.append(True))
+
+    assert done_calls == [True]
+    assert statuses == ["Model: gpt-4o-mini"]
+    assert daxnuts == ["gpt-4o-mini"]
+    assert len(scheduled) == 1
+    scheduled[0].close()
 
 
 def test_setup_key_handlers_registers_session_fork_action() -> None:
