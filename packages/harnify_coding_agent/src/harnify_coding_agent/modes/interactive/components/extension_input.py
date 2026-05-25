@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from harnify_tui import Container, Input, Spacer, Text
+from harnify_tui import Container, Input, Spacer, Text, getKeybindings
 
 from harnify_coding_agent.modes.interactive.theme.theme import theme
 
@@ -15,8 +15,6 @@ from .keybinding_hints import key_hint
 
 
 class ExtensionInputComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(
         self,
         title: str,
@@ -49,13 +47,7 @@ class ExtensionInputComponent(Container):
                 self.onCancelCallback,
             )
 
-        if placeholder:
-            self.addChild(Text(theme.fg("muted", placeholder), 1, 0))
-            self.addChild(Spacer(1))
-
         self.input = Input()
-        self.input.onSubmit = self.onSubmitCallback
-        self.input.onEscape = self.onCancelCallback
         self.addChild(self.input)
         self.addChild(Spacer(1))
         self.addChild(
@@ -78,7 +70,13 @@ class ExtensionInputComponent(Container):
         self.input.focused = value
 
     def handleInput(self, data: str) -> None:
-        self.input.handleInput(data)
+        kb = getKeybindings()
+        if kb.matches(data, "tui.select.confirm") or data == "\n":
+            self.onSubmitCallback(self.input.getValue())
+        elif kb.matches(data, "tui.select.cancel"):
+            self.onCancelCallback()
+        else:
+            self.input.handleInput(data)
 
     def dispose(self) -> None:
         if self.countdown is not None:
