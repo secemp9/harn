@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from harnify_coding_agent.config import APP_NAME
 from harnify_coding_agent.core.source_info import SourceInfo
@@ -13,9 +13,9 @@ type SlashCommandSource = Literal["extension", "prompt", "skill"]
 
 class SlashCommandInfo(TypedDict):
     name: str
-    description: str | None
     source: SlashCommandSource
     sourceInfo: SourceInfo
+    description: NotRequired[str]
 
 
 @dataclass(slots=True, frozen=True)
@@ -27,7 +27,7 @@ class BuiltinSlashCommand:
 BUILTIN_SLASH_COMMANDS: tuple[BuiltinSlashCommand, ...] = (
     BuiltinSlashCommand("settings", "Open settings menu"),
     BuiltinSlashCommand("model", "Select model (opens selector UI)"),
-    BuiltinSlashCommand("scoped-models", "Enable or disable models for Ctrl+P cycling"),
+    BuiltinSlashCommand("scoped-models", "Enable/disable models for Ctrl+P cycling"),
     BuiltinSlashCommand("export", "Export session (HTML default, or specify path: .html/.jsonl)"),
     BuiltinSlashCommand("import", "Import and resume a session from a JSONL file"),
     BuiltinSlashCommand("share", "Share session as a secret GitHub gist"),
@@ -48,31 +48,31 @@ BUILTIN_SLASH_COMMANDS: tuple[BuiltinSlashCommand, ...] = (
     BuiltinSlashCommand("quit", f"Quit {APP_NAME}"),
 )
 
-LOCAL_ALIAS_SLASH_COMMANDS: tuple[BuiltinSlashCommand, ...] = (
+_LOCAL_ALIAS_SLASH_COMMANDS: tuple[BuiltinSlashCommand, ...] = (
     BuiltinSlashCommand("models", "Configure the session model list"),
     BuiltinSlashCommand("theme", "Select a theme"),
 )
 
 
-def make_slash_command_info(
+def _make_slash_command_info(
     name: str,
     source: SlashCommandSource,
     source_info: SourceInfo,
     description: str | None = None,
 ) -> SlashCommandInfo:
-    return {
+    command_info: SlashCommandInfo = {
         "name": name,
-        "description": description,
         "source": source,
         "sourceInfo": source_info,
     }
+    if description is not None:
+        command_info["description"] = description
+    return command_info
 
 
 __all__ = [
-    "BUILTIN_SLASH_COMMANDS",
-    "BuiltinSlashCommand",
-    "LOCAL_ALIAS_SLASH_COMMANDS",
-    "SlashCommandInfo",
     "SlashCommandSource",
-    "make_slash_command_info",
+    "SlashCommandInfo",
+    "BuiltinSlashCommand",
+    "BUILTIN_SLASH_COMMANDS",
 ]
