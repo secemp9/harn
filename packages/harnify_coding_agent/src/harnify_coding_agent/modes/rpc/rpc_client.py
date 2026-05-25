@@ -8,7 +8,7 @@ import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 from harnify_ai.types import ImageContent
 
@@ -16,6 +16,13 @@ from harnify_coding_agent.modes.rpc.jsonl import JsonlLineBuffer, serialize_json
 from harnify_coding_agent.modes.rpc.rpc_types import RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand
 
 type RpcEventListener = Callable[[dict[str, Any]], None]
+
+
+class ModelInfo(TypedDict):
+    provider: str
+    id: str
+    contextWindow: int
+    reasoning: bool
 
 
 @dataclass(slots=True)
@@ -127,7 +134,7 @@ class RpcClient:
         response = await self._send({"type": "cycle_model"})
         return self._get_data(response)
 
-    async def get_available_models(self) -> list[dict[str, Any]]:
+    async def get_available_models(self) -> list[ModelInfo]:
         response = await self._send({"type": "get_available_models"})
         return self._get_data(response)["models"]
 
@@ -323,4 +330,4 @@ class RpcClient:
 
 RpcClientOptions = RpcClientOptions
 
-__all__ = ["RpcClient", "RpcClientOptions", "RpcEventListener"]
+__all__ = ["ModelInfo", "RpcClient", "RpcClientOptions", "RpcEventListener"]

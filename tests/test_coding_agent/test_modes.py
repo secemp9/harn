@@ -16,6 +16,7 @@ from harnify_coding_agent.core.compaction import CompactionResult
 from harnify_coding_agent.main import main
 from harnify_coding_agent.modes.print_mode import run_print_mode
 from harnify_coding_agent.modes.rpc import JsonlLineBuffer, RpcClient, run_rpc_mode
+import harnify_coding_agent.modes.rpc.rpc_client as rpc_client_module
 
 
 @dataclass
@@ -45,6 +46,10 @@ class _FakeExtensionRunner:
 
     def get_registered_commands(self) -> list[_FakeCommand]:
         return list(self._commands)
+
+
+def test_rpc_client_module_exports_match_ts_surface() -> None:
+    assert rpc_client_module.__all__ == ["ModelInfo", "RpcClient", "RpcClientOptions", "RpcEventListener"]
 
 
 def _fake_model(provider: str, model_id: str) -> Model[Any]:
