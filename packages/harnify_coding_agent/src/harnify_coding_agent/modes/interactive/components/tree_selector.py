@@ -759,7 +759,7 @@ class TreeList(Component):
             return f"[find: {pattern} in {path}]"
         if name == "ls":
             return f"[ls: {shorten_path(str(args.get('path') or '.'))}]"
-        args_json = json.dumps(args)
+        args_json = json.dumps(args, ensure_ascii=False, separators=(",", ":"))
         display = args_json[:40]
         return f"[{name}: {display}{'...' if len(args_json) > 40 else ''}]"
 
