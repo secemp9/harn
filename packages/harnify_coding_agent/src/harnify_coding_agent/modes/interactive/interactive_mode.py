@@ -460,7 +460,7 @@ class _ExtensionUIContext:
             return {"success": True}
 
         result = interactive_theme.set_theme(theme_or_name, True)
-        if result.get("success"):
+        if bool(_value(result, "success", False)):
             current_theme = None
             get_theme = _callable_attr(self._mode.settingsManager, "getTheme")
             if get_theme is not None:
@@ -5341,14 +5341,14 @@ class InteractiveMode:
             invalidate = _callable_attr(self.ui, "invalidate")
             if invalidate is not None:
                 invalidate()
-            if not result.get("success"):
+            if not bool(_value(result, "success", False)):
                 self.showError(
-                    f'Failed to load theme "{theme_name}": {result.get("error")}\nFell back to dark theme.'
+                    f'Failed to load theme "{theme_name}": {_value(result, "error")}\nFell back to dark theme.'
                 )
 
         def _on_theme_preview(theme_name: str) -> None:
             result = interactive_theme.set_theme(theme_name, True)
-            if result.get("success"):
+            if bool(_value(result, "success", False)):
                 invalidate = _callable_attr(self.ui, "invalidate")
                 if invalidate is not None:
                     invalidate()
