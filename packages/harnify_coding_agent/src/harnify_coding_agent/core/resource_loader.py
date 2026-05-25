@@ -33,7 +33,7 @@ from harnify_coding_agent.modes.interactive.theme.theme import Theme, load_theme
 from harnify_coding_agent.utils.paths import canonicalize_path, is_local_path, resolve_path
 
 
-class ResourcePathEntry(TypedDict, total=False):
+class ResourcePathEntry(TypedDict):
     path: str
     metadata: PathMetadata
 
@@ -44,9 +44,12 @@ class ResourceExtensionPaths(TypedDict, total=False):
     themePaths: list[ResourcePathEntry]
 
 
-class DefaultResourceLoaderOptions(TypedDict, total=False):
+class _DefaultResourceLoaderOptionsRequired(TypedDict):
     cwd: str
     agentDir: str
+
+
+class DefaultResourceLoaderOptions(_DefaultResourceLoaderOptionsRequired, total=False):
     settingsManager: SettingsManager
     eventBus: Any
     additionalExtensionPaths: list[str]
@@ -70,16 +73,35 @@ class DefaultResourceLoaderOptions(TypedDict, total=False):
     appendSystemPromptOverride: Any
 
 
+class SkillsResult(TypedDict):
+    skills: list[Skill]
+    diagnostics: list[ResourceDiagnostic]
+
+
+class PromptsResult(TypedDict):
+    prompts: list[PromptTemplate]
+    diagnostics: list[ResourceDiagnostic]
+
+
+class ThemesResult(TypedDict):
+    themes: list[Theme]
+    diagnostics: list[ResourceDiagnostic]
+
+
+class AgentsFilesResult(TypedDict):
+    agentsFiles: list[dict[str, str]]
+
+
 class ResourceLoader(Protocol):
     def getExtensions(self) -> LoadExtensionsResult: ...
 
-    def getSkills(self) -> dict[str, object]: ...
+    def getSkills(self) -> SkillsResult: ...
 
-    def getPrompts(self) -> dict[str, object]: ...
+    def getPrompts(self) -> PromptsResult: ...
 
-    def getThemes(self) -> dict[str, object]: ...
+    def getThemes(self) -> ThemesResult: ...
 
-    def getAgentsFiles(self) -> dict[str, object]: ...
+    def getAgentsFiles(self) -> AgentsFilesResult: ...
 
     def getSystemPrompt(self) -> str | None: ...
 
@@ -233,16 +255,16 @@ class DefaultResourceLoader:
     def getExtensions(self) -> LoadExtensionsResult:
         return self.extensionsResult
 
-    def getSkills(self) -> dict[str, object]:
+    def getSkills(self) -> SkillsResult:
         return {"skills": self.skills, "diagnostics": self.skillDiagnostics}
 
-    def getPrompts(self) -> dict[str, object]:
+    def getPrompts(self) -> PromptsResult:
         return {"prompts": self.prompts, "diagnostics": self.promptDiagnostics}
 
-    def getThemes(self) -> dict[str, object]:
+    def getThemes(self) -> ThemesResult:
         return {"themes": self.themes, "diagnostics": self.themeDiagnostics}
 
-    def getAgentsFiles(self) -> dict[str, object]:
+    def getAgentsFiles(self) -> AgentsFilesResult:
         return {"agentsFiles": self.agentsFiles}
 
     def getSystemPrompt(self) -> str | None:
