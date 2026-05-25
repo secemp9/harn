@@ -571,11 +571,11 @@ class DefaultResourceLoader:
     def _apply_extension_source_info(
         self,
         extensions: list[Extension],
-        metadata_source_infos: dict[str, SourceInfo] | None = None,
+        metadata_by_path: dict[str, PathMetadata] | None = None,
     ) -> None:
         for extension in extensions:
             extension.sourceInfo = (
-                self._find_source_info_for_path(extension.path, metadata_source_infos)
+                self._find_source_info_for_path(extension.path, None, metadata_by_path)
                 or self._get_default_source_info_for_path(extension.path)
             )
             for command in extension.commands.values():
@@ -587,6 +587,7 @@ class DefaultResourceLoader:
         self,
         resource_path: str,
         extra_source_infos: dict[str, SourceInfo] | None = None,
+        metadata_by_path: dict[str, PathMetadata] | None = None,
     ) -> SourceInfo | None:
         if not resource_path:
             return None
@@ -606,6 +607,18 @@ class DefaultResourceLoader:
                     origin=source_info.origin,
                     baseDir=source_info.baseDir,
                 )
+
+        if metadata_by_path is not None:
+            exact = metadata_by_path.get(normalized_resource_path) or metadata_by_path.get(resource_path)
+            if exact is not None:
+                return create_source_info(resource_path, exact)
+
+            for source_path, metadata in metadata_by_path.items():
+                normalized_source_path = os.path.abspath(source_path)
+                if normalized_resource_path == normalized_source_path or normalized_resource_path.startswith(
+                    f"{normalized_source_path}{os.sep}"
+                ):
+                    return create_source_info(resource_path, metadata)
         return None
 
     def _get_default_source_info_for_path(self, file_path: str) -> SourceInfo:
@@ -635,7 +648,7 @@ class DefaultResourceLoader:
             if self._is_under_path(normalized_path, root):
                 return SourceInfo(path=file_path, source="local", scope="project", origin="top-level", baseDir=root)
 
-        base_dir = normalized_path if os.path.isdir(normalized_path) else os.path.dirname(normalized_path)
+        base_dir = normalized_path if os.path.isdir(normalized_path) else os.path.abspath(os.path.join(normalized_path, ".."))
         return SourceInfo(
             path=file_path,
             source="local",
@@ -659,9 +672,16 @@ class DefaultResourceLoader:
     def _resolve_resource_path(self, path: str) -> str:
         return resolve_path(path, self.cwd, trim=True)
 
-    def _load_themes(self, paths: list[str]) -> dict[str, list[Any]]:
-        themes: list[ThemeResource] = []
+    def _load_themes(self, paths: list[str], include_defaults: bool = True) -> dict[str, list[Any]]:
+        themes: list[Theme] = []
         diagnostics: list[ResourceDiagnostic] = []
+
+        if include_defaults:
+            for dir_path in (
+                os.path.join(self.agentDir, "themes"),
+                os.path.join(self.cwd, CONFIG_DIR_NAME, "themes"),
+            ):
+                self._load_themes_from_dir(dir_path, themes, diagnostics)
 
         for path in paths:
             resolved = self._resolve_resource_path(path)
@@ -679,51 +699,40 @@ class DefaultResourceLoader:
                     diagnostics.append(
                         ResourceDiagnostic(type="warning", message="theme path is not a json file", path=resolved)
                     )
-            except OSError as error:
+            except Exception as error:  # noqa: BLE001
                 diagnostics.append(ResourceDiagnostic(type="warning", message=str(error), path=resolved))
         return {"themes": themes, "diagnostics": diagnostics}
 
     def _load_themes_from_dir(
         self,
         dir_path: str,
-        themes: list[ThemeResource],
+        themes: list[Theme],
         diagnostics: list[ResourceDiagnostic],
     ) -> None:
-        if not os.path.isdir(dir_path):
+        if not os.path.exists(dir_path):
             return
         try:
-            for entry in sorted(Path(dir_path).iterdir(), key=lambda candidate: candidate.name):
-                entry_path = str(entry)
-                is_file = entry.is_file()
+            for entry in os.scandir(dir_path):
+                is_file = entry.is_file(follow_symlinks=False)
                 if entry.is_symlink():
                     try:
-                        is_file = Path(entry_path).is_file()
-                    except OSError:
+                        is_file = os.path.isfile(entry.path)
+                    except Exception:  # noqa: BLE001
                         continue
-                if is_file and entry.name.endswith(".json"):
-                    self._load_theme_from_file(entry_path, themes, diagnostics)
-        except OSError as error:
+                if not is_file or not entry.name.endswith(".json"):
+                    continue
+                self._load_theme_from_file(entry.path, themes, diagnostics)
+        except Exception as error:  # noqa: BLE001
             diagnostics.append(ResourceDiagnostic(type="warning", message=str(error), path=dir_path))
 
     def _load_theme_from_file(
         self,
         file_path: str,
-        themes: list[ThemeResource],
+        themes: list[Theme],
         diagnostics: list[ResourceDiagnostic],
     ) -> None:
         try:
-            payload = json.loads(Path(file_path).read_text(encoding="utf-8"))
-            if not isinstance(payload, dict):
-                raise ValueError("theme file must contain a JSON object")
-            name = str(payload.get("name") or Path(file_path).stem)
-            themes.append(
-                ThemeResource(
-                    name=name,
-                    data=payload,
-                    sourcePath=file_path,
-                    sourceInfo=self._get_default_source_info_for_path(file_path),
-                )
-            )
+            themes.append(load_theme_from_path(file_path))
         except Exception as error:
             diagnostics.append(ResourceDiagnostic(type="warning", message=str(error), path=file_path))
 
@@ -768,24 +777,25 @@ class DefaultResourceLoader:
             )
         return {"prompts": list(seen.values()), "diagnostics": diagnostics}
 
-    def _dedupe_themes(self, themes: list[ThemeResource]) -> dict[str, list[Any]]:
-        seen: dict[str, ThemeResource] = {}
+    def _dedupe_themes(self, themes: list[Theme]) -> dict[str, list[Any]]:
+        seen: dict[str, Theme] = {}
         diagnostics: list[ResourceDiagnostic] = []
         for theme in themes:
-            existing = seen.get(theme.name)
+            name = theme.name or "unnamed"
+            existing = seen.get(name)
             if existing is None:
-                seen[theme.name] = theme
+                seen[name] = theme
                 continue
             diagnostics.append(
                 ResourceDiagnostic(
                     type="collision",
-                    message=f'name "{theme.name}" collision',
+                    message=f'name "{name}" collision',
                     path=theme.sourcePath,
                     collision=ResourceCollision(
                         resourceType="theme",
-                        name=theme.name,
-                        winnerPath=existing.sourcePath,
-                        loserPath=theme.sourcePath,
+                        name=name,
+                        winnerPath=existing.sourcePath or "<builtin>",
+                        loserPath=theme.sourcePath or "<builtin>",
                     ),
                 )
             )
@@ -826,7 +836,7 @@ class DefaultResourceLoader:
                 existing_owner = tool_owners.get(tool_name)
                 if existing_owner is not None and existing_owner != extension.path:
                     conflicts.append(
-                        {"path": extension.path, "error": f'Tool "{tool_name}" conflicts with {existing_owner}'}
+                        {"path": extension.path, "message": f'Tool "{tool_name}" conflicts with {existing_owner}'}
                     )
                 else:
                     tool_owners[tool_name] = extension.path
@@ -834,7 +844,7 @@ class DefaultResourceLoader:
                 existing_owner = flag_owners.get(flag_name)
                 if existing_owner is not None and existing_owner != extension.path:
                     conflicts.append(
-                        {"path": extension.path, "error": f'Flag "--{flag_name}" conflicts with {existing_owner}'}
+                        {"path": extension.path, "message": f'Flag "--{flag_name}" conflicts with {existing_owner}'}
                     )
                 else:
                     flag_owners[flag_name] = extension.path
