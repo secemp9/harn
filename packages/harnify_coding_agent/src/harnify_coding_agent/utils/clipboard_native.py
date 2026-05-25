@@ -62,7 +62,7 @@ def _load_clipboard(
     pyperclip_module: Any = None,
     image_grab_module: Any = None,
 ) -> ClipboardModule | None:
-    resolved_env = env or os.environ
+    resolved_env = env if env is not None else os.environ
     resolved_platform = platform_name or sys.platform
 
     if resolved_env.get("TERMUX_VERSION") or not _has_display(resolved_env, resolved_platform):
