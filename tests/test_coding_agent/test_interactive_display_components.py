@@ -30,6 +30,9 @@ bordered_loader_module = importlib.import_module("harnify_coding_agent.modes.int
 branch_summary_message_module = importlib.import_module(
     "harnify_coding_agent.modes.interactive.components.branch_summary_message"
 )
+compaction_summary_message_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.compaction_summary_message"
+)
 
 
 def _strip_ansi(text: str) -> str:
@@ -57,6 +60,10 @@ def test_branch_and_compaction_summary_components_expand() -> None:
 
 def test_branch_summary_message_module_exports_match_ts_surface() -> None:
     assert branch_summary_message_module.__all__ == ["BranchSummaryMessageComponent"]
+
+
+def test_compaction_summary_message_module_exports_match_ts_surface() -> None:
+    assert compaction_summary_message_module.__all__ == ["CompactionSummaryMessageComponent"]
 
 
 def test_custom_message_uses_custom_renderer_and_falls_back() -> None:
