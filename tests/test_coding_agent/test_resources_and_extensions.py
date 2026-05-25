@@ -359,6 +359,44 @@ def test_load_project_context_files_orders_global_then_ancestors(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_resource_loader_exports_and_nullish_prompt_overrides_match_ts(tmp_path: Path) -> None:
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    (cwd / CONFIG_DIR_NAME).mkdir()
+    (cwd / CONFIG_DIR_NAME / "SYSTEM.md").write_text("project system", encoding="utf-8")
+    (cwd / CONFIG_DIR_NAME / "APPEND_SYSTEM.md").write_text("project append", encoding="utf-8")
+    (agent_dir / "SYSTEM.md").write_text("agent system", encoding="utf-8")
+    (agent_dir / "APPEND_SYSTEM.md").write_text("agent append", encoding="utf-8")
+
+    loader = DefaultResourceLoader(
+        {
+            "cwd": str(cwd),
+            "agentDir": str(agent_dir),
+            "systemPrompt": "",
+            "appendSystemPrompt": [],
+        }
+    )
+    await loader.reload()
+
+    from harnify_coding_agent.core import resource_loader as resource_loader_module
+
+    assert resource_loader_module.__all__ == [
+        "DefaultResourceLoader",
+        "DefaultResourceLoaderOptions",
+        "ResourceCollision",
+        "ResourceDiagnostic",
+        "ResourceExtensionPaths",
+        "ResourceLoader",
+        "loadProjectContextFiles",
+    ]
+    assert resource_loader_module.loadProjectContextFiles is load_project_context_files
+    assert loader.getSystemPrompt() == ""
+    assert loader.getAppendSystemPrompt() == []
+
+
+@pytest.mark.asyncio
 async def test_resource_loader_supports_inline_extension_factories_dynamic_extension_and_dedupes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
