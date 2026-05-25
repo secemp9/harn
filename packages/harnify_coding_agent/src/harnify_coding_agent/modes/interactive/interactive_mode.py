@@ -699,7 +699,7 @@ class InteractiveMode:
         if runtime_host is not None:
             before_invalidate = _callable_attr(runtime_host, "setBeforeSessionInvalidate")
             if before_invalidate is not None:
-                before_invalidate(lambda: self._clear_selector())
+                before_invalidate(lambda: self.resetExtensionUI())
             set_rebind = _callable_attr(runtime_host, "setRebindSession")
             if set_rebind is not None:
                 set_rebind(self.rebindCurrentSession)
