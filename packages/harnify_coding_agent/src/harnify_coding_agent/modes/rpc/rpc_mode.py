@@ -266,6 +266,12 @@ class _RpcUIContext:
         return None
 
 
+class _ShutdownRequested(Exception):
+    def __init__(self, exit_code: int) -> None:
+        super().__init__(exit_code)
+        self.exit_code = exit_code
+
+
 async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) -> int:
     takeOverStdout()
     session = runtime_host.session
@@ -273,7 +279,11 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
     pending_extension_requests: dict[str, asyncio.Future[RpcExtensionUIResponse]] = {}
     shutdown_requested = False
     shutdown_exit_code = 0
+    shutting_down = False
+    cleaned_up = False
     signal_cleanup_handlers: list[tuple[int, Any]] = []
+    source = getattr(input_stream or sys.stdin, "buffer", input_stream or sys.stdin)
+    detach_input = lambda: None
 
     def output(obj: RpcResponse | RpcExtensionUIRequest | dict[str, Any]) -> None:
         writeRawStdout(serialize_json_line(obj))
@@ -351,6 +361,36 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
         nonlocal shutdown_requested, shutdown_exit_code
         shutdown_requested = True
         shutdown_exit_code = exit_code
+
+    async def cleanup() -> None:
+        nonlocal cleaned_up, unsubscribe
+        if cleaned_up:
+            return
+        cleaned_up = True
+        for current_signal, previous_handler in signal_cleanup_handlers:
+            signal.signal(current_signal, previous_handler)
+        if callable(unsubscribe):
+            unsubscribe()
+            unsubscribe = None
+        await runtime_host.dispose()
+        detach_input()
+        pause = getattr(input_stream or sys.stdin, "pause", None)
+        if callable(pause):
+            pause()
+        restoreStdout()
+
+    async def shutdown(exit_code: int = 0) -> None:
+        nonlocal shutting_down
+        if shutting_down:
+            raise _ShutdownRequested(exit_code)
+        shutting_down = True
+        await cleanup()
+        raise _ShutdownRequested(exit_code)
+
+    async def check_shutdown_requested() -> None:
+        if not shutdown_requested:
+            return
+        await shutdown(shutdown_exit_code)
 
     def register_signal_handlers() -> None:
         current_loop = asyncio.get_running_loop()
@@ -639,10 +679,10 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
             response = await handle_command(command)
             if response is not None:
                 output(response)
+            await check_shutdown_requested()
         except Exception as error:  # noqa: BLE001
             output(failure(_value(command, "id"), _value(command, "type"), str(error)))
 
-    source = getattr(input_stream or sys.stdin, "buffer", input_stream or sys.stdin)
     reader = JsonlLineBuffer()
     try:
         while True:
@@ -661,13 +701,10 @@ async def run_rpc_mode(runtime_host: Any, *, input_stream: Any | None = None) ->
                 if shutdown_requested:
                     break
         return shutdown_exit_code
+    except _ShutdownRequested as stop:
+        return stop.exit_code
     finally:
-        for current_signal, previous_handler in signal_cleanup_handlers:
-            signal.signal(current_signal, previous_handler)
-        if callable(unsubscribe):
-            unsubscribe()
-        await runtime_host.dispose()
-        restoreStdout()
+        await cleanup()
 
 
 runRpcMode = run_rpc_mode
