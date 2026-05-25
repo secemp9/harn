@@ -1478,8 +1478,10 @@ async def test_run_seeds_initial_messages_and_starts_ui(monkeypatch: pytest.Monk
     mode.checkTmuxKeyboardSetup = lambda: asyncio.sleep(0, result=None)  # type: ignore[method-assign]
 
     run_task = asyncio.create_task(mode.run())
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    for _ in range(8):
+        if len(prompts) == 2:
+            break
+        await asyncio.sleep(0)
     mode.requestShutdown()
     exit_code = await run_task
 
@@ -1490,6 +1492,30 @@ async def test_run_seeds_initial_messages_and_starts_ui(monkeypatch: pytest.Monk
         ("second", None),
     ]
     assert warnings == ["fallback"]
+
+
+@pytest.mark.asyncio
+async def test_run_honors_shutdown_requested_before_shutdown_future_exists() -> None:
+    mode = InteractiveMode(ui=FakeUi())
+    init_started = asyncio.Event()
+    allow_init_to_finish = asyncio.Event()
+
+    async def fake_init() -> None:
+        init_started.set()
+        await allow_init_to_finish.wait()
+
+    mode.init = fake_init  # type: ignore[method-assign]
+
+    run_task = asyncio.create_task(mode.run())
+    await init_started.wait()
+
+    mode.requestShutdown()
+    assert mode.shutdownRequested is True
+    assert mode._shutdownFuture is None
+
+    allow_init_to_finish.set()
+
+    assert await run_task == 0
 
 
 @pytest.mark.asyncio
