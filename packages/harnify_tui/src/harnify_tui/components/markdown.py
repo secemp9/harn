@@ -242,7 +242,7 @@ class Markdown(Component):
                     for highlighted in highlighted_lines:
                         lines.append(f"{indent}{highlighted}")
                 else:
-                    code_lines = node.content.split("\n") if node.content else [""]
+                    code_lines = node.content.rstrip("\n").split("\n") if node.content else [""]
                     for code_line in code_lines:
                         lines.append(f"{indent}{self.theme.codeBlock(code_line)}")
                 lines.append(self.theme.codeBlockBorder("```"))
