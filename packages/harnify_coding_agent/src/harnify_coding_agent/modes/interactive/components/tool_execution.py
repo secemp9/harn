@@ -10,7 +10,7 @@ from typing import Any
 
 from harnify_tui import Box, Container, Image, ImageOptions, ImageTheme, Spacer, Text, getCapabilities
 
-from harnify_coding_agent.core.tools import all_tool_names, create_all_tool_definitions
+from harnify_coding_agent.core.tools import create_all_tool_definitions
 from harnify_coding_agent.core.tools.render_utils import get_text_output
 from harnify_coding_agent.modes.interactive.theme.theme import theme
 from harnify_coding_agent.utils.image_convert import convert_to_png
@@ -89,7 +89,7 @@ class ToolExecutionComponent(Container):
         self._image_conversion_tasks: dict[int, asyncio.Task[Any]] = {}
 
         builtin_definitions = create_all_tool_definitions(self.cwd)
-        self.builtInToolDefinition = builtin_definitions.get(toolName) if toolName in all_tool_names else None
+        self.builtInToolDefinition = builtin_definitions.get(toolName)
 
         self.addChild(Spacer(1))
         self.contentBox = Box(1, 1, lambda text: theme.bg("toolPendingBg", text))
@@ -154,19 +154,10 @@ class ToolExecutionComponent(Container):
         )
 
     def _format_args(self) -> str:
-        if self.args in (None, {}, []):
-            return ""
-        try:
-            return json.dumps(self.args, indent=2, ensure_ascii=False)
-        except TypeError:
-            return str(self.args)
+        return json.dumps(self.args, indent=2, ensure_ascii=False)
 
     def createCallFallback(self) -> Text:
-        text = theme.fg("toolTitle", theme.bold(self.toolName))
-        args_text = self._format_args()
-        if args_text:
-            text += f"\n\n{args_text}"
-        return Text(text, 0, 0)
+        return Text(theme.fg("toolTitle", theme.bold(self.toolName)), 0, 0)
 
     def createResultFallback(self) -> Text | None:
         output = self.getTextOutput()
@@ -198,8 +189,8 @@ class ToolExecutionComponent(Container):
                 isError=bool(_value(result, "isError", False)),
             )
         self.isPartial = isPartial
-        self._maybe_convert_images_for_kitty()
         self.updateDisplay()
+        self._maybe_convert_images_for_kitty()
 
     def setExpanded(self, expanded: bool) -> None:
         self.expanded = expanded
@@ -303,6 +294,7 @@ class ToolExecutionComponent(Container):
                 try:
                     component = call_renderer(self.args, theme, self.getRenderContext(self.callRendererComponent))
                 except Exception:
+                    self.callRendererComponent = None
                     component = None
                 if component is None:
                     render_container.addChild(self.createCallFallback())
@@ -324,13 +316,13 @@ class ToolExecutionComponent(Container):
                             {
                                 "content": self.result.content,
                                 "details": self.result.details,
-                                "isError": self.result.isError,
                             },
                             {"expanded": self.expanded, "isPartial": self.isPartial},
                             theme,
                             self.getRenderContext(self.resultRendererComponent),
                         )
                     except Exception:
+                        self.resultRendererComponent = None
                         component = None
                     if component is None:
                         fallback = self.createResultFallback()
@@ -359,6 +351,9 @@ class ToolExecutionComponent(Container):
                 if converted is not None:
                     data, mime_type = converted
                 if not (caps.images and self.showImages and isinstance(data, str) and isinstance(mime_type, str)):
+                    image_index += 1
+                    continue
+                if caps.images == "kitty" and mime_type != "image/png":
                     image_index += 1
                     continue
                 spacer = Spacer(1)
@@ -396,5 +391,4 @@ class ToolExecutionComponent(Container):
 __all__ = [
     "ToolExecutionComponent",
     "ToolExecutionOptions",
-    "ToolRenderContext",
 ]
