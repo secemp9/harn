@@ -65,6 +65,7 @@ from harnify_coding_agent.config import (
 from harnify_coding_agent.core.agent_session import parse_skill_block
 from harnify_coding_agent.core.agent_session_runtime import SessionImportFileNotFoundError
 from harnify_coding_agent.core.footer_data_provider import FooterDataProvider
+from harnify_coding_agent.core.http_dispatcher import configureHttpDispatcher
 from harnify_coding_agent.core.keybindings import KEYBINDINGS, KeybindingsManager
 from harnify_coding_agent.core.messages import createCompactionSummaryMessage
 from harnify_coding_agent.core.model_resolver import (
@@ -101,6 +102,8 @@ from harnify_coding_agent.modes.interactive.components.extension_selector import
 )
 from harnify_coding_agent.modes.interactive.components.footer import FooterComponent
 from harnify_coding_agent.modes.interactive.components.keybinding_hints import (
+    KeyTextFormatOptions,
+    format_key_text,
     key_display_text,
     key_hint,
     key_text,
@@ -144,6 +147,7 @@ from harnify_coding_agent.utils.clipboard_image import (
     read_clipboard_image,
 )
 from harnify_coding_agent.utils.shell import kill_tracked_detached_children
+from harnify_coding_agent.utils.tools_manager import ensureTool
 from harnify_coding_agent.utils.version_check import LatestPiRelease, check_for_new_pi_version
 
 interactive_theme = import_module("harnify_coding_agent.modes.interactive.theme.theme")
