@@ -41,6 +41,7 @@ from harnify_tui import (
     SlashCommand,
     Spacer,
     Text,
+    TruncatedText,
     getCapabilities,
     hyperlink,
     matchesKey,
@@ -93,6 +94,7 @@ from harnify_coding_agent.modes.interactive.components.extension_selector import
 )
 from harnify_coding_agent.modes.interactive.components.footer import FooterComponent
 from harnify_coding_agent.modes.interactive.components.keybinding_hints import (
+    key_display_text,
     key_hint,
     key_text,
     raw_key_hint,
@@ -639,6 +641,9 @@ class InteractiveMode:
         self.workingIndicatorOptions = getattr(self, "workingIndicatorOptions", None)
         self.defaultHiddenThinkingLabel = getattr(self, "defaultHiddenThinkingLabel", "Thinking...")
         self.hiddenThinkingLabel = getattr(self, "hiddenThinkingLabel", self.defaultHiddenThinkingLabel)
+        self.compactionQueuedMessages = list(getattr(self, "compactionQueuedMessages", []))
+        self.pendingBashComponents = list(getattr(self, "pendingBashComponents", []))
+        self.bashComponent = getattr(self, "bashComponent", None)
         self._shutdownFuture: asyncio.Future[int] | None = None
         self._backgroundTasks: set[asyncio.Task[Any]] = set()
         self._sessionUnsubscribe: Callable[[], None] | None = None
