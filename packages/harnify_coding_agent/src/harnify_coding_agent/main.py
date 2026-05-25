@@ -46,7 +46,7 @@ from harnify_coding_agent.core.session_manager import SessionManager
 from harnify_coding_agent.core.settings_manager import SettingsManager
 from harnify_coding_agent.core.timings import print_timings, reset_timings, time as time_mark
 from harnify_coding_agent.migrations import run_migrations, show_deprecation_warnings
-from harnify_coding_agent.modes import run_print_mode
+from harnify_coding_agent.modes import runPrintMode as run_print_mode
 from harnify_coding_agent.modes.interactive.components.extension_selector import ExtensionSelectorComponent
 from harnify_coding_agent.modes.interactive import InteractiveMode
 from harnify_coding_agent.modes.interactive.theme.theme import init_theme, stop_theme_watcher
