@@ -3509,7 +3509,7 @@ class InteractiveMode:
             return
 
     async def checkShutdownRequested(self) -> None:
-        if self._shutdownFuture is None or not self._shutdownFuture.done():
+        if not self.shutdownRequested:
             return
         await self.shutdown()
 
