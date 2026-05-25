@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
+
+if TYPE_CHECKING:
+    from harnify_coding_agent.core.package_manager import PathMetadata
 
 SourceScope = Literal["user", "project", "temporary"]
 SourceOrigin = Literal["package", "top-level"]
 
 
-class _SyntheticSourceInfoOptions(TypedDict, total=False):
+class _SyntheticSourceInfoOptions(TypedDict):
     source: str
-    scope: SourceScope
-    origin: SourceOrigin
-    baseDir: str | None
+    scope: NotRequired[SourceScope]
+    origin: NotRequired[SourceOrigin]
+    baseDir: NotRequired[str | None]
 
 
 @dataclass(slots=True)
@@ -25,7 +28,7 @@ class SourceInfo:
     baseDir: str | None = None
 
 
-def create_source_info(path: str, metadata: dict[str, object]) -> SourceInfo:
+def create_source_info(path: str, metadata: PathMetadata) -> SourceInfo:
     return SourceInfo(
         path=path,
         source=metadata["source"],  # type: ignore[arg-type]
