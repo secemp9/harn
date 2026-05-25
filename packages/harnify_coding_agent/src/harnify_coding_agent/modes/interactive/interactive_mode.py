@@ -687,6 +687,7 @@ class InteractiveMode:
             getattr(self, "signalCleanupHandlers", [])
         )
         self._shutdownFuture: asyncio.Future[int] | None = None
+        self._pendingUserInputFuture: asyncio.Future[str] | None = None
         self._backgroundTasks: set[asyncio.Task[Any]] = set()
         self._sessionUnsubscribe: Callable[[], None] | None = None
         self._activeSelectorHandle: Any | None = None
