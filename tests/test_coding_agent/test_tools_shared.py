@@ -40,6 +40,7 @@ from harnify_coding_agent.core.tools import path_utils as path_utils_module
 from harnify_coding_agent.core.tools import render_utils as render_utils_module
 from harnify_coding_agent.core.tools import tool_definition_wrapper as tool_definition_wrapper_module
 from harnify_coding_agent.core.tools import truncate as truncate_module
+from harnify_coding_agent.utils import ansi as ansi_module
 
 
 def test_truncate_head_honors_line_and_byte_limits() -> None:
@@ -134,6 +135,13 @@ def test_render_utils_module_exports_match_ts_surface() -> None:
         "shortenPath",
         "str",
     ]
+
+
+def test_ansi_module_matches_ts_surface_and_type_error() -> None:
+    assert ansi_module.__all__ == ["stripAnsi"]
+    assert ansi_module.strip_ansi("\x1b]8;;https://pi.dev\x07link\x1b]8;;\x07 \x1b[31mred\x1b[0m") == "link red"
+    with pytest.raises(TypeError, match=r"Expected a `string`, got `number`"):
+        ansi_module.strip_ansi(123)  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
