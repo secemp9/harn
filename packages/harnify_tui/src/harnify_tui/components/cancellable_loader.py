@@ -47,4 +47,4 @@ class CancellableLoader(Loader):
         self.stop()
 
 
-__all__ = ["AbortController", "AbortSignal", "CancellableLoader"]
+__all__ = ["CancellableLoader"]
