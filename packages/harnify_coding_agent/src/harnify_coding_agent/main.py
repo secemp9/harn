@@ -614,6 +614,7 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
     resolved_prompt_template_paths = resolve_cli_paths(cwd, parsed.promptTemplates)
     resolved_theme_paths = resolve_cli_paths(cwd, parsed.themes)
     auth_storage = AuthStorage.create()
+    time_mark("createRuntime")
     try:
         runtime = await create_agent_session_runtime(
             create_runtime_factory(
@@ -636,7 +637,6 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
         settings_manager = services.settingsManager
         model_registry = services.modelRegistry
         configureHttpDispatcher(settings_manager.getHttpIdleTimeoutMs())
-        time_mark("createAgentSessionRuntime")
 
         if parsed.help:
             extension_flags = [
