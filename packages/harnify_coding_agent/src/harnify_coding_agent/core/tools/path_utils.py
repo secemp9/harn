@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
 
 from harnify_coding_agent.utils.paths import normalize_path, resolve_path
 
@@ -10,11 +12,11 @@ NARROW_NO_BREAK_SPACE = "\u202F"
 
 
 def try_macos_screenshot_path(file_path: str) -> str:
-    return file_path.replace(" AM.", f"{NARROW_NO_BREAK_SPACE}AM.").replace(" PM.", f"{NARROW_NO_BREAK_SPACE}PM.")
+    return re.sub(r" (AM|PM)\.", rf"{NARROW_NO_BREAK_SPACE}\1.", file_path, flags=re.IGNORECASE)
 
 
 def try_nfd_variant(file_path: str) -> str:
-    return file_path.normalize("NFD") if hasattr(file_path, "normalize") else file_path
+    return unicodedata.normalize("NFD", file_path)
 
 
 def try_curly_quote_variant(file_path: str) -> str:
@@ -42,7 +44,7 @@ def resolve_read_path(file_path: str, cwd: str) -> str:
     if am_pm_variant != resolved and file_exists(am_pm_variant):
         return am_pm_variant
 
-    nfd_variant = unicodedata_nfd(resolved)
+    nfd_variant = try_nfd_variant(resolved)
     if nfd_variant != resolved and file_exists(nfd_variant):
         return nfd_variant
 
@@ -56,15 +58,8 @@ def resolve_read_path(file_path: str, cwd: str) -> str:
 
     return resolved
 
-
-def unicodedata_nfd(value: str) -> str:
-    import unicodedata
-
-    return unicodedata.normalize("NFD", value)
-
-
 expandPath = expand_path
 resolveToCwd = resolve_to_cwd
 resolveReadPath = resolve_read_path
 
-__all__ = ["expandPath", "expand_path", "resolveReadPath", "resolveToCwd", "resolve_read_path", "resolve_to_cwd"]
+__all__ = ["expandPath", "resolveReadPath", "resolveToCwd"]
