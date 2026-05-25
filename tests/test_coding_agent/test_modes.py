@@ -56,6 +56,17 @@ def test_rpc_client_module_exports_match_ts_surface() -> None:
     assert rpc_client_module.__all__ == ["ModelInfo", "RpcClient", "RpcClientOptions", "RpcEventListener"]
 
 
+def test_rpc_client_options_surface_matches_ts() -> None:
+    assert list(rpc_client_module.RpcClientOptions.__dataclass_fields__) == [
+        "cliPath",
+        "cwd",
+        "env",
+        "provider",
+        "model",
+        "args",
+    ]
+
+
 def test_rpc_client_camel_method_surface_matches_ts() -> None:
     expected_aliases = {
         "onEvent": "on_event",
