@@ -51,7 +51,11 @@ from harnify_coding_agent.modes.interactive.components.extension_selector import
 from harnify_coding_agent.modes.interactive import InteractiveMode
 from harnify_coding_agent.modes.interactive.theme.theme import init_theme, stop_theme_watcher
 from harnify_coding_agent.modes.rpc import run_rpc_mode
-from harnify_coding_agent.package_manager_cli import handle_config_command, handle_package_command
+from harnify_coding_agent.package_manager_cli import (
+    _take_command_exit_code,
+    handle_config_command,
+    handle_package_command,
+)
 from harnify_coding_agent.utils.paths import is_local_path, normalize_path, resolve_path
 from harnify_coding_agent.utils.windows_self_update import cleanup_windows_self_update_quarantine
 
@@ -522,10 +526,17 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
         cleanup_windows_self_update_quarantine(get_package_dir())
 
     package_command_result = await handle_package_command(args)
-    if package_command_result is not None:
+    if type(package_command_result) is bool:
+        if package_command_result:
+            return _take_command_exit_code()
+    elif package_command_result is not None:
         return package_command_result
+
     config_command_result = await handle_config_command(args)
-    if config_command_result is not None:
+    if type(config_command_result) is bool:
+        if config_command_result:
+            return _take_command_exit_code()
+    elif config_command_result is not None:
         return config_command_result
 
     parsed = parse_args(args)
