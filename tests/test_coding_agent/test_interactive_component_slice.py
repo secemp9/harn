@@ -4,6 +4,7 @@ import importlib
 import re
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from harnify_coding_agent.core.keybindings import KeybindingsManager
 from harnify_coding_agent.core.session_manager import SessionInfo
@@ -116,6 +117,76 @@ def test_theme_helpers_load_builtin_themes() -> None:
     switched = interactive_theme_module.set_theme("light")
     assert switched["success"] is True
     assert interactive_theme_module.theme.name == "light"
+
+
+def test_theme_module_exports_match_ts_surface() -> None:
+    assert interactive_theme_module.__all__ == [
+        "Theme",
+        "ThemeBg",
+        "ThemeColor",
+        "ThemeInfo",
+        "TerminalTheme",
+        "RgbColor",
+        "TerminalThemeDetection",
+        "TerminalThemeDetectionOptions",
+        "getAvailableThemes",
+        "getAvailableThemesWithPaths",
+        "loadThemeFromPath",
+        "getThemeByName",
+        "getThemeForRgbColor",
+        "parseOsc11BackgroundColor",
+        "detectTerminalBackground",
+        "getDefaultTheme",
+        "theme",
+        "setRegisteredThemes",
+        "initTheme",
+        "setTheme",
+        "setThemeInstance",
+        "onThemeChange",
+        "stopThemeWatcher",
+        "getResolvedThemeColors",
+        "isLightTheme",
+        "getThemeExportColors",
+        "highlightCode",
+        "getLanguageFromPath",
+        "getMarkdownTheme",
+        "getSelectListTheme",
+        "getEditorTheme",
+        "getSettingsListTheme",
+    ]
+
+
+def test_theme_helpers_match_ts_detection_and_name_contracts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    custom_theme_dir = tmp_path / "themes"
+    custom_theme_dir.mkdir()
+    (custom_theme_dir / "oceanic-next.json").write_text('{"name":"Oceanic Next","colors":{}}', encoding="utf-8")
+    monkeypatch.setattr(interactive_theme_module, "get_custom_themes_dir", lambda: str(custom_theme_dir))
+    interactive_theme_module.set_registered_themes([])
+
+    names = interactive_theme_module.get_available_themes()
+    assert "Oceanic Next" in names
+    assert "oceanic-next" not in names
+
+    detection = interactive_theme_module.detectTerminalBackground({"env": {"COLORFGBG": "15;0"}})
+    assert detection == {
+        "theme": "dark",
+        "source": "COLORFGBG",
+        "detail": "background color index 0",
+        "confidence": "high",
+    }
+
+    assert interactive_theme_module.getThemeForRgbColor({"r": 255, "g": 255, "b": 255}) == "light"
+    assert interactive_theme_module.parseOsc11BackgroundColor("\x1b]11;rgb:ffff/ffff/ffff\x07") == {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+    }
+    assert interactive_theme_module.isLightTheme("light") is True
+    assert interactive_theme_module.isLightTheme("dark") is False
+    assert interactive_theme_module.getThemeByName("__missing_theme__") is None
 
 
 def test_keybinding_hints_format_text(monkeypatch) -> None:
