@@ -2491,6 +2491,28 @@ class InteractiveMode:
             await self.handleFatalRuntimeError("Failed to start new session", error)
             return {"cancelled": True}
 
+    async def handleClearCommand(self) -> None:
+        if self.loadingAnimation is not None:
+            stop = _callable_attr(self.loadingAnimation, "stop")
+            if stop is not None:
+                stop()
+            self.loadingAnimation = None
+        clear = _callable_attr(self.statusContainer, "clear")
+        if clear is not None:
+            clear()
+        try:
+            result = await self.runtimeHost.newSession()
+            if result.get("cancelled"):
+                return
+            self.renderCurrentSessionState()
+            self.chatContainer.addChild(Spacer(1))
+            self.chatContainer.addChild(
+                Text(f"{interactive_theme.theme.fg('accent', '✓ New session started')}", 1, 1)
+            )
+            self._request_render()
+        except Exception as error:  # noqa: BLE001
+            await self.handleFatalRuntimeError("Failed to create session", error)
+
     async def handleBashCommand(self, command: str, excludeFromContext: bool = False) -> None:
         original_escape = getattr(self.defaultEditor, "onEscape", None)
         bash_component = BashExecutionComponent(command, self.ui, excludeFromContext)
