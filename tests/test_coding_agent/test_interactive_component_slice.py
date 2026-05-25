@@ -230,7 +230,6 @@ def test_session_selector_search_module_exports_match_ts_surface() -> None:
         "ParsedSearchQuery",
         "SortMode",
         "filterAndSortSessions",
-        "getSessionSearchText",
         "hasSessionName",
         "matchSession",
         "parseSearchQuery",
