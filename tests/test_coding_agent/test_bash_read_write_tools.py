@@ -4,6 +4,7 @@ import asyncio
 import base64
 from collections.abc import Callable
 from pathlib import Path
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -23,10 +24,15 @@ from harnify_coding_agent.core.tools import write as write_module
 from harnify_tui import Text
 
 TINY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _text(result: object) -> str:
     return get_text_output(result, show_images=True)
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 def _fake_theme():
@@ -211,7 +217,7 @@ def test_write_render_call_and_result_match_ts_surface() -> None:
 
     assert "write" in call_component.text
     assert "demo.py" in call_component.text
-    assert "print('hi')" in call_component.text
+    assert "print('hi')" in _strip_ansi(call_component.text)
 
     error_component = definition.renderResult(
         SimpleNamespace(content=[SimpleNamespace(type="text", text="boom")]),
