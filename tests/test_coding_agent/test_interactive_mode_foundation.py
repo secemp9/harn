@@ -230,6 +230,32 @@ def test_toggle_thinking_block_visibility_rebuilds_chat_and_reports_status() -> 
     assert statuses == ["rebuilt", "Thinking blocks: hidden"]
 
 
+def test_render_current_session_state_resets_pending_and_streaming_before_render() -> None:
+    ui = FakeUi()
+    pending = Container()
+    pending.addChild(Text("queued", 0, 0))
+    chat = Container()
+    chat.addChild(Text("stale", 0, 0))
+    calls: list[str] = []
+    mode = InteractiveMode(ui=ui, chatContainer=chat, pendingMessagesContainer=pending)
+    mode.compactionQueuedMessages = [{"text": "queued", "mode": "followUp"}]
+    mode.streamingComponent = object()
+    mode.streamingMessage = {"role": "assistant"}
+    mode._toolComponentsById = {"tool-1": object()}
+    mode.renderInitialMessages = lambda: calls.append("rendered")  # type: ignore[method-assign]
+
+    mode.renderCurrentSessionState()
+
+    assert len(chat.children) == 0
+    assert len(pending.children) == 0
+    assert mode.compactionQueuedMessages == []
+    assert mode.streamingComponent is None
+    assert mode.streamingMessage is None
+    assert mode._toolComponentsById == {}
+    assert calls == ["rendered"]
+    assert ui.render_calls == [None]
+
+
 def test_update_editor_border_color_matches_ts_and_requests_render() -> None:
     ui = FakeUi()
     editor = FakeEditor()
