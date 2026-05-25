@@ -5,11 +5,12 @@ from __future__ import annotations
 import copy
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from filelock import FileLock
+from filelock import FileLock, Timeout
 from harnify_ai.types import Transport
 
 from harnify_coding_agent.config import CONFIG_DIR_NAME, get_agent_dir
@@ -19,6 +20,15 @@ from harnify_coding_agent.core.http_dispatcher import (
 )
 from harnify_coding_agent.utils.paths import normalize_path, resolve_path
 
+type CompactionSettings = dict[str, Any]
+type BranchSummarySettings = dict[str, Any]
+type ProviderRetrySettings = dict[str, Any]
+type RetrySettings = dict[str, Any]
+type TerminalSettings = dict[str, Any]
+type ImageSettings = dict[str, Any]
+type ThinkingBudgetsSettings = dict[str, Any]
+type MarkdownSettings = dict[str, Any]
+type WarningSettings = dict[str, Any]
 type Settings = dict[str, Any]
 type PackageSource = str | dict[str, Any]
 type SettingsScope = Literal["global", "project"]
@@ -29,9 +39,6 @@ def deep_merge_settings(base: Settings, overrides: Settings) -> Settings:
     result = copy.deepcopy(base)
     for key, override_value in overrides.items():
         base_value = base.get(key)
-        if override_value is None:
-            result[key] = None
-            continue
         if (
             isinstance(override_value, dict)
             and isinstance(base_value, dict)
@@ -64,18 +71,37 @@ class FileSettingsStorage(SettingsStorage):
     def _lock_path(path: str) -> str:
         return f"{path}.lock"
 
+    def acquireLockSyncWithRetry(self, path: str) -> Any:
+        max_attempts = 10
+        delay_ms = 20
+        last_error: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            lock = FileLock(self._lock_path(path), timeout=0)
+            try:
+                lock.acquire()
+                return lock.release
+            except Timeout as error:
+                if attempt == max_attempts:
+                    raise error
+                last_error = error
+                start = time.perf_counter()
+                while (time.perf_counter() - start) * 1000 < delay_ms:
+                    pass
+
+        raise last_error or Exception("Failed to acquire settings lock")
+
     def withLock(self, scope: SettingsScope, fn: Any) -> None:
         path = self.globalSettingsPath if scope == "global" else self.projectSettingsPath
         directory = os.path.dirname(path)
-        release_lock: FileLock | None = None
+        release_lock: Any = None
 
         try:
             file_exists = os.path.exists(path)
             current: str | None = None
 
             if file_exists:
-                release_lock = FileLock(self._lock_path(path), timeout=10)
-                release_lock.acquire()
+                release_lock = self.acquireLockSyncWithRetry(path)
                 with open(path, encoding="utf-8") as handle:
                     current = handle.read()
 
@@ -86,12 +112,11 @@ class FileSettingsStorage(SettingsStorage):
             if not os.path.exists(directory):
                 os.makedirs(directory, exist_ok=True)
             if release_lock is None:
-                release_lock = FileLock(self._lock_path(path), timeout=10)
-                release_lock.acquire()
+                release_lock = self.acquireLockSyncWithRetry(path)
             with open(path, "w", encoding="utf-8") as handle:
                 handle.write(next_value)
         finally:
-            if release_lock is not None and release_lock.is_locked:
+            if release_lock is not None:
                 release_lock.release()
 
 
@@ -132,10 +157,11 @@ class SettingsManager:
         self.globalSettingsLoadError = globalLoadError
         self.projectSettingsLoadError = projectLoadError
         self.errors: list[SettingsError] = list(initialErrors or [])
+        self.writeQueue: asyncio.Future[None] | None = None
 
     @classmethod
     def create(cls, cwd: str, agentDir: str | None = None) -> SettingsManager:
-        storage = FileSettingsStorage(cwd, agentDir or get_agent_dir())
+        storage = FileSettingsStorage(cwd, get_agent_dir() if agentDir is None else agentDir)
         return cls.fromStorage(storage)
 
     @classmethod
@@ -160,7 +186,7 @@ class SettingsManager:
     def inMemory(cls, settings: dict[str, Any] | None = None) -> SettingsManager:
         storage = InMemorySettingsStorage()
         initial_settings = cls.migrateSettings(copy.deepcopy(settings or {}))
-        storage.withLock("global", lambda _current: json.dumps(initial_settings, indent=2))
+        storage.withLock("global", lambda _current: json.dumps(initial_settings, indent=2, ensure_ascii=False))
         return cls.fromStorage(storage)
 
     @classmethod
@@ -209,7 +235,7 @@ class SettingsManager:
             if not isinstance(provider_settings, dict):
                 provider_settings = {}
             max_delay = retry_settings.get("maxDelayMs")
-            if isinstance(max_delay, int | float) and provider_settings.get("maxRetryDelayMs") is None:
+            if isinstance(max_delay, (int, float)) and not isinstance(max_delay, bool) and provider_settings.get("maxRetryDelayMs") is None:
                 retry_settings["provider"] = {**provider_settings, "maxRetryDelayMs": max_delay}
             retry_settings.pop("maxDelayMs", None)
 
@@ -222,6 +248,7 @@ class SettingsManager:
         return copy.deepcopy(self.projectSettings)
 
     async def reload(self) -> None:
+        await self.flush()
         global_load = self.tryLoadFromStorage(self.storage, "global")
         if global_load["error"] is None:
             self.globalSettings = global_load["settings"]
@@ -262,6 +289,15 @@ class SettingsManager:
         normalized = error if isinstance(error, Exception) else Exception(str(error))
         self.errors.append(SettingsError(scope=scope, error=normalized))
 
+    def clearModifiedScope(self, scope: SettingsScope) -> None:
+        if scope == "global":
+            self.modifiedFields.clear()
+            self.modifiedNestedFields.clear()
+            return
+
+        self.modifiedProjectFields.clear()
+        self.modifiedProjectNestedFields.clear()
+
     @staticmethod
     def _clone_modified_nested_fields(source: dict[str, set[str]]) -> dict[str, set[str]]:
         return {key: set(value) for key, value in source.items()}
@@ -293,9 +329,32 @@ class SettingsManager:
                         merged_settings.pop(field, None)
                     else:
                         merged_settings[field] = copy.deepcopy(value)
-            return json.dumps(merged_settings, indent=2)
+            return json.dumps(merged_settings, indent=2, ensure_ascii=False)
 
         self.storage.withLock(scope, persist)
+
+    def _run_write_task(self, scope: SettingsScope, task: Any) -> None:
+        try:
+            task()
+            self.clearModifiedScope(scope)
+        except Exception as error:  # noqa: BLE001
+            self.recordError(scope, error)
+
+    def enqueueWrite(self, scope: SettingsScope, task: Any) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._run_write_task(scope, task)
+            return
+
+        previous = self.writeQueue
+
+        async def runner() -> None:
+            if previous is not None:
+                await previous
+            self._run_write_task(scope, task)
+
+        self.writeQueue = loop.create_task(runner())
 
     def save(self) -> None:
         self.settings = deep_merge_settings(self.globalSettings, self.projectSettings)
@@ -305,12 +364,10 @@ class SettingsManager:
         snapshot_global_settings = copy.deepcopy(self.globalSettings)
         modified_fields = set(self.modifiedFields)
         modified_nested_fields = self._clone_modified_nested_fields(self.modifiedNestedFields)
-        try:
-            self._persistScopedSettings("global", snapshot_global_settings, modified_fields, modified_nested_fields)
-            self.modifiedFields.clear()
-            self.modifiedNestedFields.clear()
-        except Exception as error:  # noqa: BLE001
-            self.recordError("global", error)
+        self.enqueueWrite(
+            "global",
+            lambda: self._persistScopedSettings("global", snapshot_global_settings, modified_fields, modified_nested_fields),
+        )
 
     def saveProjectSettings(self, settings: Settings) -> None:
         self.projectSettings = copy.deepcopy(settings)
@@ -321,15 +378,14 @@ class SettingsManager:
         snapshot_project_settings = copy.deepcopy(self.projectSettings)
         modified_fields = set(self.modifiedProjectFields)
         modified_nested_fields = self._clone_modified_nested_fields(self.modifiedProjectNestedFields)
-        try:
-            self._persistScopedSettings("project", snapshot_project_settings, modified_fields, modified_nested_fields)
-            self.modifiedProjectFields.clear()
-            self.modifiedProjectNestedFields.clear()
-        except Exception as error:  # noqa: BLE001
-            self.recordError("project", error)
+        self.enqueueWrite(
+            "project",
+            lambda: self._persistScopedSettings("project", snapshot_project_settings, modified_fields, modified_nested_fields),
+        )
 
     async def flush(self) -> None:
-        return None
+        if self.writeQueue is not None:
+            await self.writeQueue
 
     def drainErrors(self) -> list[SettingsError]:
         drained = list(self.errors)
@@ -350,6 +406,14 @@ class SettingsManager:
             value = {}
             self.globalSettings[key] = value
         return value
+
+    def _settings_object(self, key: str) -> dict[str, Any]:
+        value = self.settings.get(key)
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _nullish(value: Any, default: Any) -> Any:
+        return default if value is None else value
 
     def getLastChangelogVersion(self) -> str | None:
         return self.settings.get("lastChangelogVersion")
@@ -405,13 +469,13 @@ class SettingsManager:
         self._set_global_value("defaultThinkingLevel", level)
 
     def getTransport(self) -> TransportSetting:
-        return self.settings.get("transport") or "auto"
+        return self._nullish(self.settings.get("transport"), "auto")
 
     def setTransport(self, transport: TransportSetting) -> None:
         self._set_global_value("transport", transport)
 
     def getCompactionEnabled(self) -> bool:
-        return bool((self.settings.get("compaction") or {}).get("enabled", True))
+        return self._nullish(self._settings_object("compaction").get("enabled"), True)
 
     def setCompactionEnabled(self, enabled: bool) -> None:
         compaction = self._ensure_global_nested("compaction")
@@ -420,10 +484,10 @@ class SettingsManager:
         self.save()
 
     def getCompactionReserveTokens(self) -> int:
-        return int((self.settings.get("compaction") or {}).get("reserveTokens", 16384))
+        return self._nullish(self._settings_object("compaction").get("reserveTokens"), 16384)
 
     def getCompactionKeepRecentTokens(self) -> int:
-        return int((self.settings.get("compaction") or {}).get("keepRecentTokens", 20000))
+        return self._nullish(self._settings_object("compaction").get("keepRecentTokens"), 20000)
 
     def getCompactionSettings(self) -> dict[str, Any]:
         return {
@@ -433,17 +497,17 @@ class SettingsManager:
         }
 
     def getBranchSummarySettings(self) -> dict[str, Any]:
-        branch_summary = self.settings.get("branchSummary") or {}
+        branch_summary = self._settings_object("branchSummary")
         return {
-            "reserveTokens": branch_summary.get("reserveTokens", 16384),
-            "skipPrompt": branch_summary.get("skipPrompt", False),
+            "reserveTokens": self._nullish(branch_summary.get("reserveTokens"), 16384),
+            "skipPrompt": self._nullish(branch_summary.get("skipPrompt"), False),
         }
 
     def getBranchSummarySkipPrompt(self) -> bool:
-        return bool((self.settings.get("branchSummary") or {}).get("skipPrompt", False))
+        return self._nullish(self._settings_object("branchSummary").get("skipPrompt"), False)
 
     def getRetryEnabled(self) -> bool:
-        return bool((self.settings.get("retry") or {}).get("enabled", True))
+        return self._nullish(self._settings_object("retry").get("enabled"), True)
 
     def setRetryEnabled(self, enabled: bool) -> None:
         retry_settings = self._ensure_global_nested("retry")
@@ -452,11 +516,11 @@ class SettingsManager:
         self.save()
 
     def getRetrySettings(self) -> dict[str, Any]:
-        retry_settings = self.settings.get("retry") or {}
+        retry_settings = self._settings_object("retry")
         return {
             "enabled": self.getRetryEnabled(),
-            "maxRetries": retry_settings.get("maxRetries", 3),
-            "baseDelayMs": retry_settings.get("baseDelayMs", 2000),
+            "maxRetries": self._nullish(retry_settings.get("maxRetries"), 3),
+            "baseDelayMs": self._nullish(retry_settings.get("baseDelayMs"), 2000),
         }
 
     def getHttpIdleTimeoutMs(self) -> int:
@@ -465,24 +529,25 @@ class SettingsManager:
         if timeout_ms is not None:
             return timeout_ms
         if value is not None:
-            raise ValueError(f"Invalid httpIdleTimeoutMs setting: {value}")
+            raise Exception(f"Invalid httpIdleTimeoutMs setting: {value}")
         return DEFAULT_HTTP_IDLE_TIMEOUT_MS
 
     def setHttpIdleTimeoutMs(self, timeoutMs: int) -> None:
-        if not isinstance(timeoutMs, int | float) or not float(timeoutMs).is_integer() or timeoutMs < 0:
-            raise ValueError(f"Invalid httpIdleTimeoutMs setting: {timeoutMs}")
-        self._set_global_value("httpIdleTimeoutMs", int(timeoutMs))
+        if not isinstance(timeoutMs, (int, float)) or isinstance(timeoutMs, bool) or timeoutMs < 0 or not float(timeoutMs) < float("inf"):
+            raise Exception(f"Invalid httpIdleTimeoutMs setting: {timeoutMs}")
+        self._set_global_value("httpIdleTimeoutMs", int(timeoutMs // 1))
 
     def getProviderRetrySettings(self) -> dict[str, Any]:
-        provider = ((self.settings.get("retry") or {}).get("provider") or {})
+        provider = self._settings_object("retry").get("provider")
+        provider_settings = provider if isinstance(provider, dict) else {}
         return {
-            "timeoutMs": provider.get("timeoutMs"),
-            "maxRetries": provider.get("maxRetries"),
-            "maxRetryDelayMs": provider.get("maxRetryDelayMs", 60000),
+            "timeoutMs": provider_settings.get("timeoutMs"),
+            "maxRetries": provider_settings.get("maxRetries"),
+            "maxRetryDelayMs": self._nullish(provider_settings.get("maxRetryDelayMs"), 60000),
         }
 
     def getHideThinkingBlock(self) -> bool:
-        return bool(self.settings.get("hideThinkingBlock", False))
+        return self._nullish(self.settings.get("hideThinkingBlock"), False)
 
     def setHideThinkingBlock(self, hide: bool) -> None:
         self._set_global_value("hideThinkingBlock", hide)
@@ -494,7 +559,7 @@ class SettingsManager:
         self._set_global_value("shellPath", path)
 
     def getQuietStartup(self) -> bool:
-        return bool(self.settings.get("quietStartup", False))
+        return self._nullish(self.settings.get("quietStartup"), False)
 
     def setQuietStartup(self, quiet: bool) -> None:
         self._set_global_value("quietStartup", quiet)
@@ -525,14 +590,14 @@ class SettingsManager:
         self._set_global_value("enableInstallTelemetry", enabled)
 
     def getPackages(self) -> list[PackageSource]:
-        return copy.deepcopy(self.settings.get("packages") or [])
+        return list(self.settings.get("packages") or [])
 
     def setPackages(self, packages: list[PackageSource]) -> None:
-        self._set_global_value("packages", copy.deepcopy(packages))
+        self._set_global_value("packages", packages)
 
     def setProjectPackages(self, packages: list[PackageSource]) -> None:
         project_settings = copy.deepcopy(self.projectSettings)
-        project_settings["packages"] = copy.deepcopy(packages)
+        project_settings["packages"] = packages
         self.markProjectModified("packages")
         self.saveProjectSettings(project_settings)
 
@@ -585,17 +650,17 @@ class SettingsManager:
         self.saveProjectSettings(project_settings)
 
     def getEnableSkillCommands(self) -> bool:
-        return bool(self.settings.get("enableSkillCommands", True))
+        return self._nullish(self.settings.get("enableSkillCommands"), True)
 
     def setEnableSkillCommands(self, enabled: bool) -> None:
         self._set_global_value("enableSkillCommands", enabled)
 
     def getThinkingBudgets(self) -> dict[str, Any] | None:
         budgets = self.settings.get("thinkingBudgets")
-        return copy.deepcopy(budgets) if isinstance(budgets, dict) else budgets
+        return budgets if isinstance(budgets, dict) else budgets
 
     def getShowImages(self) -> bool:
-        return bool((self.settings.get("terminal") or {}).get("showImages", True))
+        return self._nullish(self._settings_object("terminal").get("showImages"), True)
 
     def setShowImages(self, show: bool) -> None:
         terminal = self._ensure_global_nested("terminal")
@@ -604,10 +669,10 @@ class SettingsManager:
         self.save()
 
     def getImageWidthCells(self) -> int:
-        width = (self.settings.get("terminal") or {}).get("imageWidthCells")
-        if not isinstance(width, int | float):
+        width = self._settings_object("terminal").get("imageWidthCells")
+        if not isinstance(width, (int, float)) or isinstance(width, bool) or not float("-inf") < float(width) < float("inf"):
             return 60
-        return max(1, int(width))
+        return max(1, int(width // 1))
 
     def setImageWidthCells(self, width: int) -> None:
         terminal = self._ensure_global_nested("terminal")
@@ -616,9 +681,9 @@ class SettingsManager:
         self.save()
 
     def getClearOnShrink(self) -> bool:
-        terminal = self.settings.get("terminal") or {}
+        terminal = self._settings_object("terminal")
         if terminal.get("clearOnShrink") is not None:
-            return bool(terminal["clearOnShrink"])
+            return terminal["clearOnShrink"]
         return os.environ.get("PI_CLEAR_ON_SHRINK") == "1"
 
     def setClearOnShrink(self, enabled: bool) -> None:
@@ -628,7 +693,7 @@ class SettingsManager:
         self.save()
 
     def getShowTerminalProgress(self) -> bool:
-        return bool((self.settings.get("terminal") or {}).get("showTerminalProgress", False))
+        return self._nullish(self._settings_object("terminal").get("showTerminalProgress"), False)
 
     def setShowTerminalProgress(self, enabled: bool) -> None:
         terminal = self._ensure_global_nested("terminal")
@@ -637,7 +702,7 @@ class SettingsManager:
         self.save()
 
     def getImageAutoResize(self) -> bool:
-        return bool((self.settings.get("images") or {}).get("autoResize", True))
+        return self._nullish(self._settings_object("images").get("autoResize"), True)
 
     def setImageAutoResize(self, enabled: bool) -> None:
         images = self._ensure_global_nested("images")
@@ -646,7 +711,7 @@ class SettingsManager:
         self.save()
 
     def getBlockImages(self) -> bool:
-        return bool((self.settings.get("images") or {}).get("blockImages", False))
+        return self._nullish(self._settings_object("images").get("blockImages"), False)
 
     def setBlockImages(self, blocked: bool) -> None:
         images = self._ensure_global_nested("images")
@@ -662,7 +727,7 @@ class SettingsManager:
         self._set_global_value("enabledModels", list(patterns) if patterns is not None else None)
 
     def getDoubleEscapeAction(self) -> str:
-        return self.settings.get("doubleEscapeAction") or "tree"
+        return self._nullish(self.settings.get("doubleEscapeAction"), "tree")
 
     def setDoubleEscapeAction(self, action: str) -> None:
         self._set_global_value("doubleEscapeAction", action)
@@ -677,45 +742,50 @@ class SettingsManager:
 
     def getShowHardwareCursor(self) -> bool:
         if self.settings.get("showHardwareCursor") is not None:
-            return bool(self.settings["showHardwareCursor"])
+            return self.settings["showHardwareCursor"]
         return os.environ.get("PI_HARDWARE_CURSOR") == "1"
 
     def setShowHardwareCursor(self, enabled: bool) -> None:
         self._set_global_value("showHardwareCursor", enabled)
 
     def getEditorPaddingX(self) -> int:
-        return int(self.settings.get("editorPaddingX", 0))
+        return self._nullish(self.settings.get("editorPaddingX"), 0)
 
     def setEditorPaddingX(self, padding: int) -> None:
         self._set_global_value("editorPaddingX", max(0, min(3, int(padding))))
 
     def getAutocompleteMaxVisible(self) -> int:
-        return int(self.settings.get("autocompleteMaxVisible", 5))
+        return self._nullish(self.settings.get("autocompleteMaxVisible"), 5)
 
     def setAutocompleteMaxVisible(self, maxVisible: int) -> None:
         self._set_global_value("autocompleteMaxVisible", max(3, min(20, int(maxVisible))))
 
     def getCodeBlockIndent(self) -> str:
-        return str((self.settings.get("markdown") or {}).get("codeBlockIndent", "  "))
+        return self._nullish(self._settings_object("markdown").get("codeBlockIndent"), "  ")
 
     def getWarnings(self) -> dict[str, Any]:
-        return copy.deepcopy(self.settings.get("warnings") or {})
+        return dict(self._settings_object("warnings"))
 
     def setWarnings(self, warnings: dict[str, Any]) -> None:
-        self._set_global_value("warnings", copy.deepcopy(warnings))
-
-
-deepMergeSettings = deep_merge_settings
+        self._set_global_value("warnings", {**warnings})
 
 __all__ = [
-    "FileSettingsStorage",
-    "InMemorySettingsStorage",
+    "CompactionSettings",
+    "BranchSummarySettings",
+    "ProviderRetrySettings",
+    "RetrySettings",
+    "TerminalSettings",
+    "ImageSettings",
+    "ThinkingBudgetsSettings",
+    "MarkdownSettings",
+    "WarningSettings",
+    "TransportSetting",
     "PackageSource",
     "Settings",
-    "SettingsError",
-    "SettingsManager",
     "SettingsScope",
-    "TransportSetting",
-    "deepMergeSettings",
-    "deep_merge_settings",
+    "SettingsStorage",
+    "SettingsError",
+    "FileSettingsStorage",
+    "InMemorySettingsStorage",
+    "SettingsManager",
 ]
