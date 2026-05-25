@@ -3274,20 +3274,19 @@ class InteractiveMode:
     def showLoginAuthTypeSelector(self) -> None:
         subscription_label = "Use a subscription"
         api_key_label = "Use an API key"
-        self.showSelector(
-            lambda done: {
-                "component": ExtensionSelectorComponent(
-                    "Select authentication method:",
-                    [subscription_label, api_key_label],
-                    lambda option: (
-                        done(),
-                        self.showLoginProviderSelector("oauth" if option == subscription_label else "api_key"),
-                    ),
-                    lambda: (done(), self._request_render()),
+        def _build_auth_type_selector(done: Callable[[], None]) -> dict[str, Any]:
+            selector = ExtensionSelectorComponent(
+                "Select authentication method:",
+                [subscription_label, api_key_label],
+                lambda option: (
+                    done(),
+                    self.showLoginProviderSelector("oauth" if option == subscription_label else "api_key"),
                 ),
-                "focus": True,
-            }
-        )
+                lambda: (done(), self._request_render()),
+            )
+            return {"component": selector, "focus": selector}
+
+        self.showSelector(_build_auth_type_selector)
 
     def showLoginProviderSelector(self, authType: str) -> None:
         provider_options = self.getLoginProviderOptions(authType)
@@ -3299,21 +3298,20 @@ class InteractiveMode:
             )
             return
 
-        self.showSelector(
-            lambda done: {
-                "component": OAuthSelectorComponent(
-                    "login",
-                    self.session.modelRegistry.authStorage,
-                    provider_options,
-                    lambda provider_id: self._schedule_task(
-                        self._handle_login_provider_select(provider_options, provider_id, done)
-                    ),
-                    lambda: (done(), self.showLoginAuthTypeSelector()),
-                    lambda provider_id: self.session.modelRegistry.getProviderAuthStatus(provider_id),
+        def _build_login_provider_selector(done: Callable[[], None]) -> dict[str, Any]:
+            selector = OAuthSelectorComponent(
+                "login",
+                self.session.modelRegistry.authStorage,
+                provider_options,
+                lambda provider_id: self._schedule_task(
+                    self._handle_login_provider_select(provider_options, provider_id, done)
                 ),
-                "focus": True,
-            }
-        )
+                lambda: (done(), self.showLoginAuthTypeSelector()),
+                lambda provider_id: self.session.modelRegistry.getProviderAuthStatus(provider_id),
+            )
+            return {"component": selector, "focus": selector}
+
+        self.showSelector(_build_login_provider_selector)
 
     async def _handle_login_provider_select(
         self,
@@ -3346,20 +3344,19 @@ class InteractiveMode:
             )
             return
 
-        self.showSelector(
-            lambda done: {
-                "component": OAuthSelectorComponent(
-                    mode,
-                    self.session.modelRegistry.authStorage,
-                    provider_options,
-                    lambda provider_id: self._schedule_task(
-                        self._handle_logout_provider_select(provider_options, provider_id, done)
-                    ),
-                    lambda: (done(), self._request_render()),
+        def _build_logout_selector(done: Callable[[], None]) -> dict[str, Any]:
+            selector = OAuthSelectorComponent(
+                mode,
+                self.session.modelRegistry.authStorage,
+                provider_options,
+                lambda provider_id: self._schedule_task(
+                    self._handle_logout_provider_select(provider_options, provider_id, done)
                 ),
-                "focus": True,
-            }
-        )
+                lambda: (done(), self._request_render()),
+            )
+            return {"component": selector, "focus": selector}
+
+        self.showSelector(_build_logout_selector)
 
     async def _handle_logout_provider_select(
         self,
