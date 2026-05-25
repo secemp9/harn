@@ -100,12 +100,7 @@ spawnProcessSync = spawn_process_sync
 waitForChildProcess = wait_for_child_process
 
 __all__ = [
-    "SpawnProcess",
-    "SpawnProcessSyncResult",
     "spawnProcess",
-    "spawn_process",
     "spawnProcessSync",
-    "spawn_process_sync",
     "waitForChildProcess",
-    "wait_for_child_process",
 ]
