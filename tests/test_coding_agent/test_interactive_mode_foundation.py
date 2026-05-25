@@ -681,7 +681,7 @@ async def test_show_extension_custom_restores_editor_inline_and_overlay() -> Non
 
     async def overlay_factory(_ui: Any, _theme: Any, _keybindings: Any, done: Any) -> Any:
         captured_overlay["done"] = done
-        return SimpleNamespace(render=lambda _width: ["overlay"], dispose=lambda: None)
+        return SimpleNamespace(width=72, render=lambda _width: ["overlay"], dispose=lambda: None)
 
     overlay_task = asyncio.create_task(
         mode.showExtensionCustom(
@@ -691,6 +691,7 @@ async def test_show_extension_custom_restores_editor_inline_and_overlay() -> Non
     )
     await asyncio.sleep(0)
     assert ui.overlays and handles
+    assert ui.overlays[-1][1] == {"width": 72}
     captured_overlay["done"]("overlay-ok")
     assert await overlay_task == "overlay-ok"
     assert handles[0].hidden["value"] is True
