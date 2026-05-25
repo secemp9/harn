@@ -7,11 +7,13 @@ from pathlib import Path
 import pytest
 from harnify_coding_agent.core.tools import (
     create_bash_tool,
+    create_bash_tool_definition,
     create_local_bash_operations,
     create_read_tool,
     create_write_tool,
     get_text_output,
 )
+from harnify_coding_agent.core.tools import bash as bash_module
 
 TINY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
 
@@ -243,3 +245,53 @@ async def test_create_local_bash_operations_streams_environment_output(tmp_path:
 
     assert result["exitCode"] == 0
     assert b"".join(chunks).decode("utf-8") == "from-local-ops"
+
+
+@pytest.mark.asyncio
+async def test_create_local_bash_operations_preserves_explicit_empty_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_called() -> dict[str, str]:
+        raise AssertionError("get_shell_env should not be used when env={} is explicitly provided")
+
+    monkeypatch.setattr("harnify_coding_agent.core.tools.bash.get_shell_env", fail_if_called)
+
+    operations = create_local_bash_operations()
+    chunks: list[bytes] = []
+    result = await operations.exec(
+        "printf 'ok'",
+        str(tmp_path),
+        {
+            "onData": chunks.append,
+            "env": {},
+        },
+    )
+
+    assert result["exitCode"] == 0
+    assert b"".join(chunks) == b"ok"
+
+
+def test_bash_tool_definition_surface_matches_ts(tmp_path: Path) -> None:
+    definition = create_bash_tool_definition(str(tmp_path))
+
+    assert definition.promptSnippet == "Execute bash commands (ls, grep, find, etc.)"
+    assert definition.prepareArguments is None
+    assert definition.renderCall is not None
+    assert definition.renderResult is not None
+    assert definition.description.endswith("Optionally provide a timeout in seconds.")
+    assert "50KB" in definition.description
+
+
+def test_bash_module_exports_match_ts_surface() -> None:
+    assert bash_module.__all__ == [
+        "BashOperations",
+        "BashSpawnContext",
+        "BashSpawnHook",
+        "BashToolDetails",
+        "BashToolInput",
+        "BashToolOptions",
+        "createBashTool",
+        "createBashToolDefinition",
+        "createLocalBashOperations",
+    ]
