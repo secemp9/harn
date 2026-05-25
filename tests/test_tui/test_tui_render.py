@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import time
 from typing import Any
 
 from harnify_tui import tui as tui_module
@@ -57,6 +58,17 @@ class DemoComponent:
         return None
 
 
+def wait_for_tui_idle(tui: TUI, timeout: float = 0.25) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not tui.renderRequested and tui.renderTimer is None:
+            time.sleep(0.01)
+            if not tui.renderRequested and tui.renderTimer is None:
+                return
+        time.sleep(0.001)
+    raise AssertionError("TUI did not become idle in time")
+
+
 def test_tui_differential_render_updates_changed_lines_without_full_redraw() -> None:
     terminal = FakeTerminal()
     tui = TUI(terminal)
@@ -64,11 +76,13 @@ def test_tui_differential_render_updates_changed_lines_without_full_redraw() -> 
     tui.addChild(component)
 
     tui.start()
+    wait_for_tui_idle(tui)
     initial_redraws = tui.fullRedraws
     terminal.clear_writes()
 
     component.lines = ["Line 0", "CHANGED", "Line 2"]
     tui.requestRender()
+    wait_for_tui_idle(tui)
 
     writes = "".join(terminal.writes)
     assert "\x1b[2J" not in writes
@@ -83,10 +97,12 @@ def test_tui_width_change_triggers_full_redraw() -> None:
     tui.addChild(component)
 
     tui.start()
+    wait_for_tui_idle(tui)
     initial_redraws = tui.fullRedraws
     terminal.clear_writes()
 
     terminal.resize(60, 10)
+    wait_for_tui_idle(tui)
 
     writes = "".join(terminal.writes)
     assert "\x1b[2J" in writes
@@ -101,6 +117,7 @@ def test_tui_overlay_composition_works_with_short_content() -> None:
 
     tui.showOverlay(overlay)
     tui.start()
+    wait_for_tui_idle(tui)
 
     assert any("OVERLAY" in line for line in tui.previousLines)
 
@@ -114,11 +131,13 @@ def test_tui_deletes_changed_kitty_image_before_redrawing_new_placement() -> Non
     old_image = encodeKitty("AAAA", {"columns": 2, "rows": 2, "imageId": 42, "moveCursor": False})
     component.lines = ["top", old_image]
     tui.start()
+    wait_for_tui_idle(tui)
     terminal.clear_writes()
 
     new_image = encodeKitty("BBBB", {"columns": 2, "rows": 1, "imageId": 42, "moveCursor": False})
     component.lines = [new_image, ""]
     tui.requestRender()
+    wait_for_tui_idle(tui)
 
     writes = "".join(terminal.writes)
     delete_index = writes.index(deleteKittyImage(42))
@@ -140,6 +159,26 @@ def test_tui_input_listeners_follow_set_semantics() -> None:
     tui.handleInput("x")
 
     assert calls == ["x"]
+
+
+def test_tui_request_render_is_deferred_and_coalesced() -> None:
+    terminal = FakeTerminal()
+    tui = TUI(terminal)
+    component = DemoComponent(["one"])
+    tui.addChild(component)
+
+    tui.start()
+    wait_for_tui_idle(tui)
+    terminal.clear_writes()
+
+    component.lines = ["two"]
+    tui.requestRender()
+    tui.requestRender()
+
+    assert terminal.writes == []
+    wait_for_tui_idle(tui)
+    writes = "".join(terminal.writes)
+    assert "two" in writes
 
 
 def test_tui_module_exports_match_ts_surface() -> None:
