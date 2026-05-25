@@ -101,7 +101,7 @@ def _parse_generic_git_url(repo_without_ref: str, ref: str | None) -> GitSource 
     if scp_like_match is not None:
         host = scp_like_match.group(1) or ""
         path = scp_like_match.group(2) or ""
-    elif repo_without_ref.startswith(("https://", "http://", "ssh://", "git://", "file://")):
+    elif repo_without_ref.startswith(("https://", "http://", "ssh://", "git://")):
         try:
             parsed = urlparse(repo_without_ref)
         except ValueError:
@@ -171,5 +171,4 @@ parseGitUrl = parse_git_url
 __all__ = [
     "GitSource",
     "parseGitUrl",
-    "parse_git_url",
 ]
