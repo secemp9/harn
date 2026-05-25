@@ -316,7 +316,7 @@ def test_read_tool_definition_surface_matches_ts(tmp_path: Path) -> None:
     assert definition.prepareArguments is None
     assert definition.renderCall is not None
     assert definition.renderResult is not None
-    assert "50.0KB" in definition.description
+    assert "50KB" in definition.description
 
 
 def test_read_module_exports_match_ts_surface() -> None:
