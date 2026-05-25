@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import os
@@ -584,7 +585,7 @@ class SettingsManager:
         self._set_global_value("collapseChangelog", collapse)
 
     def getEnableInstallTelemetry(self) -> bool:
-        return bool(self.settings.get("enableInstallTelemetry", True))
+        return self._nullish(self.settings.get("enableInstallTelemetry"), True)
 
     def setEnableInstallTelemetry(self, enabled: bool) -> None:
         self._set_global_value("enableInstallTelemetry", enabled)
