@@ -18,6 +18,9 @@ from harnify_tui import setCapabilities, setKeybindings
 config_selector_module = importlib.import_module(
     "harnify_coding_agent.modes.interactive.components.config_selector"
 )
+settings_selector_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.settings_selector"
+)
 
 
 def setup_function() -> None:
@@ -96,6 +99,14 @@ def test_config_selector_toggles_package_and_top_level_resources(tmp_path: Path)
 
 def test_config_selector_module_exports_match_ts_surface() -> None:
     assert config_selector_module.__all__ == ["ConfigSelectorComponent"]
+
+
+def test_settings_selector_module_exports_match_ts_surface() -> None:
+    assert settings_selector_module.__all__ == [
+        "SettingsCallbacks",
+        "SettingsConfig",
+        "SettingsSelectorComponent",
+    ]
 
 
 def test_settings_selector_supports_theme_preview_and_image_settings() -> None:
@@ -190,3 +201,19 @@ def test_settings_selector_supports_theme_preview_and_image_settings() -> None:
     submenu.handleInput("\x1b[B")
     submenu.handleInput("\r")
     assert selected_themes == ["light"]
+
+
+def test_settings_select_submenu_uses_ts_title_style_order() -> None:
+    submenu = settings_selector_module.SelectSubmenu(
+        "Theme",
+        "Select color theme",
+        [settings_selector_module.SelectItem(value="dark", label="dark")],
+        "dark",
+        lambda _value: None,
+        lambda: None,
+    )
+
+    title = submenu.children[0]
+    assert title.text == settings_selector_module.theme.bold(
+        settings_selector_module.theme.fg("accent", "Theme")
+    )
