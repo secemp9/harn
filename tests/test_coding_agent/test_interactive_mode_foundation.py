@@ -1813,12 +1813,22 @@ async def test_handle_event_queue_update_refreshes_pending_messages() -> None:
     calls: list[str] = []
     mode = InteractiveMode()
     mode.updatePendingMessagesDisplay = lambda: calls.append("pending")  # type: ignore[method-assign]
-    mode.footer = SimpleNamespace(invalidate=lambda: calls.append("footer"))
     mode._request_render = lambda force=None: calls.append("render")  # type: ignore[method-assign]
 
     await mode.handleEvent({"type": "queue_update"})
 
-    assert calls == ["pending", "footer", "render"]
+    assert calls == ["pending", "render"]
+
+
+def test_check_daxnuts_easter_egg_renders_for_kimi_k25_opencode_model() -> None:
+    calls: list[str] = []
+    mode = InteractiveMode()
+    mode.handleDaxnuts = lambda: calls.append("daxnuts")  # type: ignore[method-assign]
+
+    mode.checkDaxnutsEasterEgg({"provider": "opencode", "id": "KIMI-K2.5-special"})
+    mode.checkDaxnutsEasterEgg({"provider": "openai", "id": "gpt-4.1"})
+
+    assert calls == ["daxnuts"]
 
 
 def test_create_base_autocomplete_provider_includes_restored_builtin_commands() -> None:
