@@ -70,6 +70,9 @@ keybinding_hints_module = importlib.import_module(
 session_selector_search_module = importlib.import_module(
     "harnify_coding_agent.modes.interactive.components.session_selector_search"
 )
+show_images_selector_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.show_images_selector"
+)
 
 
 def _strip_ansi(text: str) -> str:
@@ -163,6 +166,10 @@ def test_show_images_selector_preselects_and_confirms_current_value() -> None:
     component.handleInput("\r")
     assert selected == [False]
     assert cancelled == []
+
+
+def test_show_images_selector_module_exports_match_ts_surface() -> None:
+    assert show_images_selector_module.__all__ == ["ShowImagesSelectorComponent"]
 
 
 def test_thinking_selector_cycles_and_confirms_selection() -> None:
