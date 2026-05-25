@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from harnify_coding_agent.core import session_cwd as session_cwd_module
 from harnify_coding_agent.core.session_cwd import (
     MissingSessionCwdError,
     getMissingSessionCwdIssue,
@@ -89,6 +90,18 @@ def test_missing_session_cwd_error_contains_paths(tmp_path: Path) -> None:
     assert "Stored session working directory does not exist" in message
     assert str(fallback_cwd) in message
     assert str(tmp_path / "missing") in message
+    assert excinfo.value.name == "MissingSessionCwdError"
+
+
+def test_session_cwd_exports_match_ts_surface() -> None:
+    assert session_cwd_module.__all__ == [
+        "MissingSessionCwdError",
+        "SessionCwdIssue",
+        "assertSessionCwdExists",
+        "formatMissingSessionCwdError",
+        "formatMissingSessionCwdPrompt",
+        "getMissingSessionCwdIssue",
+    ]
 
 
 def test_migrate_session_entries_adds_ids_and_updates_hook_message_role() -> None:
