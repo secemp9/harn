@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from harnify_tui import editor_component as editor_component_module
+from harnify_tui import kill_ring as kill_ring_module
 from harnify_tui.kill_ring import KillRing
 from harnify_tui.undo_stack import UndoStack
 from harnify_tui.utils import getSegmenter
@@ -43,6 +44,11 @@ def test_kill_ring_rotate_cycles_latest_entry() -> None:
     assert ring.peek() == "first"
     ring.rotate()
     assert ring.peek() == "third"
+
+
+def test_kill_ring_module_exports_match_ts_surface() -> None:
+    assert kill_ring_module.__all__ == ["KillRing"]
+    assert not hasattr(kill_ring_module, "KillRingPushOptions")
 
 
 def test_undo_stack_pushes_deep_clones_and_clears() -> None:
