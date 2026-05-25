@@ -3997,11 +3997,19 @@ class InteractiveMode:
         set_hide = _callable_attr(self.settingsManager, "setHideThinkingBlock")
         if set_hide is not None:
             set_hide(self.hideThinkingBlock)
-        for child in getattr(self.chatContainer, "children", []):
-            setter = _callable_attr(child, "setHideThinkingBlock")
-            if setter is not None:
-                setter(self.hideThinkingBlock)
-        self._request_render()
+        clear_chat = _callable_attr(self.chatContainer, "clear")
+        if clear_chat is not None:
+            clear_chat()
+        self.rebuildChatFromMessages()
+
+        if self.streamingComponent is not None and self.streamingMessage is not None:
+            self.streamingComponent.setHideThinkingBlock(self.hideThinkingBlock)
+            self.streamingComponent.updateContent(self.streamingMessage)
+            add_child = _callable_attr(self.chatContainer, "addChild")
+            if add_child is not None:
+                add_child(self.streamingComponent)
+
+        self.showStatus(f"Thinking blocks: {'hidden' if self.hideThinkingBlock else 'visible'}")
 
     async def openExternalEditor(self) -> None:
         editor_cmd = os.environ.get("VISUAL") or os.environ.get("EDITOR")
