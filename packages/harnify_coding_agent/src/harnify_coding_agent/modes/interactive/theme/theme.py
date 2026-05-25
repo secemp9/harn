@@ -7,7 +7,6 @@ import os
 import re
 import sys
 import threading
-from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Literal, TypedDict, cast
@@ -100,13 +99,6 @@ class TerminalThemeDetectionOptions(TypedDict, total=False):
     env: dict[str, str]
 
 
-@dataclass(slots=True)
-class _RegisteredThemeRecord:
-    path: str | None = None
-    data: ThemeJson | None = None
-    sourceInfo: Any | None = None
-
-
 class Theme:
     def __init__(
         self,
@@ -187,7 +179,7 @@ class Theme:
 
 
 _BUILTIN_THEMES: dict[str, ThemeJson] | None = None
-_REGISTERED_THEMES: dict[str, _RegisteredThemeRecord] = {}
+_REGISTERED_THEMES: dict[str, Any] = {}
 _CURRENT_THEME_NAME: str | None = None
 _ON_THEME_CHANGE: Any | None = None
 _THEME_WATCHER_THREAD: threading.Thread | None = None
@@ -318,6 +310,12 @@ def get_builtin_themes() -> dict[str, ThemeJson]:
     return _BUILTIN_THEMES
 
 
+def _required_theme_color_keys() -> set[str]:
+    dark_theme = get_builtin_themes().get("dark", {})
+    colors = dark_theme.get("colors") if isinstance(dark_theme, dict) else None
+    return set(colors.keys()) if isinstance(colors, dict) else set()
+
+
 def _ansi_luminance(index: int) -> float:
     color = _color256_to_hex(index).lstrip("#")
     red = int(color[0:2], 16)
@@ -423,22 +421,9 @@ def get_default_theme() -> str:
 def set_registered_themes(themes: list[Any]) -> None:
     _REGISTERED_THEMES.clear()
     for item in themes:
-        if isinstance(item, dict):
-            name = item.get("name")
-            source_path = item.get("sourcePath")
-            data = item.get("data")
-            source_info = item.get("sourceInfo")
-        else:
-            name = getattr(item, "name", None)
-            source_path = getattr(item, "sourcePath", None)
-            data = getattr(item, "data", None)
-            source_info = getattr(item, "sourceInfo", None)
+        name = item.get("name") if isinstance(item, dict) else getattr(item, "name", None)
         if isinstance(name, str) and name:
-            _REGISTERED_THEMES[name] = _RegisteredThemeRecord(
-                path=str(source_path) if source_path else None,
-                data=data if isinstance(data, dict) else None,
-                sourceInfo=source_info,
-            )
+            _REGISTERED_THEMES[name] = item
 
 
 def set_current_theme_name(theme_name: str | None) -> None:
@@ -476,6 +461,70 @@ def resolve_theme_colors(
     return resolved
 
 
+def _is_color_value(value: Any) -> bool:
+    return isinstance(value, str) or (isinstance(value, int) and 0 <= value <= 255)
+
+
+def _parse_theme_json(label: str, json_data: Any) -> ThemeJson:
+    missing_colors: set[str] = set()
+    other_errors: list[str] = []
+
+    if not isinstance(json_data, dict):
+        other_errors.append("  - /: Expected object")
+    else:
+        name = json_data.get("name")
+        if not isinstance(name, str):
+            other_errors.append("  - /name: Expected string")
+
+        variables = json_data.get("vars")
+        if variables is not None:
+            if not isinstance(variables, dict):
+                other_errors.append("  - /vars: Expected object")
+            else:
+                for key, value in variables.items():
+                    if not isinstance(key, str) or not _is_color_value(value):
+                        other_errors.append(f"  - /vars/{key}: Expected string or integer 0-255")
+
+        colors = json_data.get("colors")
+        if not isinstance(colors, dict):
+            other_errors.append("  - /colors: Expected object")
+        else:
+            missing_colors.update(sorted(_required_theme_color_keys() - set(colors.keys())))
+            for key, value in colors.items():
+                if not _is_color_value(value):
+                    other_errors.append(f"  - /colors/{key}: Expected string or integer 0-255")
+
+        export_section = json_data.get("export")
+        if export_section is not None:
+            if not isinstance(export_section, dict):
+                other_errors.append("  - /export: Expected object")
+            else:
+                for key, value in export_section.items():
+                    if not _is_color_value(value):
+                        other_errors.append(f"  - /export/{key}: Expected string or integer 0-255")
+
+    if missing_colors or other_errors:
+        error_message = f'Invalid theme "{label}":\n'
+        if missing_colors:
+            error_message += "\nMissing required color tokens:\n"
+            error_message += "\n".join(f"  - {color}" for color in sorted(missing_colors))
+            error_message += '\n\nPlease add these colors to your theme\'s "colors" object.'
+            error_message += "\nSee the built-in themes (dark.json, light.json) for reference values."
+        if other_errors:
+            error_message += f"\n\nOther errors:\n{chr(10).join(other_errors)}"
+        raise ValueError(error_message)
+
+    return cast(ThemeJson, json_data)
+
+
+def _parse_theme_json_content(label: str, content: str) -> ThemeJson:
+    try:
+        payload = json.loads(content)
+    except Exception as error:  # noqa: BLE001
+        raise ValueError(f"Failed to parse theme {label}: {error}") from error
+    return _parse_theme_json(label, payload)
+
+
 def load_theme_json(name: str) -> ThemeJson:
     builtin_themes = get_builtin_themes()
     if name in builtin_themes:
@@ -483,15 +532,16 @@ def load_theme_json(name: str) -> ThemeJson:
 
     registered = _REGISTERED_THEMES.get(name)
     if registered is not None:
-        if registered.data is not None:
-            return dict(registered.data)
-        if registered.path:
-            return _load_json(registered.path)
+        source_path = registered.get("sourcePath") if isinstance(registered, dict) else getattr(registered, "sourcePath", None)
+        if source_path:
+            content = Path(str(source_path)).read_text(encoding="utf-8")
+            return _parse_theme_json_content(str(source_path), content)
         raise ValueError(f'Theme "{name}" does not have a source path for export')
 
     custom_path = Path(get_custom_themes_dir()) / f"{name}.json"
     if custom_path.exists():
-        return _load_json(str(custom_path))
+        content = custom_path.read_text(encoding="utf-8")
+        return _parse_theme_json_content(name, content)
     raise FileNotFoundError(f"Theme not found: {name}")
 
 
@@ -517,19 +567,29 @@ def get_available_themes_with_paths() -> list[ThemeInfo]:
     if custom_dir.exists():
         for path in sorted(custom_dir.glob("*.json")):
             try:
-                payload = _load_json(str(path))
+                loaded_theme = load_theme_from_path(str(path))
             except Exception:
                 continue
-            theme_name = payload.get("name") if isinstance(payload.get("name"), str) else path.stem
-            add(theme_name, str(path))
+            if loaded_theme.name:
+                add(loaded_theme.name, str(path))
 
-    for name, record in sorted(_REGISTERED_THEMES.items()):
-        add(name, record.path)
+    for name, registered_theme in sorted(_REGISTERED_THEMES.items()):
+        source_path = (
+            registered_theme.get("sourcePath")
+            if isinstance(registered_theme, dict)
+            else getattr(registered_theme, "sourcePath", None)
+        )
+        add(name, str(source_path) if source_path else None)
 
     return sorted(result, key=lambda item: item["name"])
 
 
-def load_theme(name: str) -> Theme:
+def _create_theme(
+    theme_json: ThemeJson,
+    mode: str | None = None,
+    source_path: str | None = None,
+    source_info: Any | None = None,
+) -> Theme:
     theme_json = load_theme_json(name)
     resolved = resolve_theme_colors(theme_json.get("colors"), theme_json.get("vars"))
     fg_colors = {
@@ -542,53 +602,41 @@ def load_theme(name: str) -> Theme:
         for key, value in resolved.items()
         if key in _BACKGROUND_COLOR_KEYS
     }
+    return Theme(
+        fg_colors,
+        bg_colors,
+        name=cast(str | None, theme_json.get("name")),
+        sourcePath=source_path,
+        sourceInfo=source_info,
+        colorMode=mode or _detect_color_mode(),
+    )
+
+
+def load_theme(name: str, mode: str | None = None) -> Theme:
     registered = _REGISTERED_THEMES.get(name)
+    if isinstance(registered, Theme):
+        return registered
+
+    source_info = None
     source_path: str | None = None
     if registered is not None:
-        source_path = registered.path
+        source_info = registered.get("sourceInfo") if isinstance(registered, dict) else getattr(registered, "sourceInfo", None)
+        raw_path = registered.get("sourcePath") if isinstance(registered, dict) else getattr(registered, "sourcePath", None)
+        source_path = str(raw_path) if raw_path else None
     else:
         custom_path = Path(get_custom_themes_dir()) / f"{name}.json"
         if custom_path.exists():
             source_path = str(custom_path)
         elif name in get_builtin_themes():
             source_path = str(Path(get_themes_dir()) / f"{name}.json")
-    return Theme(
-        fg_colors,
-        bg_colors,
-        name=name,
-        sourcePath=source_path,
-        sourceInfo=registered.sourceInfo if registered is not None else None,
-        colorMode=_detect_color_mode(),
-    )
+
+    return _create_theme(load_theme_json(name), mode, source_path, source_info)
 
 
 def load_theme_from_path(theme_path: str, mode: str | None = None) -> Theme:
-    theme_json = _load_json(theme_path)
-    name = theme_json.get("name")
-    colors = theme_json.get("colors")
-    if not isinstance(name, str):
-        raise ValueError(f"Theme file must contain a string name: {theme_path}")
-    if not isinstance(colors, dict):
-        raise ValueError(f"Theme file must contain a colors object: {theme_path}")
-
-    resolved = resolve_theme_colors(colors, theme_json.get("vars"))
-    fg_colors = {
-        key: value
-        for key, value in resolved.items()
-        if key not in _BACKGROUND_COLOR_KEYS
-    }
-    bg_colors = {
-        cast(ThemeBg, key): value
-        for key, value in resolved.items()
-        if key in _BACKGROUND_COLOR_KEYS
-    }
-    return Theme(
-        fg_colors,
-        bg_colors,
-        name=name,
-        sourcePath=theme_path,
-        colorMode=mode or _detect_color_mode(),
-    )
+    content = Path(theme_path).read_text(encoding="utf-8")
+    theme_json = _parse_theme_json_content(theme_path, content)
+    return _create_theme(theme_json, mode, theme_path)
 
 
 def set_global_theme(theme_instance: Theme) -> None:
@@ -882,11 +930,11 @@ def _start_theme_watcher() -> None:
     watched_theme_name = _CURRENT_THEME_NAME
     if not watched_theme_name or watched_theme_name in {"dark", "light"}:
         return
-    current_source_path = getattr(theme, "sourcePath", None)
-    if not isinstance(current_source_path, str) or not current_source_path:
+    watched_file = Path(get_custom_themes_dir()) / f"{watched_theme_name}.json"
+    if not watched_file.exists():
         return
 
-    watched_path = current_source_path
+    watched_path = str(watched_file)
     stop_event = threading.Event()
     last_signature = _theme_file_signature(watched_path)
 
@@ -902,9 +950,10 @@ def _start_theme_watcher() -> None:
             if next_signature is None:
                 continue
             try:
-                reloaded = load_theme(watched_theme_name)
+                reloaded = load_theme_from_path(watched_path)
             except Exception:
                 continue
+            _REGISTERED_THEMES[watched_theme_name] = reloaded
             set_global_theme(reloaded)
             if callable(_ON_THEME_CHANGE):
                 _ON_THEME_CHANGE()
