@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, TypedDict
 
 from harnify_tui.keys import isKeyRelease, matchesKey
 from harnify_tui.terminal import Terminal
@@ -66,8 +67,39 @@ def is_focusable(component: Component | None) -> bool:
     return component is not None and hasattr(component, "focused")
 
 
-type OverlayAnchor = str
+type OverlayAnchor = Literal[
+    "center",
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+    "top-center",
+    "bottom-center",
+    "left-center",
+    "right-center",
+]
 type SizeValue = int | str
+
+
+class OverlayMargin(TypedDict, total=False):
+    top: int
+    right: int
+    bottom: int
+    left: int
+
+
+class OverlayOptions(TypedDict, total=False):
+    width: SizeValue
+    minWidth: int
+    maxHeight: SizeValue
+    anchor: OverlayAnchor
+    offsetX: int
+    offsetY: int
+    row: SizeValue
+    col: SizeValue
+    margin: OverlayMargin | int
+    visible: Callable[[int, int], bool]
+    nonCapturing: bool
 
 
 def parse_size_value(value: SizeValue | None, reference_size: int) -> int | None:
@@ -250,7 +282,7 @@ class TUI(Container):
         if is_focusable(component):
             component.focused = True
 
-    def showOverlay(self, component: Component, options: dict[str, Any] | None = None) -> OverlayHandle:
+    def showOverlay(self, component: Component, options: OverlayOptions | None = None) -> OverlayHandle:
         entry = {
             "component": component,
             "options": options or {},
@@ -862,6 +894,8 @@ __all__ = [
     "OverlayAnchor",
     "OverlayHandle",
     "OverlayLayout",
+    "OverlayMargin",
+    "OverlayOptions",
     "SizeValue",
     "TUI",
     "extract_kitty_image_ids",
