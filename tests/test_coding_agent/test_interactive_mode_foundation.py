@@ -1230,10 +1230,16 @@ async def test_clone_command_and_compaction_end_rebuild_chat() -> None:
     compaction_messages: list[Any] = []
     flush_calls: list[dict[str, bool]] = []
     footer_calls: list[bool] = []
+    scheduled: list[asyncio.Task[Any]] = []
     mode.chatContainer = SimpleNamespace(clear=lambda: rendered.append(False))
     mode.rebuildChatFromMessages = lambda: rendered.append(True)  # type: ignore[method-assign]
     mode.addMessageToChat = compaction_messages.append  # type: ignore[method-assign]
-    mode.flushCompactionQueue = lambda options: flush_calls.append(options)  # type: ignore[method-assign]
+
+    async def flush_queue(options: dict[str, bool]) -> None:
+        flush_calls.append(options)
+
+    mode.flushCompactionQueue = flush_queue  # type: ignore[method-assign]
+    mode._schedule_task = lambda awaitable: scheduled.append(asyncio.create_task(awaitable))  # type: ignore[method-assign]
     mode.footer = SimpleNamespace(invalidate=lambda: footer_calls.append(True))
     mode.statusContainer = SimpleNamespace(clear=lambda: None)
     mode.isInitialized = True
@@ -1252,6 +1258,9 @@ async def test_clone_command_and_compaction_end_rebuild_chat() -> None:
     assert compaction_messages and compaction_messages[0].role == "compactionSummary"
     assert compaction_messages[0].tokensBefore == 123
     assert compaction_messages[0].summary == "summary"
+    assert flush_calls == []
+    assert len(scheduled) == 1
+    await asyncio.gather(*scheduled)
     assert flush_calls == [{"willRetry": False}]
     assert footer_calls == [True]
 
