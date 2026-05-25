@@ -585,7 +585,8 @@ async def test_rpc_mode_handles_basic_commands(monkeypatch) -> None:
         + "\n"
     )
 
-    exit_code = await run_rpc_mode(runtime, input_stream=input_stream)
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: input_stream)
+    exit_code = await run_rpc_mode(runtime)
     assert exit_code == 0
     payloads = [json.loads(line) for line in stdout.getvalue().splitlines()]
     assert payloads[0]["command"] == "get_state"
@@ -611,7 +612,8 @@ async def test_rpc_mode_rebind_actions_match_ts(monkeypatch) -> None:
     monkeypatch.setattr("sys.stdout", io.StringIO())
     monkeypatch.setattr("sys.stderr", io.StringIO())
 
-    exit_code = await run_rpc_mode(runtime, input_stream=io.StringIO(""))
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: io.StringIO(""))
+    exit_code = await run_rpc_mode(runtime)
     assert exit_code == 0
 
     bindings = runtime.session._extension_bindings
@@ -674,7 +676,8 @@ async def test_rpc_mode_uses_ts_async_model_registry_path(monkeypatch) -> None:
         + "\n"
     )
 
-    exit_code = await run_rpc_mode(runtime, input_stream=input_stream)
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: input_stream)
+    exit_code = await run_rpc_mode(runtime)
     assert exit_code == 0
     payloads = [json.loads(line) for line in stdout.getvalue().splitlines()]
     assert payloads[0]["command"] == "set_model"
@@ -727,7 +730,8 @@ async def test_rpc_mode_unknown_command_omits_id_like_ts(monkeypatch) -> None:
     monkeypatch.setattr("sys.stdout", stdout)
     monkeypatch.setattr("sys.stderr", io.StringIO())
 
-    exit_code = await run_rpc_mode(runtime, input_stream=io.StringIO('{"id":"x","type":"unknown"}\n'))
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: io.StringIO('{"id":"x","type":"unknown"}\n'))
+    exit_code = await run_rpc_mode(runtime)
     assert exit_code == 0
     payload = json.loads(stdout.getvalue().splitlines()[0])
     assert payload["command"] == "unknown"
@@ -741,7 +745,8 @@ async def test_rpc_mode_non_object_json_uses_ts_raw_cast_path(monkeypatch) -> No
     monkeypatch.setattr("sys.stdout", stdout)
     monkeypatch.setattr("sys.stderr", io.StringIO())
 
-    exit_code = await run_rpc_mode(runtime, input_stream=io.StringIO('[1,2,3]\n'))
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: io.StringIO("[1,2,3]\n"))
+    exit_code = await run_rpc_mode(runtime)
     assert exit_code == 0
     payload = json.loads(stdout.getvalue().splitlines()[0])
     assert payload["error"] == "Unknown command: undefined"
@@ -766,7 +771,8 @@ async def test_rpc_mode_registers_and_restores_signal_handlers(monkeypatch) -> N
     monkeypatch.setattr(rpc_mode_module.signal, "getsignal", fake_getsignal)
     monkeypatch.setattr(rpc_mode_module.signal, "signal", fake_signal)
 
-    exit_code = await run_rpc_mode(runtime, input_stream=io.StringIO(""))
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: io.StringIO(""))
+    exit_code = await run_rpc_mode(runtime)
     assert exit_code == 0
 
     expected_signals = [signal.SIGTERM]
@@ -788,7 +794,8 @@ async def test_rpc_mode_cleanup_pauses_input_stream(monkeypatch) -> None:
     monkeypatch.setattr("sys.stdout", io.StringIO())
     monkeypatch.setattr("sys.stderr", io.StringIO())
 
-    exit_code = await run_rpc_mode(runtime, input_stream=stream)
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: stream)
+    exit_code = await run_rpc_mode(runtime)
     assert exit_code == 0
     assert stream.paused is True
 
@@ -801,7 +808,8 @@ async def test_rpc_mode_shutdown_handler_triggers_immediate_cleanup(monkeypatch)
     monkeypatch.setattr("sys.stdout", stdout)
     monkeypatch.setattr("sys.stderr", io.StringIO())
 
-    task = asyncio.create_task(run_rpc_mode(runtime, input_stream=stream))
+    monkeypatch.setattr(rpc_mode_module, "_get_rpc_input_stream", lambda: stream)
+    task = asyncio.create_task(run_rpc_mode(runtime))
     while runtime.session._extension_bindings is None:
         await asyncio.sleep(0)
     runtime.session._extension_bindings["shutdownHandler"]()
