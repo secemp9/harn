@@ -1661,17 +1661,20 @@ async def test_run_shows_version_notification_from_background_check(monkeypatch:
     mode.checkTmuxKeyboardSetup = lambda: asyncio.sleep(0, result=None)  # type: ignore[method-assign]
 
     run_task = asyncio.create_task(mode.run())
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    rendered = ""
+    for _ in range(8):
+        rendered = "\n".join(
+            line
+            for child in mode.chatContainer.children
+            if hasattr(child, "render")
+            for line in child.render(120)
+        )
+        if "Update Available" in _strip_ansi(rendered):
+            break
+        await asyncio.sleep(0)
     mode.requestShutdown()
     assert await run_task == 0
 
-    rendered = "\n".join(
-        line
-        for child in mode.chatContainer.children
-        if hasattr(child, "render")
-        for line in child.render(120)
-    )
     stripped = _strip_ansi(rendered)
     assert "Update Available" in stripped
     assert "New version 9.9.9 is available. Run: upgrade-pi" in stripped
@@ -1719,8 +1722,12 @@ async def test_run_surfaces_package_updates_tmux_warning_and_models_json_error(
     monkeypatch.setattr(interactive_mode_module, "ensureTool", _noop_async)
 
     run_task = asyncio.create_task(mode.run())
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    for _ in range(8):
+        if package_notifications == [["pkg-a", "pkg-b"]] and warnings == ["tmux warning"] and errors == [
+            "models.json error: invalid models.json"
+        ]:
+            break
+        await asyncio.sleep(0)
     mode.requestShutdown()
     assert await run_task == 0
 
@@ -2851,7 +2858,7 @@ async def test_command_context_navigate_tree_updates_chat_and_editor() -> None:
         defaultEditor=editor,
         session=SimpleNamespace(navigateTree=navigate_tree),
     )
-    mode.renderCurrentSessionState = lambda: renders.append(True)  # type: ignore[method-assign]
+    mode.renderInitialMessages = lambda: renders.append(True)  # type: ignore[method-assign]
     mode.showStatus = statuses.append  # type: ignore[method-assign]
     mode.flushCompactionQueue = lambda options: flushes.append(options)  # type: ignore[method-assign]
 
