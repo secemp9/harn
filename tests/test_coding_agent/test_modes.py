@@ -17,6 +17,7 @@ from harnify_coding_agent.core.compaction import CompactionResult
 from harnify_coding_agent.main import main
 import harnify_coding_agent.modes as modes_package
 import harnify_coding_agent.modes.print_mode as print_mode_module
+import harnify_coding_agent.modes.rpc.jsonl as rpc_jsonl_module
 from harnify_coding_agent.modes.print_mode import run_print_mode
 from harnify_coding_agent.modes.rpc import JsonlLineBuffer, RpcClient, run_rpc_mode
 import harnify_coding_agent.modes.rpc.rpc_client as rpc_client_module
@@ -77,6 +78,10 @@ def test_modes_package_exports_match_ts_surface() -> None:
 
 def test_print_mode_module_exports_match_ts_surface() -> None:
     assert print_mode_module.__all__ == ["PrintModeOptions", "runPrintMode"]
+
+
+def test_rpc_jsonl_module_exports_match_ts_surface() -> None:
+    assert rpc_jsonl_module.__all__ == ["attachJsonlLineReader", "serializeJsonLine"]
 
 
 def _fake_model(provider: str, model_id: str) -> Model[Any]:
@@ -322,11 +327,54 @@ async def _noop_async(*_args: Any, **_kwargs: Any) -> None:
     return None
 
 
+class _FakeReadable:
+    def __init__(self) -> None:
+        self._listeners: dict[str, list[Any]] = {"data": [], "end": []}
+
+    def on(self, event: str, listener: Any) -> None:
+        self._listeners.setdefault(event, []).append(listener)
+
+    def off(self, event: str, listener: Any) -> None:
+        listeners = self._listeners.get(event, [])
+        if listener in listeners:
+            listeners.remove(listener)
+
+    def emit(self, event: str, *args: Any) -> None:
+        for listener in list(self._listeners.get(event, [])):
+            listener(*args)
+
+    def listener_count(self, event: str) -> int:
+        return len(self._listeners.get(event, []))
+
+
 def test_jsonl_line_buffer_preserves_strict_lf_framing() -> None:
     reader = JsonlLineBuffer()
     lines = reader.feed(b'{"a":"one\xe2\x80\xa8two"}\r\n{"b":2}')
     assert lines == ['{"a":"one\u2028two"}']
     assert reader.end() == ['{"b":2}']
+
+
+def test_rpc_jsonl_serialization_matches_ts_compact_unicode_behavior() -> None:
+    line = rpc_jsonl_module.serializeJsonLine({"a": "é", "b": "one\u2028two", "c": "one\u2029two"})
+    assert line == '{"a":"é","b":"one\u2028two","c":"one\u2029two"}\n'
+
+
+def test_attach_jsonl_line_reader_matches_ts_listener_lifecycle() -> None:
+    readable = _FakeReadable()
+    lines: list[str] = []
+
+    detach = rpc_jsonl_module.attachJsonlLineReader(readable, lines.append)
+    assert readable.listener_count("data") == 1
+    assert readable.listener_count("end") == 1
+
+    readable.emit("data", b'{"a":"one\xe2\x80\xa8two"}\r\n{"b":2')
+    assert lines == ['{"a":"one\u2028two"}']
+    readable.emit("end")
+    assert lines == ['{"a":"one\u2028two"}', '{"b":2']
+
+    detach()
+    assert readable.listener_count("data") == 0
+    assert readable.listener_count("end") == 0
 
 
 @pytest.mark.asyncio
