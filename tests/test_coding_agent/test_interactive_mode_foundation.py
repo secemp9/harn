@@ -4244,8 +4244,9 @@ async def test_show_models_selector_updates_session_scope_and_persists(monkeypat
     callbacks = captured["callbacks"]
     assert config.enabledModelIds == ["openai/gpt-4o-mini"]
 
-    callbacks.onChange(["anthropic/claude-sonnet-4-5"])
-    await asyncio.sleep(0)
+    on_change_result = callbacks.onChange(["anthropic/claude-sonnet-4-5"])
+    if asyncio.iscoroutine(on_change_result):
+        await on_change_result
     callbacks.onPersist(["anthropic/claude-sonnet-4-5"])
 
     assert scoped_updates == [[{"model": all_models[1], "thinkingLevel": "high"}]]
