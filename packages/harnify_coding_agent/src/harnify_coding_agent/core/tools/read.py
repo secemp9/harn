@@ -21,8 +21,6 @@ from harnify_coding_agent.core.tools.render_utils import (
     get_text_output,
     invalid_arg_text,
     replace_tabs,
-    shorten_path,
-    str_value,
 )
 from harnify_coding_agent.core.tools.tool_definition_wrapper import wrap_tool_definition
 from harnify_coding_agent.core.tools.truncate import (
@@ -149,6 +147,23 @@ def _ignore_background_task_result(task: asyncio.Task[Any]) -> None:
     task.add_done_callback(_consume)
 
 
+def _string_arg(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    return None
+
+
+def _shorten_path(path: object) -> str:
+    if not isinstance(path, str):
+        return ""
+    home = os.path.expanduser("~")
+    if path.startswith(home):
+        return f"~{path[len(home):]}"
+    return path
+
+
 def _format_read_line_range(args: Mapping[str, Any] | None, theme_obj: Any) -> str:
     if _value(args, "offset") is None and _value(args, "limit") is None:
         return ""
@@ -159,8 +174,8 @@ def _format_read_line_range(args: Mapping[str, Any] | None, theme_obj: Any) -> s
 
 
 def _format_read_call(args: Mapping[str, Any] | None, theme_obj: Any) -> str:
-    raw_path = str_value(_value(args, "file_path", _value(args, "path")))
-    path_value = shorten_path(raw_path) if raw_path is not None else None
+    raw_path = _string_arg(_value(args, "file_path", _value(args, "path")))
+    path_value = _shorten_path(raw_path) if raw_path is not None else None
     invalid_arg = invalid_arg_text(theme_obj)
     path_display = invalid_arg if path_value is None else (theme_obj.fg("accent", path_value) if path_value else theme_obj.fg("toolOutput", "..."))
     return f"{theme_obj.fg('toolTitle', theme_obj.bold('read'))} {path_display}{_format_read_line_range(args, theme_obj)}"
@@ -200,7 +215,7 @@ def _get_pi_docs_classification(absolute_path: str) -> _CompactReadClassificatio
 
 
 def _get_compact_read_classification(args: Mapping[str, Any] | None, cwd: str) -> _CompactReadClassification | None:
-    raw_path = str_value(_value(args, "file_path", _value(args, "path")))
+    raw_path = _string_arg(_value(args, "file_path", _value(args, "path")))
     if not raw_path:
         return None
 
@@ -260,7 +275,7 @@ def _format_read_result(
     if not bool(_value(options, "expanded")) and not is_error and _get_compact_read_classification(args, cwd):
         return ""
 
-    raw_path = str_value(_value(args, "file_path", _value(args, "path")))
+    raw_path = _string_arg(_value(args, "file_path", _value(args, "path")))
     output = get_text_output(result, show_images)
     lang = get_language_from_path(raw_path) if raw_path else None
     rendered_lines = highlight_code(replace_tabs(output), lang) if lang else output.split("\n")
