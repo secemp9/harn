@@ -16,6 +16,9 @@ from harnify_coding_agent.modes.interactive.components.earendil_announcement imp
 from harnify_coding_agent.modes.interactive.components.extension_editor import (
     ExtensionEditorComponent,
 )
+from harnify_coding_agent.modes.interactive.components.extension_input import (
+    ExtensionInputComponent,
+)
 from harnify_coding_agent.modes.interactive.components.keybinding_hints import (
     KeyTextFormatOptions,
     format_key_text,
@@ -51,6 +54,9 @@ earendil_announcement_module = importlib.import_module(
 )
 extension_editor_module = importlib.import_module(
     "harnify_coding_agent.modes.interactive.components.extension_editor"
+)
+extension_input_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.extension_input"
 )
 
 
@@ -284,6 +290,31 @@ def test_extension_editor_routes_cancel_and_external_shortcuts(monkeypatch) -> N
 
 def test_extension_editor_module_exports_match_ts_surface() -> None:
     assert extension_editor_module.__all__ == ["ExtensionEditorComponent"]
+
+
+def test_extension_input_ignores_placeholder_and_routes_submit_cancel() -> None:
+    submitted: list[str] = []
+    cancelled: list[bool] = []
+    component = ExtensionInputComponent(
+        "Prompt",
+        "placeholder text",
+        submitted.append,
+        lambda: cancelled.append(True),
+    )
+    component.input.setValue("typed")
+
+    rendered = _strip_ansi("\n".join(component.render(80)))
+    assert "placeholder text" not in rendered
+
+    component.handleInput("\n")
+    component.handleInput("\x1b")
+
+    assert submitted == ["typed"]
+    assert cancelled == [True]
+
+
+def test_extension_input_module_exports_match_ts_surface() -> None:
+    assert extension_input_module.__all__ == ["ExtensionInputComponent"]
 
 
 def test_theme_selector_previews_and_confirms() -> None:
