@@ -6,6 +6,7 @@ from typing import Any
 from harnify_coding_agent.core.keybindings import KeybindingsManager
 from harnify_coding_agent.modes.interactive.components import armin as armin_module
 from harnify_coding_agent.modes.interactive.components.armin import DISPLAY_HEIGHT, ArminComponent
+import harnify_coding_agent.modes.interactive.components.custom_editor as custom_editor_module
 from harnify_coding_agent.modes.interactive.components.custom_editor import CustomEditor
 from harnify_coding_agent.modes.interactive.theme.theme import get_editor_theme, init_theme
 from harnify_tui import setKeybindings
@@ -89,6 +90,10 @@ def test_custom_editor_allows_escape_to_cancel_autocomplete() -> None:
     assert events == []
     assert editor.autocompleteState is None
     assert editor.autocompleteList is None
+
+
+def test_custom_editor_module_exports_match_ts_surface() -> None:
+    assert custom_editor_module.__all__ == ["CustomEditor"]
 
 
 def test_armin_component_renders_and_stops_animation(monkeypatch) -> None:
