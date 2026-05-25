@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import os
+import inspect
 import signal
 from dataclasses import dataclass
 from pathlib import Path
@@ -139,6 +140,7 @@ def test_rpc_mode_module_exports_match_ts_surface() -> None:
         "RpcSessionState",
         "runRpcMode",
     ]
+    assert list(inspect.signature(rpc_mode_module.run_rpc_mode).parameters) == ["runtime_host"]
 
 
 def _fake_model(provider: str, model_id: str) -> Model[Any]:
