@@ -264,47 +264,41 @@ def _load_skill_from_file(file_path: str, source: str) -> _LoadSkillFromFileResu
     diagnostics: list[ResourceDiagnostic] = []
     try:
         raw_content = Path(file_path).read_text(encoding="utf-8")
-    except OSError as error:
-        diagnostics.append(ResourceDiagnostic(type="warning", message=str(error), path=file_path))
-        return _LoadSkillFromFileResult(skill=None, diagnostics=diagnostics)
+        frontmatter = parse_frontmatter(raw_content).frontmatter
+        skill_dir = os.path.dirname(file_path)
+        parent_dir_name = os.path.basename(skill_dir)
+        description = frontmatter.get("description")
+        for error in _validate_description(description):
+            diagnostics.append(ResourceDiagnostic(type="warning", message=error, path=file_path))
 
-    try:
-        frontmatter, _body = _parse_frontmatter(raw_content)
+        name = frontmatter.get("name") or parent_dir_name
+        for error in _validate_name(name):
+            diagnostics.append(ResourceDiagnostic(type="warning", message=error, path=file_path))
+
+        if not description or description.strip() == "":
+            return _LoadSkillFromFileResult(skill=None, diagnostics=diagnostics)
+
+        return _LoadSkillFromFileResult(
+            skill=Skill(
+                name=name,
+                description=description,
+                filePath=file_path,
+                baseDir=skill_dir,
+                sourceInfo=_create_skill_source_info(file_path, skill_dir, source),
+                disableModelInvocation=frontmatter.get("disable-model-invocation") is True,
+            ),
+            diagnostics=diagnostics,
+        )
     except Exception as error:
         diagnostics.append(ResourceDiagnostic(type="warning", message=str(error), path=file_path))
         return _LoadSkillFromFileResult(skill=None, diagnostics=diagnostics)
 
-    skill_dir = os.path.dirname(file_path)
-    parent_dir_name = os.path.basename(skill_dir)
-    description = _string_or_none(frontmatter.get("description"))
-    for error in validate_description(description):
-        diagnostics.append(ResourceDiagnostic(type="warning", message=error, path=file_path))
 
-    name = _string_or_none(frontmatter.get("name")) or parent_dir_name
-    for error in validate_name(name):
-        diagnostics.append(ResourceDiagnostic(type="warning", message=error, path=file_path))
-
-    if description is None or not description.strip():
-        return _LoadSkillFromFileResult(skill=None, diagnostics=diagnostics)
-
-    return _LoadSkillFromFileResult(
-        skill=Skill(
-            name=name,
-            description=description,
-            filePath=file_path,
-            baseDir=skill_dir,
-            sourceInfo=_create_skill_source_info(file_path, skill_dir, source),
-            disableModelInvocation=frontmatter.get("disable-model-invocation") is True,
-        ),
-        diagnostics=diagnostics,
-    )
-
-
-def validate_name(name: str) -> list[str]:
+def _validate_name(name: Any) -> list[str]:
     errors: list[str] = []
-    if len(name) > MAX_NAME_LENGTH:
-        errors.append(f"name exceeds {MAX_NAME_LENGTH} characters ({len(name)})")
-    if not all(char.islower() or char.isdigit() or char == "-" for char in name):
+    if len(name) > _MAX_NAME_LENGTH:
+        errors.append(f"name exceeds {_MAX_NAME_LENGTH} characters ({len(name)})")
+    if not _VALID_SKILL_NAME_RE.fullmatch(name):
         errors.append("name contains invalid characters (must be lowercase a-z, 0-9, hyphens only)")
     if name.startswith("-") or name.endswith("-"):
         errors.append("name must not start or end with a hyphen")
@@ -313,12 +307,12 @@ def validate_name(name: str) -> list[str]:
     return errors
 
 
-def validate_description(description: str | None) -> list[str]:
+def _validate_description(description: Any) -> list[str]:
     errors: list[str] = []
-    if description is None or description.strip() == "":
+    if not description or description.strip() == "":
         errors.append("description is required")
-    elif len(description) > MAX_DESCRIPTION_LENGTH:
-        errors.append(f"description exceeds {MAX_DESCRIPTION_LENGTH} characters ({len(description)})")
+    elif len(description) > _MAX_DESCRIPTION_LENGTH:
+        errors.append(f"description exceeds {_MAX_DESCRIPTION_LENGTH} characters ({len(description)})")
     return errors
 
 
