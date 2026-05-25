@@ -24,10 +24,10 @@ from harnify_coding_agent.modes.interactive.components.extension_selector import
 )
 from harnify_coding_agent.modes.interactive.components.keybinding_hints import (
     KeyTextFormatOptions,
-    format_key_text,
-    key_display_text,
+    formatKeyText,
+    keyDisplayText,
     key_text,
-    raw_key_hint,
+    rawKeyHint,
 )
 from harnify_coding_agent.modes.interactive.components.session_selector_search import (
     filter_and_sort_sessions,
@@ -63,6 +63,9 @@ extension_input_module = importlib.import_module(
 )
 extension_selector_module = importlib.import_module(
     "harnify_coding_agent.modes.interactive.components.extension_selector"
+)
+keybinding_hints_module = importlib.import_module(
+    "harnify_coding_agent.modes.interactive.components.keybinding_hints"
 )
 
 
@@ -102,12 +105,23 @@ def test_theme_helpers_load_builtin_themes() -> None:
 
 def test_keybinding_hints_format_text(monkeypatch) -> None:
     monkeypatch.setattr("sys.platform", "darwin")
-    assert format_key_text("alt+enter/ctrl+p", KeyTextFormatOptions(capitalize=True)) == "Option+Enter/Ctrl+P"
+    assert formatKeyText("alt+enter/ctrl+p", KeyTextFormatOptions(capitalize=True)) == "Option+Enter/Ctrl+P"
 
     monkeypatch.setattr("sys.platform", "linux")
     assert key_text("app.message.followUp") == "alt+enter"
-    assert key_display_text("app.message.followUp") == "Alt+Enter"
-    assert "follow-up" in _strip_ansi(raw_key_hint("alt+enter", "queue follow-up"))
+    assert keyDisplayText("app.message.followUp") == "Alt+Enter"
+    assert "follow-up" in _strip_ansi(rawKeyHint("alt+enter", "queue follow-up"))
+
+
+def test_keybinding_hints_module_exports_match_ts_surface() -> None:
+    assert keybinding_hints_module.__all__ == [
+        "KeyTextFormatOptions",
+        "formatKeyText",
+        "keyDisplayText",
+        "keyHint",
+        "keyText",
+        "rawKeyHint",
+    ]
 
 
 def test_dynamic_border_renders_width_with_theme_color() -> None:
