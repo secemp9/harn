@@ -191,7 +191,5 @@ __all__ = [
     "ImageResizeOptions",
     "ResizedImage",
     "formatDimensionNote",
-    "format_dimension_note",
     "resizeImage",
-    "resize_image",
 ]
