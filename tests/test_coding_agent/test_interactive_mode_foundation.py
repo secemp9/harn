@@ -801,6 +801,27 @@ async def test_update_terminal_title_and_reload_command_binding() -> None:
 
 
 @pytest.mark.asyncio
+async def test_command_context_new_session_preserves_object_shaped_runtime_result() -> None:
+    rendered: list[bool] = []
+    request_renders: list[bool | None] = []
+    result_object = SimpleNamespace(cancelled=False, sessionPath="/tmp/new.pi.jsonl")
+
+    mode = InteractiveMode(
+        ui=SimpleNamespace(requestRender=lambda force=None: request_renders.append(force)),
+        runtimeHost=SimpleNamespace(newSession=lambda options=None: asyncio.sleep(0, result=result_object)),
+        statusContainer=SimpleNamespace(clear=lambda: None),
+    )
+    mode.renderCurrentSessionState = lambda: rendered.append(True)  # type: ignore[method-assign]
+
+    actions = mode._build_command_context_actions()
+    result = await actions["newSession"]()
+
+    assert result is result_object
+    assert rendered == [True]
+    assert request_renders == [None]
+
+
+@pytest.mark.asyncio
 async def test_rebind_current_session_shows_loaded_resources_and_diagnostics() -> None:
     source_info = lambda path, base_dir: SimpleNamespace(  # noqa: E731
         path=path,
