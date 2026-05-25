@@ -2959,8 +2959,6 @@ class InteractiveMode:
             return
 
         if bool(getattr(self.session, "isStreaming", False)):
-            if self.onInputCallback is not None:
-                self.onInputCallback(text)
             add_history = _callable_attr(self.editor, "addToHistory")
             if add_history is not None:
                 add_history(text)
