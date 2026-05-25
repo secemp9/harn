@@ -101,6 +101,18 @@ class _EditCallRenderComponent(Box):
         self.settledError = False
 
 
+def _ensure_edit_call_render_component(component: Box) -> _EditCallRenderComponent:
+    if not hasattr(component, "preview"):
+        component.preview = None
+    if not hasattr(component, "previewArgsKey"):
+        component.previewArgsKey = None
+    if not hasattr(component, "previewPending"):
+        component.previewPending = False
+    if not hasattr(component, "settledError"):
+        component.settledError = False
+    return component  # type: ignore[return-value]
+
+
 @dataclass(slots=True)
 class _DefaultEditOperations:
     async def readFile(self, absolute_path: str) -> bytes:
@@ -245,13 +257,14 @@ def _ignore_background_task_result(task: asyncio.Task[Any]) -> None:
 
 
 def _get_edit_call_render_component(state: dict[str, Any], last_component: Any) -> _EditCallRenderComponent:
-    if isinstance(last_component, _EditCallRenderComponent):
-        state["callComponent"] = last_component
-        return last_component
-    component = state.get("callComponent")
-    if isinstance(component, _EditCallRenderComponent):
+    if isinstance(last_component, Box):
+        component = _ensure_edit_call_render_component(last_component)
+        state["callComponent"] = component
         return component
-    component = _EditCallRenderComponent()
+    component = state.get("callComponent")
+    if isinstance(component, Box):
+        return _ensure_edit_call_render_component(component)
+    component = _ensure_edit_call_render_component(_EditCallRenderComponent())
     state["callComponent"] = component
     return component
 
@@ -548,7 +561,7 @@ def create_edit_tool_definition(
                 _build_edit_call_component(call_component, context.args, theme_obj)
 
         output = _format_edit_result(context.args, call_component.preview if isinstance(call_component, _EditCallRenderComponent) else None, result, theme_obj, context.isError)
-        component = context.lastComponent if isinstance(context.lastComponent, Container) else Container()
+        component = context.lastComponent if context.lastComponent is not None else Container()
         component.clear()
         if not output:
             return component
