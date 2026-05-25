@@ -66,6 +66,7 @@ def test_undo_stack_pushes_deep_clones_and_clears() -> None:
     assert stack.length == 1
     stack.clear()
     assert stack.length == 0
+    assert not hasattr(UndoStack, "__len__")
 
 
 @dataclass
