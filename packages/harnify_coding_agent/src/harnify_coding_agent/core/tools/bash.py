@@ -19,8 +19,6 @@ from harnify_coding_agent.core.tools.output_accumulator import OutputAccumulator
 from harnify_coding_agent.core.tools.render_utils import get_text_output, invalid_arg_text, str as str_value
 from harnify_coding_agent.core.tools.tool_definition_wrapper import wrap_tool_definition
 from harnify_coding_agent.core.tools.truncate import DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, TruncationResult, format_size
-from harnify_coding_agent.modes.interactive.components.keybinding_hints import key_hint
-from harnify_coding_agent.modes.interactive.components.visual_truncate import truncate_to_visual_lines
 from harnify_coding_agent.modes.interactive.theme.theme import theme
 from harnify_coding_agent.utils.child_process import wait_for_child_process
 from harnify_coding_agent.utils.shell import (
@@ -104,6 +102,9 @@ class _CollapsedBashPreview:
         self._state = state
 
     def render(self, width: int) -> list[str]:
+        from harnify_coding_agent.modes.interactive.components.keybinding_hints import key_hint
+        from harnify_coding_agent.modes.interactive.components.visual_truncate import truncate_to_visual_lines
+
         if self._state.cachedLines is None or self._state.cachedWidth != width:
             preview = truncate_to_visual_lines(self._styled_output, _BASH_PREVIEW_LINES, width)
             self._state.cachedLines = preview.visualLines
