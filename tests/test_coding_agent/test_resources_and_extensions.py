@@ -382,6 +382,23 @@ def test_build_system_prompt_uses_context_and_skills(tmp_path: Path) -> None:
     assert f"Current working directory: {str(cwd)}" in prompt
 
 
+def test_build_system_prompt_default_surface_and_docs_paths() -> None:
+    from harnify_coding_agent.config import get_docs_path, get_examples_path, get_readme_path
+    from harnify_coding_agent.core import system_prompt as system_prompt_module
+
+    assert system_prompt_module.__all__ == ["BuildSystemPromptOptions", "buildSystemPrompt"]
+
+    prompt = build_system_prompt({"cwd": "/tmp/project"})
+
+    assert prompt.startswith(
+        "You are an expert coding assistant operating inside pi, a coding agent harness. "
+        "You help users by reading files, executing commands, editing code, and writing new files."
+    )
+    assert f"- Main documentation: {get_readme_path()}" in prompt
+    assert f"- Additional docs: {get_docs_path()}" in prompt
+    assert f"- Examples: {get_examples_path()} (extensions, custom tools, SDK)" in prompt
+
+
 def test_load_project_context_files_orders_global_then_ancestors(tmp_path: Path) -> None:
     cwd = tmp_path / "a" / "b" / "c"
     cwd.mkdir(parents=True)
