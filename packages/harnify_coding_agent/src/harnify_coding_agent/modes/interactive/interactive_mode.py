@@ -4147,6 +4147,9 @@ class InteractiveMode:
                 handler = _value(shortcut, "handler")
                 if callable(handler):
                     context = create_context() if create_context is not None else None
+                    extras = getattr(context, "_extras", None)
+                    if isinstance(extras, dict):
+                        extras["shutdown"] = lambda: setattr(self, "shutdownRequested", True)
                     self._schedule_task(_run_shortcut(handler, context))
                 return True
             return False
