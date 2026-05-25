@@ -3200,8 +3200,6 @@ class InteractiveMode:
         add_history = _callable_attr(self.editor, "addToHistory")
         if add_history is not None:
             add_history(text)
-        self._set_editor_text("")
-        await self.session.prompt(text)
 
     async def handleThemeCommand(self, themeName: str) -> None:
         if not themeName:
