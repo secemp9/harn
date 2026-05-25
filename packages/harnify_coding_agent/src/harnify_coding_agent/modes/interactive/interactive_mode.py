@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
@@ -3003,13 +3003,28 @@ class InteractiveMode:
         messages = list(getattr(self.session, "messages", []) or [])
 
         def _json_default(value: Any) -> Any:
-            if hasattr(value, "__dict__"):
-                return value.__dict__
+            if is_dataclass(value):
+                return asdict(value)
+            value_dict = getattr(value, "__dict__", None)
+            if isinstance(value_dict, dict):
+                return value_dict
+            slots = getattr(type(value), "__slots__", ())
+            if isinstance(slots, str):
+                slots = (slots,)
+            slot_values = {
+                slot: getattr(value, slot)
+                for slot in slots
+                if slot not in {"__dict__", "__weakref__"} and hasattr(value, slot)
+            }
+            if slot_values:
+                return slot_values
             return str(value)
+
+        timestamp = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
         debug_data = "\n".join(
             [
-                f"Debug output at {datetime.now(UTC).isoformat().replace('+00:00', 'Z')}",
+                f"Debug output at {timestamp}",
                 f"Terminal: {width}x{height}",
                 f"Total lines: {len(all_lines)}",
                 "",
