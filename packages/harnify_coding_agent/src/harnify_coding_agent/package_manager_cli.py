@@ -2,16 +2,33 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
+import subprocess
 import sys
 import traceback
 from dataclasses import dataclass
 from typing import Literal
 
 from harnify_coding_agent.cli.config_selector import select_config
-from harnify_coding_agent.config import APP_NAME, PACKAGE_NAME, get_agent_dir, get_update_instruction
+from harnify_coding_agent.config import (
+    APP_NAME,
+    PACKAGE_NAME,
+    VERSION,
+    SelfUpdateCommand,
+    get_agent_dir,
+    get_package_dir,
+    get_self_update_command,
+    get_self_update_unavailable_instruction,
+)
 from harnify_coding_agent.core.package_manager import DefaultPackageManager
 from harnify_coding_agent.core.settings_manager import SettingsManager
+from harnify_coding_agent.utils.child_process import spawn_process
+from harnify_coding_agent.utils.version_check import get_latest_pi_release, is_newer_package_version
+from harnify_coding_agent.utils.windows_self_update import (
+    cleanup_windows_self_update_quarantine,
+    quarantine_windows_native_dependencies,
+)
 
 
 PackageCommand = Literal["install", "remove", "update", "list"]
@@ -36,6 +53,13 @@ class PackageCommandOptions:
     invalidArgument: str | None = None
     missingOptionValue: str | None = None
     conflictingOptions: str | None = None
+
+
+@dataclass(slots=True)
+class _SelfUpdatePlan:
+    packageName: str
+    shouldRun: bool
+    note: str | None = None
 
 
 _command_exit_code = 0
