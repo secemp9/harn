@@ -1500,6 +1500,7 @@ async def test_init_ensures_tools_and_logs_scoped_model_scope(monkeypatch: pytes
         session=SimpleNamespace(
             resourceLoader=SimpleNamespace(getThemes=lambda: {"themes": []}),
             scopedModels=[{"model": _model("anthropic", "claude-scope"), "thinkingLevel": "high"}],
+            state=SimpleNamespace(messages=[]),
         ),
         settingsManager=SimpleNamespace(
             getQuietStartup=lambda: False,
