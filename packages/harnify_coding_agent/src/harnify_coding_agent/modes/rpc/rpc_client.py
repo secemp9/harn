@@ -33,13 +33,19 @@ class RpcClientOptions:
     provider: str | None = None
     model: str | None = None
     args: list[str] = field(default_factory=list)
-    pythonExecutable: str = sys.executable
-    module: str = "harnify_coding_agent.cli"
 
 
 class RpcClient:
     def __init__(self, options: RpcClientOptions | dict[str, Any] | None = None) -> None:
-        self.options = options if isinstance(options, RpcClientOptions) else RpcClientOptions(**dict(options or {}))
+        if isinstance(options, RpcClientOptions):
+            self.options = options
+            self._python_executable = sys.executable
+            self._module = "harnify_coding_agent.cli"
+        else:
+            options_dict = dict(options or {})
+            self._python_executable = str(options_dict.pop("pythonExecutable", sys.executable))
+            self._module = str(options_dict.pop("module", "harnify_coding_agent.cli"))
+            self.options = RpcClientOptions(**options_dict)
         self.process: asyncio.subprocess.Process | None = None
         self._stdout_task: asyncio.Task[None] | None = None
         self._stderr_task: asyncio.Task[None] | None = None
@@ -260,11 +266,11 @@ class RpcClient:
             args.extend(["--model", self.options.model])
         args.extend(self.options.args)
         if self.options.cliPath:
-            return [self.options.pythonExecutable, self.options.cliPath, *args]
+            return [self._python_executable, self.options.cliPath, *args]
         return [
-            self.options.pythonExecutable,
+            self._python_executable,
             "-m",
-            self.options.module,
+            self._module,
             *args,
         ]
 
