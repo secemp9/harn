@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from harnify_agent.types import ThinkingLevel
 from harnify_tui import Container, SelectItem, SelectList, SelectListLayoutOptions
 
 from harnify_coding_agent.modes.interactive.components.dynamic_border import DynamicBorder
@@ -11,7 +12,7 @@ from harnify_coding_agent.modes.interactive.theme.theme import get_select_list_t
 
 THINKING_SELECT_LIST_LAYOUT = SelectListLayoutOptions(minPrimaryColumnWidth=12, maxPrimaryColumnWidth=32)
 
-LEVEL_DESCRIPTIONS = {
+LEVEL_DESCRIPTIONS: dict[ThinkingLevel, str] = {
     "off": "No reasoning",
     "minimal": "Very brief reasoning (~1k tokens)",
     "low": "Light reasoning (~2k tokens)",
@@ -22,13 +23,11 @@ LEVEL_DESCRIPTIONS = {
 
 
 class ThinkingSelectorComponent(Container):
-    wantsKeyRelease = False
-
     def __init__(
         self,
-        currentLevel: str,
-        availableLevels: list[str],
-        onSelect: Callable[[str], None],
+        currentLevel: ThinkingLevel,
+        availableLevels: list[ThinkingLevel],
+        onSelect: Callable[[ThinkingLevel], None],
         onCancel: Callable[[], None],
     ) -> None:
         super().__init__()
@@ -56,7 +55,5 @@ class ThinkingSelectorComponent(Container):
 
 
 __all__ = [
-    "LEVEL_DESCRIPTIONS",
-    "THINKING_SELECT_LIST_LAYOUT",
     "ThinkingSelectorComponent",
 ]
