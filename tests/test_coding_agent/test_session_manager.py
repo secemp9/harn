@@ -255,6 +255,19 @@ def test_find_most_recent_session_ignores_invalid_files(tmp_path: Path) -> None:
     assert findMostRecentSession(str(tmp_path)) == str(newer)
 
 
+def test_session_info_modified_ignores_messages_without_content(tmp_path: Path) -> None:
+    session_file = tmp_path / "session.jsonl"
+    session_file.write_text(
+        '{"type":"session","id":"abc","timestamp":"2025-01-01T00:00:00Z","cwd":"/tmp"}\n'
+        '{"type":"message","id":"1","parentId":null,"timestamp":"2025-01-02T00:00:00Z","message":{"role":"user","timestamp":999999999999}}\n',
+        encoding="utf-8",
+    )
+
+    info = session_manager_module._build_session_info_sync(str(session_file))
+    assert info is not None
+    assert info.modified == datetime(2025, 1, 1, tzinfo=UTC)
+
+
 def test_open_recovers_corrupted_file_and_preserves_explicit_path(tmp_path: Path) -> None:
     corrupted = tmp_path / "corrupted.jsonl"
     corrupted.write_text("", encoding="utf-8")
