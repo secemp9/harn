@@ -1630,7 +1630,7 @@ class InteractiveMode:
         get_auth = _callable_attr(auth_storage, "get")
         if get_auth is not None:
             stored_credential = get_auth("anthropic")
-        if isinstance(stored_credential, dict) and stored_credential.get("type") == "oauth":
+        if _value(stored_credential, "type") == "oauth":
             self.anthropicSubscriptionWarningShown = True
             self.showWarning(ANTHROPIC_SUBSCRIPTION_AUTH_WARNING)
             return
