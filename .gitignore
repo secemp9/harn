@@ -1,4 +1,25 @@
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+.env
+
+# Testing / linting caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Session logs
+pi-session-*.html
+harnify-session-*.html
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
