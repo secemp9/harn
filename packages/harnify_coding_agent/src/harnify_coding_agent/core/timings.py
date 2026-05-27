@@ -13,7 +13,7 @@ class _TimingEntry(TypedDict):
     ms: int
 
 
-_ENABLED = os.environ.get("PI_TIMING") == "1"
+_ENABLED = os.environ.get("HARNIFY_TIMING") == "1"
 _timings: list[_TimingEntry] = []
 _last_time_ms = int(_time.time() * 1000)
 

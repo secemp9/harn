@@ -21,7 +21,7 @@ from harnify_ai.utils.oauth.types import OAuthCredentials, OAuthLoginCallbacks
 CLIENT_ID = base64.b64decode("OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl").decode("utf-8")
 AUTHORIZE_URL = "https://claude.ai/oauth/authorize"
 TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
-CALLBACK_HOST = os.environ.get("PI_OAUTH_CALLBACK_HOST", "127.0.0.1")
+CALLBACK_HOST = os.environ.get("HARNIFY_OAUTH_CALLBACK_HOST", "127.0.0.1")
 CALLBACK_PORT = 53692
 CALLBACK_PATH = "/callback"
 REDIRECT_URI = f"http://localhost:{CALLBACK_PORT}{CALLBACK_PATH}"

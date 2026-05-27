@@ -85,7 +85,7 @@ TERMUX_PACKAGES: dict[ToolName, str] = {"fd": "fd", "rg": "ripgrep"}
 
 
 def is_offline_mode_enabled() -> bool:
-    value = os.environ.get("PI_OFFLINE")
+    value = os.environ.get("HARNIFY_OFFLINE")
     if not value:
         return False
     return value == "1" or value.lower() in {"true", "yes"}

@@ -691,7 +691,7 @@ def map_thinking_level_to_effort(
 def resolve_cache_retention(cache_retention: CacheRetention | None = None) -> CacheRetention:
     if cache_retention:
         return cache_retention
-    return "long" if os.environ.get("PI_CACHE_RETENTION") == "long" else "short"
+    return "long" if os.environ.get("HARNIFY_CACHE_RETENTION") == "long" else "short"
 
 
 def is_anthropic_claude_model(model: Model) -> bool:

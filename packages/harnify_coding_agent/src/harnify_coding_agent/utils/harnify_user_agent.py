@@ -1,4 +1,4 @@
-"""User-Agent helpers for pi version checks."""
+"""User-Agent helpers for harnify version checks."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import platform
 import sys
 
 
-def get_pi_user_agent(version: str) -> str:
+def get_harnify_user_agent(version: str) -> str:
     runtime = f"python/{platform.python_version()}"
-    return f"pi/{version} ({sys.platform}; {runtime}; {_arch()})"
+    return f"harnify/{version} ({sys.platform}; {runtime}; {_arch()})"
 
 
 def _arch() -> str:
@@ -20,6 +20,6 @@ def _arch() -> str:
     return machine
 
 
-getPiUserAgent = get_pi_user_agent
+getHarnifyUserAgent = get_harnify_user_agent
 
-__all__ = ["getPiUserAgent"]
+__all__ = ["getHarnifyUserAgent", "get_harnify_user_agent"]

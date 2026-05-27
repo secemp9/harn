@@ -24,7 +24,7 @@ from harnify_coding_agent.config import (
 from harnify_coding_agent.core.package_manager import DefaultPackageManager
 from harnify_coding_agent.core.settings_manager import SettingsManager
 from harnify_coding_agent.utils.child_process import spawn_process
-from harnify_coding_agent.utils.version_check import get_latest_pi_release, is_newer_package_version
+from harnify_coding_agent.utils.version_check import get_latest_harnify_release, is_newer_package_version
 from harnify_coding_agent.utils.windows_self_update import (
     cleanup_windows_self_update_quarantine,
     quarantine_windows_native_dependencies,
@@ -84,7 +84,7 @@ def _get_package_command_usage(command: PackageCommand) -> str:
         case "remove":
             return f"{APP_NAME} remove <source> [-l]"
         case "update":
-            return f"{APP_NAME} update [source|self|pi] [--self] [--extensions] [--extension <source>] [--force]"
+            return f"{APP_NAME} update [source|self|harnify] [--self] [--extensions] [--extension <source>] [--force]"
         case "list":
             return f"{APP_NAME} list"
 
@@ -145,7 +145,7 @@ async def _get_self_update_plan(force: bool) -> _SelfUpdatePlan:
         return _SelfUpdatePlan(packageName=PACKAGE_NAME, shouldRun=True)
 
     try:
-        latest_release = await get_latest_pi_release(VERSION)
+        latest_release = await get_latest_harnify_release(VERSION)
         package_name = latest_release.packageName if latest_release and latest_release.packageName else PACKAGE_NAME
         if (
             latest_release is None
@@ -278,7 +278,7 @@ def _parse_package_command(args: list[str]) -> PackageCommandOptions | None:
                 )
             options.updateTarget = UpdateTarget(type="extensions", source=extension_flag_source)
         elif options.source:
-            source_is_self = options.source in {"self", "pi"}
+            source_is_self = options.source in {"self", "harnify"}
             if source_is_self:
                 options.updateTarget = UpdateTarget(type="all" if extensions_flag else "self")
             else:
@@ -307,7 +307,7 @@ def _print_package_command_help(command: PackageCommand) -> None:
             f"  {APP_NAME} install <source> [-l]\n\n"
             "Install a package and add it to settings.\n\n"
             "Options:\n"
-            "  -l, --local    Install project-locally (.pi/settings.json)\n\n"
+            "  -l, --local    Install project-locally (.harnify/settings.json)\n\n"
             "Examples:\n"
             f"  {APP_NAME} install npm:@foo/bar\n"
             f"  {APP_NAME} install git:github.com/user/repo\n"
@@ -324,7 +324,7 @@ def _print_package_command_help(command: PackageCommand) -> None:
             "Remove a package and its source from settings.\n"
             f"Alias: {APP_NAME} uninstall <source> [-l]\n\n"
             "Options:\n"
-            "  -l, --local    Remove from project settings (.pi/settings.json)\n\n"
+            "  -l, --local    Remove from project settings (.harnify/settings.json)\n\n"
             "Examples:\n"
             f"  {APP_NAME} remove npm:@foo/bar\n"
             f"  {APP_NAME} uninstall npm:@foo/bar\n"
@@ -333,7 +333,7 @@ def _print_package_command_help(command: PackageCommand) -> None:
     if command == "update":
         print(
             f"Usage:\n"
-            f"  {APP_NAME} update [source|self|pi] [--self] [--extensions] [--extension <source>] [--force]\n\n"
+            f"  {APP_NAME} update [source|self|harnify] [--self] [--extensions] [--extension <source>] [--force]\n\n"
             f"Update {APP_NAME} and installed packages.\n\n"
             "Options:\n"
             f"  --self                  Update {APP_NAME} only\n"
@@ -343,7 +343,7 @@ def _print_package_command_help(command: PackageCommand) -> None:
             "Short forms:\n"
             f"  {APP_NAME} update                Update {APP_NAME} and all extensions\n"
             f"  {APP_NAME} update <source>       Update one package\n"
-            f"  {APP_NAME} update pi             Update {APP_NAME} only (self works as alias to pi)\n"
+            f"  {APP_NAME} update harnify         Update {APP_NAME} only (self works as alias to harnify)\n"
         )
         return
     print(

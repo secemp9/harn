@@ -73,7 +73,7 @@ def _find_package_root(start: Path) -> Path:
 
 
 def get_package_dir() -> str:
-    env_dir = os.environ.get("PI_PACKAGE_DIR")
+    env_dir = os.environ.get("HARNIFY_PACKAGE_DIR")
     if env_dir:
         return normalize_path(env_dir)
 
@@ -107,23 +107,23 @@ def _load_package_metadata() -> dict[str, Any]:
             return {
                 "name": parsed.get("name"),
                 "version": parsed.get("version"),
-                "piConfig": parsed.get("piConfig", {}),
+                "harnifyConfig": parsed.get("harnifyConfig", {}),
             }
 
         parsed_toml = tomllib.loads(metadata_path.read_text(encoding="utf-8"))
         project = parsed_toml.get("project", {})
         tool_section = parsed_toml.get("tool", {})
-        pi_config = (
-            tool_section.get("pi", {})
-            or tool_section.get("harnify_coding_agent", {}).get("pi_config", {})
-            or tool_section.get("harnify-coding-agent", {}).get("pi_config", {})
+        harnify_config = (
+            tool_section.get("harnify", {})
+            or tool_section.get("harnify_coding_agent", {}).get("harnify_config", {})
+            or tool_section.get("harnify-coding-agent", {}).get("harnify_config", {})
         )
         return {
             "name": project.get("name"),
             "version": project.get("version"),
-            "piConfig": {
-                "name": pi_config.get("name"),
-                "configDir": pi_config.get("configDir") or pi_config.get("config_dir"),
+            "harnifyConfig": {
+                "name": harnify_config.get("name"),
+                "configDir": harnify_config.get("configDir") or harnify_config.get("config_dir"),
             },
         }
 
@@ -135,24 +135,24 @@ def _load_package_metadata() -> dict[str, Any]:
     return {
         "name": distribution.get("Name"),
         "version": distribution.get("Version"),
-        "piConfig": {},
+        "harnifyConfig": {},
     }
 
 
 _PACKAGE_METADATA = _load_package_metadata()
-_PI_CONFIG = _PACKAGE_METADATA.get("piConfig", {})
-_PI_CONFIG_NAME = _PI_CONFIG.get("name")
+_HARNIFY_CONFIG = _PACKAGE_METADATA.get("harnifyConfig", {})
+_HARNIFY_CONFIG_NAME = _HARNIFY_CONFIG.get("name")
 
 PACKAGE_NAME = _PACKAGE_METADATA.get("name") or "harnify-coding-agent"
-APP_NAME = _PI_CONFIG_NAME or "pi"
-APP_TITLE = APP_NAME if _PI_CONFIG_NAME else "π"
-CONFIG_DIR_NAME = _PI_CONFIG.get("configDir") or ".pi"
+APP_NAME = _HARNIFY_CONFIG_NAME or "harnify"
+APP_TITLE = APP_NAME if _HARNIFY_CONFIG_NAME else "harnify"
+CONFIG_DIR_NAME = _HARNIFY_CONFIG.get("configDir") or ".harnify"
 VERSION = _PACKAGE_METADATA.get("version") or "0.0.0"
 
 ENV_AGENT_DIR = f"{APP_NAME.upper()}_CODING_AGENT_DIR"
 ENV_SESSION_DIR = f"{APP_NAME.upper()}_CODING_AGENT_SESSION_DIR"
 
-DEFAULT_SHARE_VIEWER_URL = "https://pi.dev/session/"
+DEFAULT_SHARE_VIEWER_URL = "https://harnify.dev/session/"
 
 
 def expand_tilde_path(path: str) -> str:
@@ -160,7 +160,7 @@ def expand_tilde_path(path: str) -> str:
 
 
 def get_share_viewer_url(gist_id: str) -> str:
-    base_url = os.environ.get("PI_SHARE_VIEWER_URL", DEFAULT_SHARE_VIEWER_URL)
+    base_url = os.environ.get("HARNIFY_SHARE_VIEWER_URL", DEFAULT_SHARE_VIEWER_URL)
     return f"{base_url}#{gist_id}"
 
 

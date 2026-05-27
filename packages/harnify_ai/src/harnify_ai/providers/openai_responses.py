@@ -141,7 +141,7 @@ async def _await_maybe_with_signal(value: Any, signal: Any, *, on_abort: Any = N
 def resolve_cache_retention(cache_retention: CacheRetention | None = None) -> CacheRetention:
     if cache_retention:
         return cache_retention
-    return "long" if os.environ.get("PI_CACHE_RETENTION") == "long" else "short"
+    return "long" if os.environ.get("HARNIFY_CACHE_RETENTION") == "long" else "short"
 
 
 def get_compat(model: Model) -> dict[str, bool]:

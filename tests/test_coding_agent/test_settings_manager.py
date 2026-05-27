@@ -21,7 +21,7 @@ async def test_preserves_external_array_changes_on_unrelated_global_save(tmp_pat
     project_dir.mkdir()
     settings_path = agent_dir / "settings.json"
     settings_path.write_text(
-        json.dumps({"theme": "dark", "packages": ["npm:pi-mcp-adapter"]}),
+        json.dumps({"theme": "dark", "packages": ["npm:harnify-mcp-adapter"]}),
         encoding="utf-8",
     )
 
@@ -68,14 +68,14 @@ async def test_project_settings_dir_created_only_on_write(tmp_path: Path) -> Non
     (agent_dir / "settings.json").write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
 
     manager = SettingsManager.create(str(project_dir), str(agent_dir))
-    assert not (project_dir / ".pi").exists()
+    assert not (project_dir / ".harnify").exists()
     assert manager.getTheme() == "dark"
 
     manager.setProjectPackages([{"source": "npm:test-pkg"}])
     await manager.flush()
 
-    assert (project_dir / ".pi").exists()
-    assert _read_json(project_dir / ".pi" / "settings.json")["packages"] == [{"source": "npm:test-pkg"}]
+    assert (project_dir / ".harnify").exists()
+    assert _read_json(project_dir / ".harnify" / "settings.json")["packages"] == [{"source": "npm:test-pkg"}]
 
 
 @pytest.mark.asyncio
@@ -89,13 +89,13 @@ async def test_http_idle_timeout_defaults_and_project_override(tmp_path: Path) -
     assert manager.getHttpIdleTimeoutMs() == DEFAULT_HTTP_IDLE_TIMEOUT_MS
 
     (agent_dir / "settings.json").write_text(json.dumps({"httpIdleTimeoutMs": 300000}), encoding="utf-8")
-    (project_dir / ".pi").mkdir()
-    (project_dir / ".pi" / "settings.json").write_text(json.dumps({"httpIdleTimeoutMs": 0}), encoding="utf-8")
+    (project_dir / ".harnify").mkdir()
+    (project_dir / ".harnify" / "settings.json").write_text(json.dumps({"httpIdleTimeoutMs": 0}), encoding="utf-8")
 
     manager = SettingsManager.create(str(project_dir), str(agent_dir))
     assert manager.getHttpIdleTimeoutMs() == 0
 
-    (project_dir / ".pi" / "settings.json").unlink()
+    (project_dir / ".harnify" / "settings.json").unlink()
     (agent_dir / "settings.json").write_text(json.dumps({"httpIdleTimeoutMs": -1}), encoding="utf-8")
     manager = SettingsManager.create(str(project_dir), str(agent_dir))
     with pytest.raises(Exception, match="Invalid httpIdleTimeoutMs setting"):

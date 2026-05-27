@@ -128,8 +128,8 @@ def _get_attribution_headers(
 
     if model.provider == "openrouter" or "openrouter.ai" in model.baseUrl:
         return {
-            "HTTP-Referer": "https://pi.dev",
-            "X-OpenRouter-Title": "pi",
+            "HTTP-Referer": "https://harnify.dev",
+            "X-OpenRouter-Title": "harnify",
             "X-OpenRouter-Categories": "cli-agent",
         }
 
@@ -139,7 +139,7 @@ def _get_attribution_headers(
         or "gateway.ai.cloudflare.com" in model.baseUrl
     ):
         return {
-            "User-Agent": "pi-coding-agent",
+            "User-Agent": "harnify-coding-agent",
         }
 
     return None
@@ -271,7 +271,7 @@ async def create_agent_session(options: CreateAgentSessionOptions | None = None)
 
         provider_retry_settings = settings_manager.getProviderRetrySettings()
         attribution_headers = _get_attribution_headers(model_value, settings_manager)
-        resolved_stream_options = dict(stream_options or {})
+        resolved_stream_options = _to_dict(stream_options)
         headers = _merge_headers(attribution_headers, auth.get("headers"), resolved_stream_options.get("headers"))
         final_options = dict(resolved_stream_options)
         final_options["apiKey"] = auth.get("apiKey")
@@ -283,7 +283,13 @@ async def create_agent_session(options: CreateAgentSessionOptions | None = None)
             final_options["maxRetryDelayMs"] = provider_retry_settings.get("maxRetryDelayMs")
         if headers is not None:
             final_options["headers"] = headers
-        return stream_simple(model_value, context, SimpleStreamOptions.model_validate(final_options))
+        # Filter to only SimpleStreamOptions-known fields before validation.
+        # In the TypeScript original, `{ ...options, ... }` creates a plain object
+        # with extra AgentLoopConfig keys that are silently ignored by JS runtime.
+        # Python's Pydantic extra="forbid" rejects unknown keys, so we must strip them.
+        allowed_keys = SimpleStreamOptions.model_fields.keys()
+        filtered_options = {k: v for k, v in final_options.items() if k in allowed_keys}
+        return stream_simple(model_value, context, SimpleStreamOptions.model_validate(filtered_options))
 
     async def on_payload(payload: dict[str, Any], _model: Model[Any]) -> Any:
         runner = extension_runner_ref.get("current")
@@ -366,6 +372,27 @@ async def create_agent_session(options: CreateAgentSessionOptions | None = None)
         "extensionsResult": extensions_result,
         "modelFallbackMessage": model_fallback_message,
     }
+
+
+def _to_dict(value: Any) -> dict[str, Any]:
+    """Convert an options-like value to a plain dict.
+
+    Handles dicts, Pydantic models, SimpleNamespace subclasses (e.g.
+    ``StreamOptionsNamespace``), and other objects with ``__dict__``.
+    Falls back to an empty dict for ``None``.
+    """
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    # SimpleNamespace and its subclasses (e.g. StreamOptionsNamespace) store
+    # their attributes in __dict__ but are not iterable, so dict() on them
+    # raises TypeError.  We read __dict__ directly instead.
+    if hasattr(value, "__dict__"):
+        return dict(vars(value))
+    return dict(value)
 
 
 def _merge_headers(*header_groups: dict[str, str] | None) -> dict[str, str] | None:

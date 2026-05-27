@@ -78,7 +78,7 @@ def test_run_migrations_collects_deprecation_warnings(tmp_path: Path, monkeypatc
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(tmp_path / "agent"))
     agent_dir = tmp_path / "agent"
     (agent_dir / "hooks").mkdir(parents=True)
-    project_config = tmp_path / ".pi" / "tools"
+    project_config = tmp_path / ".harnify" / "tools"
     project_config.mkdir(parents=True)
     (project_config / "custom.sh").write_text("echo hi", encoding="utf-8")
 

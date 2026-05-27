@@ -34,6 +34,7 @@ from harnify_tui import (
     CombinedAutocompleteProvider,
     Container,
     DefaultTextStyle,
+    EditorOptions,
     Loader,
     LoaderIndicatorOptions,
     Markdown,
@@ -147,7 +148,7 @@ from harnify_coding_agent.utils.clipboard_image import (
 )
 from harnify_coding_agent.utils.shell import kill_tracked_detached_children
 from harnify_coding_agent.utils.tools_manager import ensureTool
-from harnify_coding_agent.utils.version_check import LatestPiRelease, check_for_new_pi_version
+from harnify_coding_agent.utils.version_check import LatestHarnifyRelease, check_for_new_harnify_version
 
 interactive_theme = import_module("harnify_coding_agent.modes.interactive.theme.theme")
 
@@ -635,12 +636,12 @@ class InteractiveMode:
                     self.ui,
                     interactive_theme.get_editor_theme(),
                     self.keybindings,
-                    {
-                        "paddingX": _safe_call_int(self.settingsManager, "getEditorPaddingX", 0),
-                        "autocompleteMaxVisible": _safe_call_int(
+                    EditorOptions(
+                        paddingX=_safe_call_int(self.settingsManager, "getEditorPaddingX", 0),
+                        autocompleteMaxVisible=_safe_call_int(
                             self.settingsManager, "getAutocompleteMaxVisible", 5
                         ),
-                    },
+                    ),
                 )
             else:
                 self.defaultEditor = SimpleNamespace(
@@ -909,12 +910,12 @@ class InteractiveMode:
     def showWarning(self, message: str) -> None:
         self._append_notice(message, "warning", "Warning")
 
-    def showNewVersionNotification(self, release: LatestPiRelease) -> None:
+    def showNewVersionNotification(self, release: LatestHarnifyRelease) -> None:
         action = interactive_theme.theme.fg("accent", f"{APP_NAME} update")
         update_instruction = (
             interactive_theme.theme.fg("muted", f"New version {release.version} is available. Run ") + action
         )
-        changelog_url = "https://pi.dev/changelog"
+        changelog_url = "https://harnify.dev/changelog"
         changelog_link = (
             hyperlink(interactive_theme.theme.fg("accent", "open changelog"), changelog_url)
             if getattr(getCapabilities(), "hyperlinks", False)
@@ -2116,7 +2117,7 @@ class InteractiveMode:
         return None
 
     def reportInstallTelemetry(self, version: str) -> None:
-        if os.environ.get("PI_OFFLINE"):
+        if os.environ.get("HARNIFY_OFFLINE"):
             return
 
         get_install_telemetry = _callable_attr(self.settingsManager, "getEnableInstallTelemetry")
@@ -2133,8 +2134,8 @@ class InteractiveMode:
             def _send() -> None:
                 try:
                     request = Request(
-                        f"https://pi.dev/api/report-install?version={quote(version)}",
-                        headers={"User-Agent": f"pi/{version}"},
+                        f"https://harnify.dev/api/report-install?version={quote(version)}",
+                        headers={"User-Agent": f"harnify/{version}"},
                     )
                     with urlopen(request, timeout=5):
                         return
@@ -2146,7 +2147,7 @@ class InteractiveMode:
         self._schedule_task(_report())
 
     async def checkForPackageUpdates(self) -> list[str]:
-        if os.environ.get("PI_OFFLINE"):
+        if os.environ.get("HARNIFY_OFFLINE"):
             return []
 
         try:
@@ -4503,7 +4504,7 @@ class InteractiveMode:
 
             tmp_dir = Path(tempfile.gettempdir())
             extension = extension_for_image_mime_type(image.mimeType) or "png"
-            file_path = tmp_dir / f"pi-clipboard-{uuid4()}.{extension}"
+            file_path = tmp_dir / f"harnify-clipboard-{uuid4()}.{extension}"
             file_path.write_bytes(image.bytes)
 
             insert_text_at_cursor = _callable_attr(self.editor, "insertTextAtCursor")
@@ -4583,7 +4584,7 @@ class InteractiveMode:
             return
 
         current_text = self._get_editor_text()
-        tmp_file = Path(tempfile.gettempdir()) / f"pi-editor-{int(time.time() * 1000)}.pi.md"
+        tmp_file = Path(tempfile.gettempdir()) / f"harnify-editor-{int(time.time() * 1000)}.harnify.md"
 
         try:
             tmp_file.write_text(current_text, encoding="utf-8")
@@ -4931,7 +4932,7 @@ class InteractiveMode:
         await _maybe_await(self.updateAvailableProviderCount())
 
     async def _check_for_new_version(self) -> None:
-        release = await check_for_new_pi_version(self.version)
+        release = await check_for_new_harnify_version(self.version)
         if release is not None:
             self.showNewVersionNotification(release)
 
@@ -5063,7 +5064,7 @@ class InteractiveMode:
         if stop is not None:
             with contextlib.suppress(Exception):
                 stop()
-        print("pi exiting due to uncaughtException:", file=sys.stderr)
+        print("harnify exiting due to uncaughtException:", file=sys.stderr)
         print(error, file=sys.stderr)
         raise SystemExit(1)
 

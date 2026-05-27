@@ -58,7 +58,7 @@ class PackageFilter(TypedDict, total=False):
     themes: list[str]
 
 
-class PiManifest(TypedDict, total=False):
+class HarnifyManifest(TypedDict, total=False):
     extensions: list[str]
     skills: list[str]
     prompts: list[str]
@@ -395,20 +395,20 @@ def _resource_precedence_rank(metadata: PathMetadata) -> int:
     return scope_base + (0 if metadata.get("source") == "local" else 1)
 
 
-def _read_pi_manifest(package_root: str) -> PiManifest | None:
+def _read_harnify_manifest(package_root: str) -> HarnifyManifest | None:
     package_json_path = os.path.join(package_root, "package.json")
     if not os.path.exists(package_json_path):
         return None
-    return _read_pi_manifest_file(package_json_path)
+    return _read_harnify_manifest_file(package_json_path)
 
 
-def _read_pi_manifest_file(package_json_path: str) -> PiManifest | None:
+def _read_harnify_manifest_file(package_json_path: str) -> HarnifyManifest | None:
     try:
         payload = json.loads(Path(package_json_path).read_text(encoding="utf-8"))
     except Exception:
         return None
-    manifest = payload.get("pi")
-    return cast(PiManifest, manifest) if isinstance(manifest, dict) else None
+    manifest = payload.get("harnify")
+    return cast(HarnifyManifest, manifest) if isinstance(manifest, dict) else None
 
 
 def _resolve_dir_entry(entry: os.DirEntry[str]) -> tuple[bool, bool]:
@@ -469,7 +469,7 @@ def _collect_files(
 
 def _collect_skill_entries(
     dir_path: str,
-    mode: Literal["pi", "agents"],
+    mode: Literal["harnify", "agents"],
     ignore_matcher: _IgnoreMatcher | None = None,
     root_dir: str | None = None,
 ) -> list[str]:
@@ -506,7 +506,7 @@ def _collect_skill_entries(
             continue
         rel_path = _to_posix_path(os.path.relpath(full_path, root))
         if (
-            mode == "pi"
+            mode == "harnify"
             and dir_path == root
             and is_file
             and entry.name.endswith(".md")
@@ -520,7 +520,7 @@ def _collect_skill_entries(
     return entries
 
 
-def _collect_auto_skill_entries(dir_path: str, mode: Literal["pi", "agents"]) -> list[str]:
+def _collect_auto_skill_entries(dir_path: str, mode: Literal["harnify", "agents"]) -> list[str]:
     return _collect_skill_entries(dir_path, mode)
 
 
@@ -571,7 +571,7 @@ def _collect_auto_theme_entries(dir_path: str) -> list[str]:
 def _resolve_extension_entries(dir_path: str) -> list[str] | None:
     package_json_path = os.path.join(dir_path, "package.json")
     if os.path.exists(package_json_path):
-        manifest = _read_pi_manifest_file(package_json_path)
+        manifest = _read_harnify_manifest_file(package_json_path)
         if manifest and manifest.get("extensions"):
             entries = [
                 os.path.abspath(os.path.join(dir_path, candidate))
@@ -625,7 +625,7 @@ def _collect_auto_extension_entries(dir_path: str) -> list[str]:
 
 def _collect_resource_files(dir_path: str, resource_type: ResourceType) -> list[str]:
     if resource_type == "skills":
-        return _collect_skill_entries(dir_path, "pi")
+        return _collect_skill_entries(dir_path, "harnify")
     if resource_type == "extensions":
         return _collect_auto_extension_entries(dir_path)
     if resource_type == "prompts":
@@ -660,7 +660,7 @@ def _collect_ancestor_agents_skill_dirs(start_dir: str) -> list[str]:
 
 
 def _is_offline_mode_enabled() -> bool:
-    value = os.environ.get("PI_OFFLINE")
+    value = os.environ.get("HARNIFY_OFFLINE")
     if not value:
         return False
     normalized = value.strip().lower()
@@ -1207,7 +1207,7 @@ class DefaultPackageManager:
         package_json_path = os.path.join(install_root, "package.json")
         if not os.path.exists(package_json_path):
             Path(package_json_path).write_text(
-                json.dumps({"name": "pi-extensions", "private": True}, indent=2),
+                json.dumps({"name": "harnify-extensions", "private": True}, indent=2),
                 encoding="utf-8",
             )
 
@@ -1642,7 +1642,7 @@ class DefaultPackageManager:
 
     def _get_temporary_dir(self, prefix: str, suffix: str | None = None) -> str:
         digest = hashlib.sha256(f"{prefix}-{suffix or ''}".encode()).hexdigest()[:8]
-        base = os.path.join(tempfile.gettempdir(), "pi-extensions", prefix, digest)
+        base = os.path.join(tempfile.gettempdir(), "harnify-extensions", prefix, digest)
         return os.path.join(base, suffix) if suffix else base
 
     def _get_git_install_path(self, source: GitSource, scope: SourceScope) -> str:
@@ -1770,7 +1770,7 @@ class DefaultPackageManager:
                     self._collect_default_resources(package_root, resource_type, target, metadata)
             return True
 
-        manifest = _read_pi_manifest(package_root)
+        manifest = _read_harnify_manifest(package_root)
         if manifest:
             for resource_type in RESOURCE_TYPES:
                 self._add_manifest_entries(
@@ -1799,7 +1799,7 @@ class DefaultPackageManager:
         target: dict[str, tuple[PathMetadata, bool]],
         metadata: PathMetadata,
     ) -> None:
-        manifest = _read_pi_manifest(package_root)
+        manifest = _read_harnify_manifest(package_root)
         entries = manifest.get(resource_type) if manifest else None
         if entries:
             self._add_manifest_entries(entries, package_root, resource_type, target, metadata)
@@ -1828,7 +1828,7 @@ class DefaultPackageManager:
             self._add_resource(target, file_path, metadata, file_path in enabled_paths)
 
     def _collect_manifest_files(self, package_root: str, resource_type: ResourceType) -> _ManifestFiles:
-        manifest = _read_pi_manifest(package_root)
+        manifest = _read_harnify_manifest(package_root)
         entries = manifest.get(resource_type) if manifest else None
         if entries:
             all_files = self._collect_files_from_manifest_entries(entries, package_root, resource_type)
@@ -1959,7 +1959,7 @@ class DefaultPackageManager:
         )
         add_resources(
             "skills",
-            _collect_auto_skill_entries(project_dirs["skills"], "pi"),
+            _collect_auto_skill_entries(project_dirs["skills"], "harnify"),
             project_metadata,
             project_overrides["skills"],
             project_base_dir,
@@ -2002,7 +2002,7 @@ class DefaultPackageManager:
         )
         add_resources(
             "skills",
-            _collect_auto_skill_entries(user_dirs["skills"], "pi"),
+            _collect_auto_skill_entries(user_dirs["skills"], "harnify"),
             user_metadata,
             user_overrides["skills"],
             global_base_dir,

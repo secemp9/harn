@@ -407,12 +407,12 @@ def test_format_skill_invocation_and_system_prompt() -> None:
             name="inspect",
             description="Inspect things",
             content="Use inspection tools.",
-            filePath="/project/.pi/skills/inspect/SKILL.md",
+            filePath="/project/.harnify/skills/inspect/SKILL.md",
         ),
         "Check errors.",
     ) == (
-        '<skill name="inspect" location="/project/.pi/skills/inspect/SKILL.md">\n'
-        "References are relative to /project/.pi/skills/inspect.\n\n"
+        '<skill name="inspect" location="/project/.harnify/skills/inspect/SKILL.md">\n'
+        "References are relative to /project/.harnify/skills/inspect.\n\n"
         "Use inspection tools.\n"
         "</skill>\n\n"
         "Check errors."

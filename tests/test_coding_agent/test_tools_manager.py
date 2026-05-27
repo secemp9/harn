@@ -41,13 +41,13 @@ async def test_ensure_tool_short_circuits_for_offline_and_downloads_when_availab
         return str(tmp_path / tool)
 
     monkeypatch.setattr(tools_manager, "download_tool", fake_download_tool)
-    monkeypatch.setenv("PI_OFFLINE", "1")
+    monkeypatch.setenv("HARNIFY_OFFLINE", "1")
 
     assert await tools_manager.ensure_tool("rg", tools_dir=str(tmp_path), printer=messages.append) is None
     assert messages == ["ripgrep not found. Offline mode enabled, skipping download."]
 
     messages.clear()
-    monkeypatch.delenv("PI_OFFLINE", raising=False)
+    monkeypatch.delenv("HARNIFY_OFFLINE", raising=False)
     path = await tools_manager.ensure_tool("rg", tools_dir=str(tmp_path), printer=messages.append)
     assert path == str(tmp_path / "rg")
     assert messages == ["ripgrep not found. Downloading...", f"ripgrep installed to {tmp_path / 'rg'}"]

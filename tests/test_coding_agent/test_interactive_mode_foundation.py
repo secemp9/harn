@@ -31,7 +31,7 @@ from harnify_coding_agent.modes.interactive.components.tool_execution import Too
 from harnify_coding_agent.modes.interactive.components.user_message import UserMessageComponent
 from harnify_coding_agent.modes.interactive.theme.theme import init_theme
 from harnify_coding_agent.utils.changelog import ChangelogEntry
-from harnify_coding_agent.utils.version_check import LatestPiRelease
+from harnify_coding_agent.utils.version_check import LatestHarnifyRelease
 from harnify_tui import Container, Spacer, Text, setKeybindings
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*m|\]8;;.*?\x07)", re.DOTALL)
@@ -804,7 +804,7 @@ async def test_update_terminal_title_and_reload_command_binding() -> None:
 async def test_command_context_new_session_preserves_object_shaped_runtime_result() -> None:
     rendered: list[bool] = []
     request_renders: list[bool | None] = []
-    result_object = SimpleNamespace(cancelled=False, sessionPath="/tmp/new.pi.jsonl")
+    result_object = SimpleNamespace(cancelled=False, sessionPath="/tmp/new.harnify.jsonl")
 
     mode = InteractiveMode(
         ui=SimpleNamespace(requestRender=lambda force=None: request_renders.append(force)),
@@ -1976,7 +1976,7 @@ async def test_run_seeds_initial_messages_and_starts_ui(monkeypatch: pytest.Monk
         return None
 
     monkeypatch.setattr(
-        "harnify_coding_agent.modes.interactive.interactive_mode.check_for_new_pi_version",
+        "harnify_coding_agent.modes.interactive.interactive_mode.check_for_new_harnify_version",
         fake_version_check,
     )
     monkeypatch.setattr(interactive_mode_module, "ensureTool", _noop_async)
@@ -2199,11 +2199,11 @@ async def test_init_matches_ts_startup_header_and_render_order(monkeypatch: pyte
 async def test_run_shows_version_notification_from_background_check(monkeypatch: pytest.MonkeyPatch) -> None:
     ui = FakeUi()
 
-    async def fake_version_check(_version: str) -> LatestPiRelease | None:
-        return LatestPiRelease(version="9.9.9", note="*New bits*")
+    async def fake_version_check(_version: str) -> LatestHarnifyRelease | None:
+        return LatestHarnifyRelease(version="9.9.9", note="*New bits*")
 
     monkeypatch.setattr(
-        "harnify_coding_agent.modes.interactive.interactive_mode.check_for_new_pi_version",
+        "harnify_coding_agent.modes.interactive.interactive_mode.check_for_new_harnify_version",
         fake_version_check,
     )
     monkeypatch.setattr(interactive_mode_module, "ensureTool", _noop_async)
@@ -4027,7 +4027,7 @@ async def test_handle_clipboard_image_paste_writes_temp_file_and_inserts_path(
 
     await mode.handleClipboardImagePaste()
 
-    expected_path = tmp_path / "pi-clipboard-fixed-id.png"
+    expected_path = tmp_path / "harnify-clipboard-fixed-id.png"
     assert expected_path.read_bytes() == b"\x89PNG\r\n\x1a\n"
     assert editor.inserted == [str(expected_path)]
     assert ui.render_calls == [None]
@@ -4332,7 +4332,7 @@ async def test_handle_resume_session_accepts_object_shaped_runtime_result() -> N
     rendered: list[bool] = []
 
     async def switch_session(session_path: str, options: dict[str, Any] | None = None) -> Any:
-        assert session_path == "/tmp/session.pi.jsonl"
+        assert session_path == "/tmp/session.harnify.jsonl"
         assert options == {"withSession": None}
         return SimpleNamespace(cancelled=False)
 
@@ -4343,7 +4343,7 @@ async def test_handle_resume_session_accepts_object_shaped_runtime_result() -> N
     mode.renderCurrentSessionState = lambda: rendered.append(True)  # type: ignore[method-assign]
     mode.showStatus = statuses.append  # type: ignore[method-assign]
 
-    result = await mode.handleResumeSession("/tmp/session.pi.jsonl")
+    result = await mode.handleResumeSession("/tmp/session.harnify.jsonl")
 
     assert getattr(result, "cancelled", None) is False
     assert rendered == [True]
@@ -4366,13 +4366,13 @@ async def test_handle_resume_session_accepts_object_shaped_options() -> None:
     mode.showStatus = lambda _message: None  # type: ignore[method-assign]
 
     await mode.handleResumeSession(
-        "/tmp/session.pi.jsonl",
+        "/tmp/session.harnify.jsonl",
         SimpleNamespace(withSession=SimpleNamespace(id="session-2")),
     )
 
     assert calls == [
         (
-            "/tmp/session.pi.jsonl",
+            "/tmp/session.harnify.jsonl",
             {"withSession": SimpleNamespace(id="session-2")},
         )
     ]

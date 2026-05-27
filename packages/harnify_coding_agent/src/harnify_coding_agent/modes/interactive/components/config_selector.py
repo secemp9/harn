@@ -88,7 +88,7 @@ def get_group_label(metadata: PathMetadata) -> str:
                 if metadata.get("scope") == "user"
                 else f"Project ({format_base_dir(base_dir)})"
             )
-        return "User (~/.pi/agent/)" if metadata.get("scope") == "user" else "Project (.pi/)"
+        return "User (~/.harnify/agent/)" if metadata.get("scope") == "user" else "Project (.harnify/)"
     return "User settings" if metadata.get("scope") == "user" else "Project settings"
 
 

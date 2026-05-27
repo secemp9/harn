@@ -685,7 +685,7 @@ class SettingsManager:
         terminal = self._settings_object("terminal")
         if terminal.get("clearOnShrink") is not None:
             return terminal["clearOnShrink"]
-        return os.environ.get("PI_CLEAR_ON_SHRINK") == "1"
+        return os.environ.get("HARNIFY_CLEAR_ON_SHRINK") == "1"
 
     def setClearOnShrink(self, enabled: bool) -> None:
         terminal = self._ensure_global_nested("terminal")
@@ -743,7 +743,7 @@ class SettingsManager:
     def getShowHardwareCursor(self) -> bool:
         if self.settings.get("showHardwareCursor") is not None:
             return self.settings["showHardwareCursor"]
-        return os.environ.get("PI_HARDWARE_CURSOR") == "1"
+        return os.environ.get("HARNIFY_HARDWARE_CURSOR") == "1"
 
     def setShowHardwareCursor(self, enabled: bool) -> None:
         self._set_global_value("showHardwareCursor", enabled)

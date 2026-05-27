@@ -476,7 +476,7 @@ def create_bash_tool_definition(
             f"{resolved_options.commandPrefix}\n{parsed.command}" if resolved_options.commandPrefix else parsed.command
         )
         spawn_context = _resolve_spawn_context(resolved_command, cwd, resolved_options.spawnHook)
-        output = OutputAccumulator(OutputAccumulatorOptions(tempFilePrefix="pi-bash"))
+        output = OutputAccumulator(OutputAccumulatorOptions(tempFilePrefix="harnify-bash"))
         loop = asyncio.get_running_loop()
         update_handle: asyncio.TimerHandle | None = None
         update_dirty = False

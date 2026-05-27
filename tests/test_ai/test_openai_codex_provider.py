@@ -242,7 +242,7 @@ def test_build_request_body_and_headers_include_codex_specific_fields() -> None:
     assert headers["authorization"].startswith("Bearer ")
     assert headers["chatgpt-account-id"] == "acc_test"
     assert headers["OpenAI-Beta"] == "responses=experimental"
-    assert headers["originator"] == "pi"
+    assert headers["originator"] == "harnify"
     assert headers["session_id"] == "session-1"
     assert headers["x-client-request-id"] == "session-1"
 
@@ -269,11 +269,11 @@ def test_build_sse_headers_preserve_custom_headers_but_override_reserved_values(
 
     assert headers["authorization"].startswith("Bearer ")
     assert headers["chatgpt-account-id"] == "acc_test"
-    assert headers["originator"] == "pi"
+    assert headers["originator"] == "harnify"
     assert headers["accept"] == "text/event-stream"
     assert headers["content-type"] == "application/json"
     assert headers["OpenAI-Beta"] == "responses=experimental"
-    assert headers["User-Agent"].startswith("pi (")
+    assert headers["User-Agent"].startswith("harnify (")
     assert headers["x-base"] == "1"
     assert headers["x-extra"] == "2"
 
@@ -326,7 +326,7 @@ async def test_stream_openai_codex_responses_sends_expected_request_and_complete
     assert headers["authorization"] == f"Bearer {token}"
     assert headers["chatgpt-account-id"] == "acc_test"
     assert headers["openai-beta"] == "responses=experimental"
-    assert headers["originator"] == "pi"
+    assert headers["originator"] == "harnify"
     assert headers["session_id"] == "test-session-123"
     assert headers["x-client-request-id"] == "test-session-123"
     assert body["prompt_cache_key"] == "test-session-123"

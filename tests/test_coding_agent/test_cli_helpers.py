@@ -517,8 +517,8 @@ async def test_main_help_includes_runtime_extension_flags(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.stdin", type("TTY", (), {"isatty": lambda self: True})())
 
-    async def extension_factory(api: object) -> None:
-        api.registerFlag(  # type: ignore[attr-defined]
+    async def extension_factory(harnify: object) -> None:
+        harnify.registerFlag(  # type: ignore[attr-defined]
             "demo-flag",
             {
                 "type": "string",

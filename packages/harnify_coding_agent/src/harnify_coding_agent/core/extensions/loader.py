@@ -196,7 +196,7 @@ def create_extension_runtime() -> ExtensionRuntime:
             message
             or (
                 "This extension ctx is stale after session replacement or reload. "
-                "Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), "
+                "Do not use a captured harnify or command ctx after ctx.newSession(), ctx.fork(), "
                 "ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, "
                 "move post-replacement work into withSession and use the ctx passed to withSession. "
                 "For reload, do not use the old ctx after await ctx.reload()."
@@ -339,7 +339,7 @@ async def discover_and_load_extensions(
 def resolve_extension_entries(dir_path: str) -> list[str] | None:
     package_json_path = os.path.join(dir_path, "package.json")
     if os.path.exists(package_json_path):
-        manifest = _read_pi_manifest(package_json_path)
+        manifest = _read_harnify_manifest(package_json_path)
         if manifest and manifest.get("extensions"):
             entries = [
                 os.path.abspath(os.path.join(dir_path, candidate))
@@ -358,13 +358,13 @@ def is_extension_file(name: str) -> bool:
     return name.endswith(".py")
 
 
-def _read_pi_manifest(package_json_path: str) -> dict[str, list[str]] | None:
+def _read_harnify_manifest(package_json_path: str) -> dict[str, list[str]] | None:
     try:
         package = json.loads(Path(package_json_path).read_text(encoding="utf-8"))
     except Exception:
         return None
-    pi_section = package.get("pi")
-    return pi_section if isinstance(pi_section, dict) else None
+    harnify_section = package.get("harnify")
+    return harnify_section if isinstance(harnify_section, dict) else None
 
 
 async def _load_extension(

@@ -39,7 +39,7 @@ class EarendilAnnouncementComponent(Container):
         super().__init__()
 
         self.addChild(DynamicBorder(lambda text: theme.fg("accent", text)))
-        self.addChild(Text(theme.bold(theme.fg("accent", "pi has joined Earendil")), 1, 0))
+        self.addChild(Text(theme.bold(theme.fg("accent", "harnify has joined Earendil")), 1, 0))
         self.addChild(Spacer(1))
         self.addChild(Text(theme.fg("muted", "Read the blog post:"), 1, 0))
         self.addChild(Text(theme.fg("mdLink", BLOG_URL), 1, 0))

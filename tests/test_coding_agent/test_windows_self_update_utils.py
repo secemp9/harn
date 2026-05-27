@@ -15,7 +15,7 @@ def test_windows_self_update_module_exports_match_ts_surface() -> None:
 
 def test_cleanup_windows_self_update_quarantine_removes_node_modules_quarantine(tmp_path: Path) -> None:
     package_dir = tmp_path / "node_modules" / "pkg" / "dist"
-    quarantine_root = tmp_path / "node_modules" / ".pi-native-quarantine"
+    quarantine_root = tmp_path / "node_modules" / ".harnify-native-quarantine"
     package_dir.mkdir(parents=True)
     (quarantine_root / "stale").mkdir(parents=True)
 
@@ -44,7 +44,7 @@ def test_quarantine_windows_native_dependencies_preserves_loaded_binary_and_quar
 
     windows_self_update_module.quarantine_windows_native_dependencies(str(package_dir))
 
-    quarantine_root = tmp_path / "node_modules" / ".pi-native-quarantine"
+    quarantine_root = tmp_path / "node_modules" / ".harnify-native-quarantine"
     run_dirs = list(quarantine_root.iterdir())
     assert [path.name for path in run_dirs] == ["1234-4321-fixed-uuid"]
     assert loaded_file.read_text(encoding="utf-8") == "native-binary"

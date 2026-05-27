@@ -13,8 +13,8 @@ import harnify_coding_agent.package_manager_cli as package_manager_cli_module
 
 def test_config_metadata_defaults_match_package_configuration() -> None:
     assert config.PACKAGE_NAME == "harnify-coding-agent"
-    assert config.APP_NAME == "pi"
-    assert config.APP_TITLE == "π"
+    assert config.APP_NAME == "harnify"
+    assert config.APP_TITLE == "harnify"
     assert config.VERSION == "0.1.0"
     assert config.isBunBinary is False
     assert config.isBunRuntime is False
@@ -134,19 +134,19 @@ def test_cli_package_entrypoint_wraps_async_main(monkeypatch) -> None:
 
     async def fake_invoke(argv: list[str]) -> int:
         seen["argv"] = argv
-        seen["env"] = os.environ.get("PI_CODING_AGENT")
+        seen["env"] = os.environ.get("HARNIFY_CODING_AGENT")
         return 17
 
     monkeypatch.setattr(cli_package, "_invoke_main", fake_invoke)
     monkeypatch.setattr(cli_package, "_set_process_title", lambda title: seen.setdefault("title", title))
     monkeypatch.setattr(cli_package, "_suppress_runtime_warnings", lambda: seen.setdefault("warnings", True))
     monkeypatch.setattr(cli_package, "configureHttpDispatcher", lambda: seen.setdefault("dispatcher", True))
-    monkeypatch.delenv("PI_CODING_AGENT", raising=False)
+    monkeypatch.delenv("HARNIFY_CODING_AGENT", raising=False)
 
     assert cli_package.main(["--demo"]) == 17
     assert seen["argv"] == ["--demo"]
     assert seen["env"] == "true"
-    assert seen["title"] == "pi"
+    assert seen["title"] == "harnify"
     assert seen["warnings"] is True
     assert seen["dispatcher"] is True
     assert cli_package.__all__ == ["main"]

@@ -23,7 +23,7 @@ def is_install_telemetry_enabled(
     settings_manager: _SettingsManagerLike,
     telemetry_env: str | None | object = _UNSET,
 ) -> bool:
-    resolved_env = os.environ.get("PI_TELEMETRY") if telemetry_env is _UNSET else telemetry_env
+    resolved_env = os.environ.get("HARNIFY_TELEMETRY") if telemetry_env is _UNSET else telemetry_env
     if resolved_env is not None:
         return _is_truthy_env_flag(resolved_env)
     return settings_manager.getEnableInstallTelemetry()

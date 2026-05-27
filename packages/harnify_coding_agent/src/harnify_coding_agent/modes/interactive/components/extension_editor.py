@@ -94,7 +94,7 @@ class ExtensionEditorComponent(Container):
             return
 
         current_text = self.editor.getText()
-        temp_file = Path(tempfile.gettempdir()) / f"pi-extension-editor-{int(time.time() * 1000)}.md"
+        temp_file = Path(tempfile.gettempdir()) / f"harnify-extension-editor-{int(time.time() * 1000)}.md"
         temp_file.write_text(current_text, encoding="utf-8")
 
         stop = getattr(self.tui, "stop", None)

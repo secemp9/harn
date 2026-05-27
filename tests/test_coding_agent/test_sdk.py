@@ -222,8 +222,8 @@ async def test_create_agent_session_respects_no_tools_all_and_explicit_allowlist
             None,
             None,
             {
-                "HTTP-Referer": "https://pi.dev",
-                "X-OpenRouter-Title": "pi",
+                "HTTP-Referer": "https://harnify.dev",
+                "X-OpenRouter-Title": "harnify",
                 "X-OpenRouter-Categories": "cli-agent",
             },
         ),
@@ -242,8 +242,8 @@ async def test_create_agent_session_respects_no_tools_all_and_explicit_allowlist
             None,
             None,
             {
-                "HTTP-Referer": "https://pi.dev",
-                "X-OpenRouter-Title": "pi",
+                "HTTP-Referer": "https://harnify.dev",
+                "X-OpenRouter-Title": "harnify",
                 "X-OpenRouter-Categories": "cli-agent",
             },
         ),
@@ -383,7 +383,7 @@ async def test_create_agent_session_applies_dynamic_provider_overrides(tmp_path:
 
     top_level = await build_session(
         [
-            lambda pi: pi.registerProvider("anthropic", {"baseUrl": "http://localhost:8080/top-level"}),
+            lambda harnify: harnify.registerProvider("anthropic", {"baseUrl": "http://localhost:8080/top-level"}),
         ]
     )
     try:
@@ -394,9 +394,9 @@ async def test_create_agent_session_applies_dynamic_provider_overrides(tmp_path:
 
     session_start = await build_session(
         [
-            lambda pi: pi.on(
+            lambda harnify: harnify.on(
                 "session_start",
-                lambda _event: pi.registerProvider("anthropic", {"baseUrl": "http://localhost:8080/session-start"}),
+                lambda _event: harnify.registerProvider("anthropic", {"baseUrl": "http://localhost:8080/session-start"}),
             ),
         ]
     )
@@ -409,4 +409,4 @@ async def test_create_agent_session_applies_dynamic_provider_overrides(tmp_path:
 
 
 class ExtensionFactoryLike:
-    def __call__(self, pi: object) -> object: ...
+    def __call__(self, harnify: object) -> object: ...

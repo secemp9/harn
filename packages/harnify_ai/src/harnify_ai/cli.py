@@ -92,16 +92,16 @@ async def main() -> None:
     if command is None or command in {"help", "--help", "-h"}:
         provider_list = _format_provider_list()
         print(
-            "Usage: python -m harnify_ai.cli <command> [provider]\n\n"
+            "Usage: harnify-ai <command> [provider]\n\n"
             "Commands:\n"
             "  login [provider]  Login to an OAuth provider\n"
             "  list              List available providers\n\n"
             "Providers:\n"
             f"{provider_list}\n\n"
             "Examples:\n"
-            "  python -m harnify_ai.cli login              # interactive provider selection\n"
-            "  python -m harnify_ai.cli login anthropic    # login to specific provider\n"
-            "  python -m harnify_ai.cli list               # list providers\n"
+            "  harnify-ai login              # interactive provider selection\n"
+            "  harnify-ai login anthropic    # login to specific provider\n"
+            "  harnify-ai list               # list providers\n"
         )
         return
 
@@ -133,7 +133,7 @@ async def main() -> None:
 
         if not any(provider.id == provider_id for provider in PROVIDERS):
             print(f"Unknown provider: {provider_id}", file=sys.stderr)
-            print("Use 'python -m harnify_ai.cli list' to see available providers", file=sys.stderr)
+            print("Use 'harnify-ai list' to see available providers", file=sys.stderr)
             raise SystemExit(1)
 
         print(f"Logging in to {provider_id}...")
@@ -141,7 +141,7 @@ async def main() -> None:
         return
 
     print(f"Unknown command: {command}", file=sys.stderr)
-    print("Use 'python -m harnify_ai.cli --help' for usage", file=sys.stderr)
+    print("Use 'harnify-ai --help' for usage", file=sys.stderr)
     raise SystemExit(1)
 
 

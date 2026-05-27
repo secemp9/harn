@@ -279,7 +279,7 @@ class ProcessTerminal:
         self.progressTimer.start()
 
     def _resolve_write_log_path(self) -> str:
-        raw = os.environ.get("PI_TUI_WRITE_LOG", "")
+        raw = os.environ.get("HARNIFY_TUI_WRITE_LOG", "")
         if not raw:
             return ""
         try:

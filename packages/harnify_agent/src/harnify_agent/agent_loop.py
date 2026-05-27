@@ -78,6 +78,35 @@ class ExecutedToolCallOutcome:
 
 
 class StreamOptionsNamespace(SimpleNamespace):
+    """A SimpleNamespace subclass that supports dict() conversion and ** unpacking.
+
+    In TypeScript, the agent loop spreads ``config`` into a plain object via
+    ``{ ...config, apiKey, signal }``.  Downstream code (e.g. ``sdk.py``) then
+    spreads that object again with ``{ ...options, ... }``.  JavaScript object
+    spread works transparently on any object, but Python's ``dict()`` and ``**``
+    unpacking require the target to expose ``keys()`` and ``__getitem__()`` (the
+    informal mapping protocol).  Without these methods, ``dict(namespace)`` raises
+    ``TypeError: 'StreamOptionsNamespace' object is not iterable``.
+    """
+
+    def keys(self):
+        return self.__dict__.keys()
+
+    def __getitem__(self, key: str) -> Any:
+        try:
+            return self.__dict__[key]
+        except KeyError:
+            raise KeyError(key) from None
+
+    def __contains__(self, key: object) -> bool:
+        return key in self.__dict__
+
+    def __iter__(self):
+        return iter(self.__dict__)
+
+    def __len__(self) -> int:
+        return len(self.__dict__)
+
     def model_dump(self, *, exclude_none: bool = False) -> dict[str, Any]:
         payload = dict(self.__dict__)
         if exclude_none:

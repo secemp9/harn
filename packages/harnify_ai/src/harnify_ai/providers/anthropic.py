@@ -233,7 +233,7 @@ def _merge_headers(*header_sources: Mapping[str, Any] | None) -> dict[str, Any]:
 def resolve_cache_retention(cache_retention: CacheRetention | None = None) -> CacheRetention:
     if cache_retention:
         return cache_retention
-    return "long" if os.environ.get("PI_CACHE_RETENTION") == "long" else "short"
+    return "long" if os.environ.get("HARNIFY_CACHE_RETENTION") == "long" else "short"
 
 
 def _force_adaptive_thinking(model: Model) -> bool | None:

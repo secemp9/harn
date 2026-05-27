@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-_QUARANTINE_DIR_NAME = ".pi-native-quarantine"
+_QUARANTINE_DIR_NAME = ".harnify-native-quarantine"
 _SHARED_OBJECT_SUFFIXES = {".dll", ".dylib", ".pyd", ".so"}
 
 

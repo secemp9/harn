@@ -391,7 +391,7 @@ def test_build_system_prompt_default_surface_and_docs_paths() -> None:
     prompt = build_system_prompt({"cwd": "/tmp/project"})
 
     assert prompt.startswith(
-        "You are an expert coding assistant operating inside pi, a coding agent harness. "
+        "You are an expert coding assistant operating inside harnify, a coding agent harness. "
         "You help users by reading files, executing commands, editing code, and writing new files."
     )
     assert f"- Main documentation: {get_readme_path()}" in prompt

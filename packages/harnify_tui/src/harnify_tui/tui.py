@@ -250,8 +250,8 @@ class TUI(Container):
         self.lastRenderAt = 0.0
         self.cursorRow = 0
         self.hardwareCursorRow = 0
-        self.showHardwareCursor = os.environ.get("PI_HARDWARE_CURSOR") == "1"
-        self.clearOnShrink = os.environ.get("PI_CLEAR_ON_SHRINK") == "1"
+        self.showHardwareCursor = os.environ.get("HARNIFY_HARDWARE_CURSOR") == "1"
+        self.clearOnShrink = os.environ.get("HARNIFY_CLEAR_ON_SHRINK") == "1"
         self.maxLinesRendered = 0
         self.previousViewportTop = 0
         self.fullRedrawCount = 0
@@ -733,12 +733,12 @@ class TUI(Container):
         cursor_pos = self.extractCursorPosition(new_lines, height)
         new_lines = self.applyLineResets(new_lines)
 
-        debug_redraw = os.environ.get("PI_DEBUG_REDRAW") == "1"
+        debug_redraw = os.environ.get("HARNIFY_DEBUG_REDRAW") == "1"
 
         def log_redraw(reason: str) -> None:
             if not debug_redraw:
                 return
-            log_path = Path.home() / ".pi" / "agent" / "pi-debug.log"
+            log_path = Path.home() / ".harnify" / "agent" / "harnify-debug.log"
             message = (
                 f"[{_utc_iso_timestamp()}] fullRender: {reason} "
                 f"(prev={len(self.previousLines)}, new={len(new_lines)}, height={height})\n"
@@ -886,7 +886,7 @@ class TUI(Container):
             buffer += "\x1b[2K"
             line = new_lines[index]
             if not isImageLine(line) and visibleWidth(line) > width:
-                crash_log_path = Path.home() / ".pi" / "agent" / "pi-crash.log"
+                crash_log_path = Path.home() / ".harnify" / "agent" / "harnify-crash.log"
                 crash_log_path.parent.mkdir(parents=True, exist_ok=True)
                 crash_data = [
                     f"Crash at {_utc_iso_timestamp()}",
@@ -926,7 +926,7 @@ class TUI(Container):
 
         buffer += "\x1b[?2026l"
 
-        if os.environ.get("PI_TUI_DEBUG") == "1":
+        if os.environ.get("HARNIFY_TUI_DEBUG") == "1":
             debug_dir = Path("/tmp/tui")
             debug_dir.mkdir(parents=True, exist_ok=True)
             debug_path = debug_dir / f"render-{int(time.time() * 1000)}-{secrets.token_hex(6)}.log"

@@ -972,7 +972,7 @@ async def test_main_startup_benchmark_stops_interactive_mode_and_theme_watcher(m
     monkeypatch.setattr("harnify_coding_agent.main.create_agent_session_runtime", _fake_create_runtime)
     monkeypatch.setattr("harnify_coding_agent.main.configureHttpDispatcher", lambda _ms: None)
     monkeypatch.setattr("sys.stdin", type("TTY", (), {"isatty": lambda self: True})())
-    monkeypatch.setenv("PI_STARTUP_BENCHMARK", "1")
+    monkeypatch.setenv("HARNIFY_STARTUP_BENCHMARK", "1")
 
     calls: list[tuple[str, Any]] = []
 
@@ -1004,7 +1004,7 @@ async def test_main_startup_benchmark_awaits_stream_drain_when_pending(monkeypat
     monkeypatch.setattr("harnify_coding_agent.main.create_agent_session_runtime", _fake_create_runtime)
     monkeypatch.setattr("harnify_coding_agent.main.configureHttpDispatcher", lambda _ms: None)
     monkeypatch.setattr("sys.stdin", type("TTY", (), {"isatty": lambda self: True})())
-    monkeypatch.setenv("PI_STARTUP_BENCHMARK", "1")
+    monkeypatch.setenv("HARNIFY_STARTUP_BENCHMARK", "1")
 
     class _DrainableStream:
         def __init__(self) -> None:

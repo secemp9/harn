@@ -538,9 +538,9 @@ def _get_codex_user_agent() -> str:
             "i686": "ia32",
             "aarch64": "arm64",
         }.get(arch, arch)
-        return f"pi ({platform_name} {platform.release()}; {arch})"
+        return f"harnify ({platform_name} {platform.release()}; {arch})"
     except Exception:
-        return "pi (browser)"
+        return "harnify (browser)"
 
 
 def _build_base_codex_headers(
@@ -553,7 +553,7 @@ def _build_base_codex_headers(
     headers.update(dict(option_headers or {}))
     headers["authorization"] = f"Bearer {api_key}"
     headers["chatgpt-account-id"] = account_id
-    headers["originator"] = "pi"
+    headers["originator"] = "harnify"
     headers["User-Agent"] = _get_codex_user_agent()
     return headers
 

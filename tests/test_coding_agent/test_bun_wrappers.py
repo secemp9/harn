@@ -55,7 +55,7 @@ def test_bun_cli_main_runs_wrapper_steps_before_delegating(monkeypatch) -> None:
     monkeypatch.setattr(bun_cli, "_load_cli_main", lambda: fake_cli_main)
     assert bun_cli.main(["--demo"]) == 23
     assert seen == {
-        "title": "pi",
+        "title": "harnify",
         "warnings": True,
         "restored": True,
         "registered": True,

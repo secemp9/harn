@@ -201,7 +201,7 @@ async def test_export_session_to_html_writes_html_and_payload(tmp_path: Path) ->
     payload = _extract_session_payload(html)
 
     assert Path(output_path).exists()
-    assert Path(output_path).name.startswith("pi-session-")
+    assert Path(output_path).name.startswith("harnify-session-")
     assert "<!DOCTYPE html>" in html
     assert "--accent: #8abeb7;" in html
     assert payload["systemPrompt"] == "system rules"

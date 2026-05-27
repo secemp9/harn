@@ -74,6 +74,17 @@ def _compat_value(compat: Any, name: str, default: Any = None) -> Any:
     return getattr(compat, name, default)
 
 
+def _set_extra(params: dict[str, Any], key: str, value: Any) -> None:
+    """Route a non-standard param through extra_body.
+
+    Python equivalent of TypeScript's (params as any).key = value,
+    which passes unknown properties through to the API request body.
+    """
+    if "extra_body" not in params:
+        params["extra_body"] = {}
+    params["extra_body"][key] = value
+
+
 def _dump_model(value: Any) -> Any:
     if hasattr(value, "model_dump"):
         return value.model_dump(exclude_none=True)
@@ -180,7 +191,7 @@ def has_tool_history(messages: list[Any]) -> bool:
 def resolve_cache_retention(cache_retention: CacheRetention | None = None) -> CacheRetention:
     if cache_retention:
         return cache_retention
-    return "long" if os.environ.get("PI_CACHE_RETENTION") == "long" else "short"
+    return "long" if os.environ.get("HARNIFY_CACHE_RETENTION") == "long" else "short"
 
 
 def stream_openai_completions(
@@ -523,10 +534,10 @@ def build_params(
             )
             else None
         ),
-        "prompt_cache_retention": (
-            "24h" if resolved_cache_retention == "long" and compat.get("supportsLongCacheRetention") else None
-        ),
     }
+
+    if resolved_cache_retention == "long" and compat.get("supportsLongCacheRetention"):
+        _set_extra(params, "prompt_cache_retention", "24h")
 
     if compat.get("supportsUsageInStreaming") is not False:
         params["stream_options"] = {"include_usage": True}
@@ -546,7 +557,7 @@ def build_params(
     if context.tools:
         params["tools"] = convert_tools(context.tools, compat)
         if compat.get("zaiToolStream"):
-            params["tool_stream"] = True
+            _set_extra(params, "tool_stream", True)
     elif has_tool_history(context.messages):
         params["tools"] = []
 
@@ -559,11 +570,11 @@ def build_params(
 
     reasoning_effort = _option(options, "reasoningEffort")
     if compat.get("thinkingFormat") in {"zai", "qwen"} and model.reasoning:
-        params["enable_thinking"] = bool(reasoning_effort)
+        _set_extra(params, "enable_thinking", bool(reasoning_effort))
     elif compat.get("thinkingFormat") == "qwen-chat-template" and model.reasoning:
-        params["chat_template_kwargs"] = {"enable_thinking": bool(reasoning_effort), "preserve_thinking": True}
+        _set_extra(params, "chat_template_kwargs", {"enable_thinking": bool(reasoning_effort), "preserve_thinking": True})
     elif compat.get("thinkingFormat") == "deepseek" and model.reasoning:
-        params["thinking"] = {"type": "enabled" if reasoning_effort else "disabled"}
+        _set_extra(params, "thinking", {"type": "enabled" if reasoning_effort else "disabled"})
         if reasoning_effort:
             params["reasoning_effort"] = (
                 model.thinkingLevelMap.get(reasoning_effort, reasoning_effort)
@@ -572,11 +583,11 @@ def build_params(
             )
     elif compat.get("thinkingFormat") == "openrouter" and model.reasoning:
         if reasoning_effort:
-            params["reasoning"] = {
+            _set_extra(params, "reasoning", {
                 "effort": model.thinkingLevelMap.get(reasoning_effort, reasoning_effort)
                 if model.thinkingLevelMap
                 else reasoning_effort
-            }
+            })
         else:
             has_off_override = False
             off_value: Any = None
@@ -584,9 +595,9 @@ def build_params(
                 has_off_override = "off" in model.thinkingLevelMap
                 off_value = model.thinkingLevelMap.get("off")
             if model.thinkingLevelMap is None or not has_off_override or off_value is not None:
-                params["reasoning"] = {"effort": "none" if off_value is None else off_value}
+                _set_extra(params, "reasoning", {"effort": "none" if off_value is None else off_value})
     elif compat.get("thinkingFormat") == "together" and model.reasoning:
-        params["reasoning"] = {"enabled": bool(reasoning_effort)}
+        _set_extra(params, "reasoning", {"enabled": bool(reasoning_effort)})
         if reasoning_effort and compat.get("supportsReasoningEffort"):
             params["reasoning_effort"] = (
                 model.thinkingLevelMap.get(reasoning_effort, reasoning_effort)
@@ -605,7 +616,7 @@ def build_params(
             params["reasoning_effort"] = off_value
 
     if "openrouter.ai" in model.baseUrl and _compat_value(model.compat, "openRouterRouting"):
-        params["provider"] = _dump_model(_compat_value(model.compat, "openRouterRouting"))
+        _set_extra(params, "provider", _dump_model(_compat_value(model.compat, "openRouterRouting")))
     if "ai-gateway.vercel.sh" in model.baseUrl and _compat_value(model.compat, "vercelGatewayRouting"):
         routing = _dump_model(_compat_value(model.compat, "vercelGatewayRouting"))
         gateway_options: dict[str, list[str]] = {}
@@ -614,7 +625,7 @@ def build_params(
         if routing.get("order"):
             gateway_options["order"] = routing["order"]
         if gateway_options:
-            params["providerOptions"] = {"gateway": gateway_options}
+            _set_extra(params, "providerOptions", {"gateway": gateway_options})
 
     return {key: value for key, value in params.items() if value is not None}
 

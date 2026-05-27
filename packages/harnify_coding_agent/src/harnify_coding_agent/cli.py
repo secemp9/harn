@@ -14,7 +14,7 @@ async def _invoke_main(argv: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    os.environ["PI_CODING_AGENT"] = "true"
+    os.environ["HARNIFY_CODING_AGENT"] = "true"
     resolved_argv = list(sys.argv[1:] if argv is None else argv)
     return asyncio.run(_invoke_main(resolved_argv))
 

@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.request import Request, urlopen
 
-from harnify_coding_agent.utils.pi_user_agent import get_pi_user_agent
+from harnify_coding_agent.utils.harnify_user_agent import get_harnify_user_agent
 
-LATEST_VERSION_URL = "https://pi.dev/api/latest-version"
+LATEST_VERSION_URL = "https://harnify.dev/api/latest-version"
 DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10_000
 
 
 @dataclass(slots=True)
-class LatestPiRelease:
+class LatestHarnifyRelease:
     version: str
     packageName: str | None = None
     note: str | None = None
@@ -58,11 +58,11 @@ def is_newer_package_version(candidate_version: str, current_version: str) -> bo
     return candidate_version.strip() != current_version.strip()
 
 
-async def get_latest_pi_release(
+async def get_latest_harnify_release(
     current_version: str,
     options: dict[str, Any] | None = None,
-) -> LatestPiRelease | None:
-    if os.environ.get("PI_SKIP_VERSION_CHECK") or os.environ.get("PI_OFFLINE"):
+) -> LatestHarnifyRelease | None:
+    if os.environ.get("HARNIFY_SKIP_VERSION_CHECK") or os.environ.get("HARNIFY_OFFLINE"):
         return None
 
     timeout_ms = (
@@ -71,7 +71,7 @@ async def get_latest_pi_release(
         else DEFAULT_VERSION_CHECK_TIMEOUT_MS
     )
     headers = {
-        "User-Agent": get_pi_user_agent(current_version),
+        "User-Agent": get_harnify_user_agent(current_version),
         "accept": "application/json",
     }
     data = await _fetch_latest_release_json(LATEST_VERSION_URL, headers, timeout_ms)
@@ -84,21 +84,21 @@ async def get_latest_pi_release(
 
     package_name = data.get("packageName")
     note = data.get("note")
-    return LatestPiRelease(
+    return LatestHarnifyRelease(
         version=version.strip(),
         packageName=package_name.strip() if isinstance(package_name, str) and package_name.strip() else None,
         note=note.strip() if isinstance(note, str) and note.strip() else None,
     )
 
 
-async def get_latest_pi_version(current_version: str, options: dict[str, Any] | None = None) -> str | None:
-    latest = await get_latest_pi_release(current_version, options)
+async def get_latest_harnify_version(current_version: str, options: dict[str, Any] | None = None) -> str | None:
+    latest = await get_latest_harnify_release(current_version, options)
     return latest.version if latest is not None else None
 
 
-async def check_for_new_pi_version(current_version: str) -> LatestPiRelease | None:
+async def check_for_new_harnify_version(current_version: str) -> LatestHarnifyRelease | None:
     try:
-        latest = await get_latest_pi_release(current_version)
+        latest = await get_latest_harnify_release(current_version)
     except Exception:
         return None
     if latest is not None and is_newer_package_version(latest.version, current_version):
@@ -134,17 +134,17 @@ async def _fetch_latest_release_json(url: str, headers: dict[str, str], timeout_
     return await asyncio.to_thread(_load)
 
 
-checkForNewPiVersion = check_for_new_pi_version
+checkForNewHarnifyVersion = check_for_new_harnify_version
 comparePackageVersions = compare_package_versions
-getLatestPiRelease = get_latest_pi_release
-getLatestPiVersion = get_latest_pi_version
+getLatestHarnifyRelease = get_latest_harnify_release
+getLatestHarnifyVersion = get_latest_harnify_version
 isNewerPackageVersion = is_newer_package_version
 
 __all__ = [
-    "LatestPiRelease",
+    "LatestHarnifyRelease",
     "comparePackageVersions",
     "isNewerPackageVersion",
-    "getLatestPiRelease",
-    "getLatestPiVersion",
-    "checkForNewPiVersion",
+    "getLatestHarnifyRelease",
+    "getLatestHarnifyVersion",
+    "checkForNewHarnifyVersion",
 ]

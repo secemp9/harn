@@ -16,7 +16,7 @@ from harnify_coding_agent.core.settings_manager import SettingsError, SettingsMa
 from harnify_coding_agent.main import main, prompt_for_missing_session_cwd
 import harnify_coding_agent.package_manager_cli as package_manager_cli_module
 from harnify_coding_agent.package_manager_cli import handle_config_command, handle_package_command
-from harnify_coding_agent.utils.version_check import LatestPiRelease
+from harnify_coding_agent.utils.version_check import LatestHarnifyRelease
 
 
 class _FakeTerminal:
@@ -509,8 +509,8 @@ async def test_handle_package_command_update_self_reports_already_up_to_date(
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
     monkeypatch.setattr(
-        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
-        lambda _version: _return_latest_release(LatestPiRelease(version=package_manager_cli_module.VERSION)),
+        "harnify_coding_agent.package_manager_cli.get_latest_harnify_release",
+        lambda _version: _return_latest_release(LatestHarnifyRelease(version=package_manager_cli_module.VERSION)),
     )
 
     stdout = io.StringIO()
@@ -548,7 +548,7 @@ async def test_handle_package_command_update_self_unavailable_sets_exit_code(
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
     monkeypatch.setattr(
-        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
+        "harnify_coding_agent.package_manager_cli.get_latest_harnify_release",
         lambda _version: _return_latest_release(None),
     )
     monkeypatch.setattr(
@@ -596,7 +596,7 @@ async def test_handle_package_command_update_all_reports_extension_and_self_succ
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
     monkeypatch.setattr(
-        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
+        "harnify_coding_agent.package_manager_cli.get_latest_harnify_release",
         lambda _version: _return_latest_release(None),
     )
 
@@ -621,7 +621,7 @@ async def test_handle_package_command_update_all_reports_extension_and_self_succ
     monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
     monkeypatch.setattr(
         "harnify_coding_agent.package_manager_cli.get_self_update_command",
-        lambda *_args, **_kwargs: SimpleNamespace(command="uv", args=("tool", "upgrade"), display="uv tool upgrade pi", steps=None),
+        lambda *_args, **_kwargs: SimpleNamespace(command="uv", args=("tool", "upgrade"), display="uv tool upgrade harnify", steps=None),
     )
 
     async def fake_run_self_update(command) -> None:
@@ -634,8 +634,8 @@ async def test_handle_package_command_update_all_reports_extension_and_self_succ
     assert handled is True
     assert package_manager_cli_module._take_command_exit_code() == 0
     assert update_calls == [None]
-    assert self_update_calls == [("uv", "uv tool upgrade pi")]
-    assert stdout.getvalue() == "Updated packages\nUpdated pi\n"
+    assert self_update_calls == [("uv", "uv tool upgrade harnify")]
+    assert stdout.getvalue() == "Updated packages\nUpdated harnify\n"
     assert stderr.getvalue() == ""
 
 
@@ -652,7 +652,7 @@ async def test_handle_package_command_update_self_failure_prints_fallback(
     monkeypatch.setenv(f"{APP_NAME.upper()}_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.setattr("harnify_coding_agent.package_manager_cli.SettingsManager.create", lambda *_args: SettingsManager.inMemory())
     monkeypatch.setattr(
-        "harnify_coding_agent.package_manager_cli.get_latest_pi_release",
+        "harnify_coding_agent.package_manager_cli.get_latest_harnify_release",
         lambda _version: _return_latest_release(None),
     )
 
@@ -671,7 +671,7 @@ async def test_handle_package_command_update_self_failure_prints_fallback(
     monkeypatch.setattr("harnify_coding_agent.package_manager_cli.DefaultPackageManager", FakePackageManager)
     monkeypatch.setattr(
         "harnify_coding_agent.package_manager_cli.get_self_update_command",
-        lambda *_args, **_kwargs: SimpleNamespace(command="uv", args=("tool", "upgrade"), display="uv tool upgrade pi", steps=None),
+        lambda *_args, **_kwargs: SimpleNamespace(command="uv", args=("tool", "upgrade"), display="uv tool upgrade harnify", steps=None),
     )
 
     async def fake_run_self_update(_command) -> None:
@@ -685,7 +685,7 @@ async def test_handle_package_command_update_self_failure_prints_fallback(
     assert package_manager_cli_module._take_command_exit_code() == 1
     assert stdout.getvalue() == ""
     assert "Error: boom" in stderr.getvalue()
-    assert "If this keeps failing, run this command yourself: uv tool upgrade pi" in stderr.getvalue()
+    assert "If this keeps failing, run this command yourself: uv tool upgrade harnify" in stderr.getvalue()
 
 
 @pytest.mark.asyncio

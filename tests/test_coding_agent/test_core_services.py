@@ -115,7 +115,7 @@ def test_install_telemetry_surface_and_env_precedence(monkeypatch: pytest.Monkey
 
     assert telemetry_module.__all__ == ["isInstallTelemetryEnabled"]
 
-    monkeypatch.setenv("PI_TELEMETRY", "yes")
+    monkeypatch.setenv("HARNIFY_TELEMETRY", "yes")
     assert telemetry_module.isInstallTelemetryEnabled(_Settings(False)) is True
     assert telemetry_module.isInstallTelemetryEnabled(_Settings(True), "0") is False
     assert telemetry_module.isInstallTelemetryEnabled(_Settings(True), None) is True

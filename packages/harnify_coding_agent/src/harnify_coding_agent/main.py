@@ -554,9 +554,9 @@ async def create_session_manager(
 
 async def main(args: list[str], options: MainOptions | None = None) -> int:
     reset_timings()
-    if "--offline" in args or is_truthy_env_flag(os.environ.get("PI_OFFLINE")):
-        os.environ["PI_OFFLINE"] = "1"
-        os.environ["PI_SKIP_VERSION_CHECK"] = "1"
+    if "--offline" in args or is_truthy_env_flag(os.environ.get("HARNIFY_OFFLINE")):
+        os.environ["HARNIFY_OFFLINE"] = "1"
+        os.environ["HARNIFY_SKIP_VERSION_CHECK"] = "1"
 
     if sys.platform == "win32":
         cleanup_windows_self_update_quarantine(get_package_dir())
@@ -738,10 +738,10 @@ async def main(args: list[str], options: MainOptions | None = None) -> int:
             print(_format_colored_message(formatNoModelsAvailableMessage(), _RED), file=sys.stderr)
             return 1
 
-        startup_benchmark = is_truthy_env_flag(os.environ.get("PI_STARTUP_BENCHMARK"))
+        startup_benchmark = is_truthy_env_flag(os.environ.get("HARNIFY_STARTUP_BENCHMARK"))
         if startup_benchmark and app_mode != "interactive":
             print(
-                _format_colored_message("Error: PI_STARTUP_BENCHMARK only supports interactive mode", _RED),
+                _format_colored_message("Error: HARNIFY_STARTUP_BENCHMARK only supports interactive mode", _RED),
                 file=sys.stderr,
             )
             return 1

@@ -163,7 +163,7 @@ def is_wsl(env: dict[str, str] | None = None) -> bool:
 
 
 def read_clipboard_image_via_powershell(*, env: dict[str, str] | None = None) -> ClipboardImage | None:
-    tmp_file = str(Path(tempfile.gettempdir()) / f"pi-wsl-clip-{uuid4()}.png")
+    tmp_file = str(Path(tempfile.gettempdir()) / f"harnify-wsl-clip-{uuid4()}.png")
     try:
         win_path_result = run_command("wslpath", ["-w", tmp_file], timeout_ms=DEFAULT_LIST_TIMEOUT_MS, env=env)
         if not win_path_result.ok:

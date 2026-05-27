@@ -244,9 +244,9 @@ async def test_agent_session_refreshes_extension_and_custom_tools_on_bind(tmp_pa
     session = await _create_loaded_session(
         tmp_path,
         extension_factories=[
-            lambda pi: pi.on(
+            lambda harnify: harnify.on(
                 "session_start",
-                lambda _event: pi.registerTool(
+                lambda _event: harnify.registerTool(
                     ToolDefinition(
                         name="dynamic_tool",
                         label="Dynamic Tool",
@@ -311,8 +311,8 @@ async def test_agent_session_dispose_invalidates_replaced_context_and_queue_help
 async def test_agent_session_extension_command_preserves_raw_argument_spacing(tmp_path: Path) -> None:
     seen_args: list[str] = []
 
-    def extension_factory(pi: object) -> None:
-        pi.registerCommand(  # type: ignore[attr-defined]
+    def extension_factory(harnify: object) -> None:
+        harnify.registerCommand(  # type: ignore[attr-defined]
             "testcmd",
             {
                 "description": "Test command",
@@ -388,12 +388,12 @@ async def test_agent_session_before_agent_start_preserves_explicit_empty_images(
     )
     registration.set_responses([faux_assistant_message("ok")])
 
-    def extension_factory(pi: object) -> None:
+    def extension_factory(harnify: object) -> None:
         def on_before_agent_start(event: dict[str, object], _ctx: object) -> None:
             seen_images.append(event["images"])
             return None
 
-        pi.on("before_agent_start", on_before_agent_start)  # type: ignore[attr-defined]
+        harnify.on("before_agent_start", on_before_agent_start)  # type: ignore[attr-defined]
 
     session = await _create_loaded_session(tmp_path, extension_factories=[extension_factory], provider="faux")
     session.agent.state.model = registration.get_model()
@@ -465,9 +465,9 @@ async def test_agent_session_exposes_slash_commands_and_exports_jsonl(tmp_path: 
 
 @pytest.mark.asyncio
 async def test_agent_session_reload_preserves_extension_flag_values_and_command_bindings(tmp_path: Path) -> None:
-    def extension_factory(pi: object) -> None:
-        pi.registerFlag("plan", {"type": "boolean", "description": "Enable planning"})  # type: ignore[attr-defined]
-        pi.registerCommand(  # type: ignore[attr-defined]
+    def extension_factory(harnify: object) -> None:
+        harnify.registerFlag("plan", {"type": "boolean", "description": "Enable planning"})  # type: ignore[attr-defined]
+        harnify.registerCommand(  # type: ignore[attr-defined]
             "review",
             {"description": "Run review", "handler": lambda _args, _ctx: None},
         )
@@ -493,8 +493,8 @@ async def test_agent_session_reload_without_bindings_skips_session_start_and_res
     session_start_events: list[object] = []
     reset_calls: list[str] = []
 
-    def extension_factory(pi: object) -> None:
-        pi.on("session_start", lambda event: session_start_events.append(event))  # type: ignore[attr-defined]
+    def extension_factory(harnify: object) -> None:
+        harnify.on("session_start", lambda event: session_start_events.append(event))  # type: ignore[attr-defined]
 
     def fake_reset_api_providers() -> None:
         reset_calls.append("reset")
@@ -537,10 +537,10 @@ async def test_agent_session_prefers_sdk_tool_over_extension_tool_with_same_name
         execute=sdk_execute,
     )
 
-    def extension_factory(pi: object) -> None:
-        pi.on(  # type: ignore[attr-defined]
+    def extension_factory(harnify: object) -> None:
+        harnify.on(  # type: ignore[attr-defined]
             "session_start",
-            lambda _event: pi.registerTool(
+            lambda _event: harnify.registerTool(
                 ToolDefinition(
                     name="shared_tool",
                     label="Extension Shared Tool",
@@ -641,7 +641,7 @@ async def test_agent_session_compact_allows_non_stream_simple_hook_without_api_k
     async def fake_get_api_key_and_headers(_model: object) -> dict[str, object]:
         return {"ok": True, "apiKey": None, "headers": {"x-test": "1"}}
 
-    def extension_factory(pi: object) -> None:
+    def extension_factory(harnify: object) -> None:
         async def on_before_compact(event: object, _ctx: object) -> dict[str, object]:
             preparation = _event_field(event, "preparation")
             return {
@@ -653,7 +653,7 @@ async def test_agent_session_compact_allows_non_stream_simple_hook_without_api_k
                 }
             }
 
-        pi.on("session_before_compact", on_before_compact)  # type: ignore[attr-defined]
+        harnify.on("session_before_compact", on_before_compact)  # type: ignore[attr-defined]
 
     session = await _create_loaded_session(tmp_path, provider="faux", extension_factories=[extension_factory])
     session.agent.streamFn = lambda *_args, **_kwargs: None
@@ -872,7 +872,7 @@ async def test_agent_session_auto_compaction_uses_threshold_hook_path(tmp_path: 
 
     hook_events: list[object] = []
 
-    def extension_factory(pi: object) -> None:
+    def extension_factory(harnify: object) -> None:
         async def on_before_compact(event: object, _ctx: object) -> dict[str, object]:
             hook_events.append(event)
             preparation = _event_field(event, "preparation")
@@ -885,7 +885,7 @@ async def test_agent_session_auto_compaction_uses_threshold_hook_path(tmp_path: 
                 }
             }
 
-        pi.on("session_before_compact", on_before_compact)  # type: ignore[attr-defined]
+        harnify.on("session_before_compact", on_before_compact)  # type: ignore[attr-defined]
 
     session = await _create_loaded_session(tmp_path, provider="faux", extension_factories=[extension_factory])
     session.agent.state.model = model

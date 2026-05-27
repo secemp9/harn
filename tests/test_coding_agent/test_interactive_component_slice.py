@@ -395,7 +395,7 @@ def test_earendil_announcement_renders_banner_without_image(monkeypatch) -> None
 
     rendered = _strip_ansi("\n".join(component.render(80)))
 
-    assert "pi has joined Earendil" in rendered
+    assert "harnify has joined Earendil" in rendered
     assert "Read the blog post:" in rendered
     assert "https://mariozechner.at/posts/2026-04-08-ive-sold-out/" in rendered
 

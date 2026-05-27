@@ -37,7 +37,7 @@ async def _invoke_main(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     _set_process_title(APP_NAME)
-    os.environ["PI_CODING_AGENT"] = "true"
+    os.environ["HARNIFY_CODING_AGENT"] = "true"
     _suppress_runtime_warnings()
     configureHttpDispatcher()
     resolved_argv = list(sys.argv[1:] if argv is None else argv)

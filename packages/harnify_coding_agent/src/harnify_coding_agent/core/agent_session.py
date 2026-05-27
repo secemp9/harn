@@ -84,7 +84,7 @@ _SKILL_BLOCK_PATTERN = re.compile(
     r'^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n</skill>(?:\n\n([\s\S]+))?$'
 )
 _STALE_CONTEXT_MESSAGE = (
-    "This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx "
+    "This extension ctx is stale after session replacement or reload. Do not use a captured harnify or command ctx "
     "after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and "
     "switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For "
     "reload, do not use the old ctx after await ctx.reload()."

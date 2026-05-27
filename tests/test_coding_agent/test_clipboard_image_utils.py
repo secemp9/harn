@@ -130,7 +130,7 @@ async def test_read_clipboard_image_wsl_uses_powershell_path_directly(
             tmp_file = Path(args[1])
             return _spawn_ok(b"C:\\Users\\O'Hare\\clip.png\n")
         if command == "powershell.exe":
-            assert kwargs.get("env", {}).get("PI_WSL_CLIPBOARD_IMAGE_PATH") is None
+            assert kwargs.get("env", {}).get("HARNIFY_WSL_CLIPBOARD_IMAGE_PATH") is None
             assert "$path = 'C:\\Users\\O''Hare\\clip.png'" in args[2]
             assert tmp_file is not None
             tmp_file.write_bytes(bytes([4, 5, 6]))

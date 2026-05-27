@@ -155,7 +155,7 @@ def test_render_utils_module_exports_match_ts_surface() -> None:
 
 def test_ansi_module_matches_ts_surface_and_type_error() -> None:
     assert ansi_module.__all__ == ["stripAnsi"]
-    assert ansi_module.strip_ansi("\x1b]8;;https://pi.dev\x07link\x1b]8;;\x07 \x1b[31mred\x1b[0m") == "link red"
+    assert ansi_module.strip_ansi("\x1b]8;;https://harnify.dev\x07link\x1b]8;;\x07 \x1b[31mred\x1b[0m") == "link red"
     with pytest.raises(TypeError, match=r"Expected a `string`, got `number`"):
         ansi_module.strip_ansi(123)  # type: ignore[arg-type]
 
