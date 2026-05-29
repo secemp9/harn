@@ -26,7 +26,7 @@ from harn_tui.utils import (
 )
 
 KITTY_SEQUENCE_PREFIX = "\x1b_G"
-CURSOR_MARKER = "\x1b_pi:c\x07"
+CURSOR_MARKER = "\x1b_harn:c\x07"
 
 
 def _utc_iso_timestamp() -> str:

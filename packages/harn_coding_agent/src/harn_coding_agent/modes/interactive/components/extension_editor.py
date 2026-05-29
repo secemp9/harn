@@ -107,7 +107,7 @@ class ExtensionEditorComponent(Container):
                 return
             editor, *editor_args = args
             sys.stdout.write(
-                f"Launching external editor: {editor_cmd}\nPi will resume when the editor exits.\n"
+                f"Launching external editor: {editor_cmd}\nHarn will resume when the editor exits.\n"
             )
 
             status: int | None

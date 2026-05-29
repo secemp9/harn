@@ -4596,7 +4596,7 @@ class InteractiveMode:
             parts = [part for part in editor_cmd.split(" ") if part]
             editor = parts[0]
             editor_args = parts[1:]
-            sys.stdout.write(f"Launching external editor: {editor_cmd}\nPi will resume when the editor exits.\n")
+            sys.stdout.write(f"Launching external editor: {editor_cmd}\nHarn will resume when the editor exits.\n")
             try:
                 status = await asyncio.to_thread(
                     subprocess.run,
