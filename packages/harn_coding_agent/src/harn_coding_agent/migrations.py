@@ -13,9 +13,9 @@ from harn_coding_agent.core.keybindings import migrateKeybindingsConfig
 from harn_coding_agent.core.session_manager import get_default_session_dir
 
 MIGRATION_GUIDE_URL = (
-    "https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md#extensions-migration"
+    "https://github.com/secemp9/harn/blob/main/packages/harn_coding_agent/CHANGELOG.md#extensions-migration"
 )
-EXTENSIONS_DOC_URL = "https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/extensions.md"
+EXTENSIONS_DOC_URL = "https://github.com/secemp9/harn/blob/main/packages/harn_coding_agent/docs/extensions.md"
 _GREEN = "\x1b[32m"
 _YELLOW = "\x1b[33m"
 _DIM = "\x1b[2m"

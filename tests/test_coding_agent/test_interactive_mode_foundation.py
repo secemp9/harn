@@ -2185,7 +2185,7 @@ async def test_init_matches_ts_startup_header_and_render_order(monkeypatch: pyte
     collapsed = _strip_ansi(str(getattr(mode.builtInHeader, "text", "")))
     assert "clear/exit" in collapsed
     assert "show full startup help and loaded resources" in collapsed
-    assert "Ask it how to use or extend Pi." in collapsed
+    assert "Ask it how to use or extend Harn." in collapsed
 
     mode.builtInHeader.setExpanded(True)
     expanded = _strip_ansi(str(getattr(mode.builtInHeader, "text", "")))

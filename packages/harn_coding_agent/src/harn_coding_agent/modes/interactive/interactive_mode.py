@@ -2213,7 +2213,7 @@ class InteractiveMode:
             )
         if extended_keys_format == "xterm":
             return (
-                "tmux extended-keys-format is xterm. Pi works best with csi-u. "
+                "tmux extended-keys-format is xterm. Harn works best with csi-u. "
                 "Add `set -g extended-keys-format csi-u` to ~/.tmux.conf and restart tmux."
             )
         return None
@@ -4867,7 +4867,7 @@ class InteractiveMode:
             )
             onboarding = interactive_theme.theme.fg(
                 "dim",
-                "Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.",
+                "Harn can explain its own features and look up its docs. Ask it how to use or extend Harn.",
             )
             self.builtInHeader = ExpandableText(
                 lambda: (
