@@ -14,10 +14,35 @@ tools.
 
 ## Installation
 
-Harn is installed from source. Clone the repository and let uv handle the
-rest.
+### From PyPI (recommended)
 
-### With uv (recommended)
+```bash
+pip install harn
+```
+
+Or with uv:
+
+```bash
+uv tool install harn
+```
+
+Or with pipx:
+
+```bash
+pipx install harn
+```
+
+Then just run:
+
+```bash
+harn
+```
+
+### From source
+
+Clone the repository and let uv handle the rest.
+
+#### With uv (recommended)
 
 ```bash
 git clone https://github.com/secemp9/harn.git
@@ -32,7 +57,7 @@ virtual environment. The `harn` CLI entry point is immediately available:
 uv run harn
 ```
 
-### With pip
+#### With pip
 
 ```bash
 git clone https://github.com/secemp9/harn.git
@@ -45,7 +70,7 @@ pip install -e packages/harn_ai \
             -e packages/harn_coding_agent
 ```
 
-### With pipx (isolated install)
+#### With pipx (isolated install)
 
 ```bash
 git clone https://github.com/secemp9/harn.git
