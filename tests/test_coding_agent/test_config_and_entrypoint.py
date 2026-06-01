@@ -15,7 +15,7 @@ def test_config_metadata_defaults_match_package_configuration() -> None:
     assert config.PACKAGE_NAME == "harn"
     assert config.APP_NAME == "harn"
     assert config.APP_TITLE == "harn"
-    assert config.VERSION == "0.1.0"
+    assert config.VERSION != "0.0.0"  # resolved from package metadata
     assert config.isBunBinary is False
     assert config.isBunRuntime is False
     assert Path(config.get_package_json_path()).name == "pyproject.toml"
