@@ -1,3 +1,7 @@
+<p align="center">
+  <img alt="Harn logo" src="assets/logo.png" width="128">
+</p>
+
 # Harn
 
 Harn is an AI coding assistant for the terminal. It is a full Python port of
