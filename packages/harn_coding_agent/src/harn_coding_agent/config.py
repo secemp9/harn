@@ -367,19 +367,30 @@ def get_package_json_path() -> str:
 
 
 def get_readme_path() -> str:
-    return str((Path(get_package_dir()) / "README.md").resolve())
+    if isBunBinary:
+        return str((Path(get_package_dir()) / "README.md").resolve())
+    # Use __file__-relative resolution so that bundled assets are found correctly
+    # both when running from source (uv run harn) and when installed as a
+    # wheel/package (uv tool install harn / pip install harn).
+    return str((_get_package_module_dir() / "README.md").resolve())
 
 
 def get_docs_path() -> str:
-    return str((Path(get_package_dir()) / "docs").resolve())
+    if isBunBinary:
+        return str((Path(get_package_dir()) / "docs").resolve())
+    return str((_get_package_module_dir() / "docs").resolve())
 
 
 def get_examples_path() -> str:
-    return str((Path(get_package_dir()) / "examples").resolve())
+    if isBunBinary:
+        return str((Path(get_package_dir()) / "examples").resolve())
+    return str((_get_package_module_dir() / "examples").resolve())
 
 
 def get_changelog_path() -> str:
-    return str((Path(get_package_dir()) / "CHANGELOG.md").resolve())
+    if isBunBinary:
+        return str((Path(get_package_dir()) / "CHANGELOG.md").resolve())
+    return str((_get_package_module_dir() / "CHANGELOG.md").resolve())
 
 
 def get_interactive_assets_dir() -> str:
