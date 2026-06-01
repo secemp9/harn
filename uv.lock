@@ -437,7 +437,7 @@ wheels = [
 
 [[package]]
 name = "harn"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "packages/harn_coding_agent" }
 dependencies = [
     { name = "aiofiles" },

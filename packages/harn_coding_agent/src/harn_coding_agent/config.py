@@ -100,6 +100,24 @@ def _get_package_metadata_path() -> Path | None:
 
 @lru_cache(maxsize=1)
 def _load_package_metadata() -> dict[str, Any]:
+    # Try importlib.metadata first -- this is the most reliable source for the
+    # version of an installed package (pip, uv tool, pipx, etc.) and avoids
+    # accidentally reading an unrelated pyproject.toml/package.json that happens
+    # to exist in a parent directory.
+    try:
+        distribution = importlib_metadata.metadata("harn")
+        dist_version = distribution.get("Version")
+        if dist_version:
+            return {
+                "name": distribution.get("Name"),
+                "version": dist_version,
+                "harnConfig": {},
+            }
+    except importlib_metadata.PackageNotFoundError:
+        pass
+
+    # Fallback: read from a co-located pyproject.toml or package.json (useful
+    # during development before the package metadata is installed).
     metadata_path = _get_package_metadata_path()
     if metadata_path is not None:
         if metadata_path.name == "package.json":
@@ -127,14 +145,9 @@ def _load_package_metadata() -> dict[str, Any]:
             },
         }
 
-    try:
-        distribution = importlib_metadata.metadata("harn")
-    except importlib_metadata.PackageNotFoundError:
-        distribution = {}
-
     return {
-        "name": distribution.get("Name"),
-        "version": distribution.get("Version"),
+        "name": None,
+        "version": None,
         "harnConfig": {},
     }
 
