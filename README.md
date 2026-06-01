@@ -1,7 +1,7 @@
 # Harn
 
 Harn is an AI coding assistant for the terminal. It is a full Python port of
-[earendil-pi](https://github.com/earendil-works/pi-mono), a TypeScript-based
+[earendil's pi agent](https://github.com/earendil-works/pi-mono), a TypeScript-based
 agent harness, rebuilt from the ground up with a native Python stack. Harn
 ships a custom TUI, supports 30+ LLM providers out of the box, and gives models
 access to your filesystem through read, edit, write, bash, grep, find, and ls
