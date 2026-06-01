@@ -301,5 +301,4 @@ uv run harn
 
 ## License
 
-This project does not yet specify a license. See the individual source files
-for details.
+[MIT](LICENSE)
