@@ -248,9 +248,11 @@ def test_find_most_recent_session_ignores_invalid_files(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
+    import time
     os_order = [older, invalid, newer]
-    for path in os_order:
-        path.touch()
+    for i, path in enumerate(os_order):
+        t = time.time() + i
+        os.utime(path, (t, t))
 
     assert findMostRecentSession(str(tmp_path)) == str(newer)
 
