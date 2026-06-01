@@ -322,16 +322,28 @@ def _get_package_source_dir() -> Path:
     return package_dir
 
 
+def _get_package_module_dir() -> Path:
+    """Return the harn_coding_agent package directory using __file__.
+
+    This works reliably whether running from source or from an installed wheel,
+    because __file__ always points to the actual location of this module on disk.
+    """
+    return Path(__file__).resolve().parent
+
+
 def get_themes_dir() -> str:
     if isBunBinary:
         return str(Path(get_package_dir()) / "theme")
-    return str(_get_package_source_dir() / "modes" / "interactive" / "theme")
+    # Use __file__-relative resolution so that theme files are found correctly
+    # both when running from source (uv run harn) and when installed as a
+    # wheel/package (uv tool install harn / pip install harn).
+    return str(_get_package_module_dir() / "modes" / "interactive" / "theme")
 
 
 def get_export_template_dir() -> str:
     if isBunBinary:
         return str(Path(get_package_dir()) / "export-html")
-    return str(_get_package_source_dir() / "core" / "export_html")
+    return str(_get_package_module_dir() / "core" / "export_html")
 
 
 def get_package_json_path() -> str:
@@ -360,7 +372,7 @@ def get_changelog_path() -> str:
 def get_interactive_assets_dir() -> str:
     if isBunBinary:
         return str(Path(get_package_dir()) / "assets")
-    return str(_get_package_source_dir() / "modes" / "interactive" / "assets")
+    return str(_get_package_module_dir() / "modes" / "interactive" / "assets")
 
 
 def get_bundled_interactive_asset_path(name: str) -> str:
