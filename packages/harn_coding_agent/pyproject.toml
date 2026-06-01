@@ -1,7 +1,18 @@
 [project]
 name = "harn"
-version = "0.1.4"
+version = "0.1.5"
 requires-python = ">=3.12"
+description = "AI coding assistant for the terminal with 30+ LLM providers"
+readme = {file = "src/harn_coding_agent/README.md", content-type = "text/markdown"}
+license = {text = "MIT"}
+keywords = ["ai", "coding", "assistant", "terminal", "tui", "llm", "agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
 dependencies = [
     "harn-ai",
     "harn-agent",
