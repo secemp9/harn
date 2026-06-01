@@ -22,7 +22,7 @@ jobs:
         run: uv sync --all-packages
 
       - name: Lint
-        run: uv run ruff check .
+        run: uvx ruff check .
 
       - name: Run tests
         run: uv run pytest tests/ -x -q
