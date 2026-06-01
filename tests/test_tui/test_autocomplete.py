@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 import harn_tui.autocomplete as autocomplete
 from harn_tui.autocomplete import CombinedAutocompleteProvider, SlashCommand
+from harn_coding_agent.utils.tools_manager import get_tool_path
 
 
 async def get_suggestions(
@@ -151,12 +151,12 @@ async def test_quoted_completion_does_not_duplicate_closing_quote(tmp_path: Path
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(shutil.which("fd") is None, reason="fd not installed")
+@pytest.mark.skipif(get_tool_path("fd") is None, reason="fd not installed")
 async def test_fd_file_completion_quotes_space_paths(tmp_path: Path) -> None:
     folder = tmp_path / "my folder"
     folder.mkdir()
     (folder / "test.txt").write_text("content", encoding="utf-8")
-    provider = CombinedAutocompleteProvider([], str(tmp_path), shutil.which("fd"))
+    provider = CombinedAutocompleteProvider([], str(tmp_path), get_tool_path("fd"))
 
     result = await get_suggestions(provider, "@my")
 
