@@ -1,6 +1,6 @@
 [project]
 name = "harn"
-version = "0.1.6"
+version = "0.1.7"
 requires-python = ">=3.12"
 description = "AI coding assistant for the terminal with 30+ LLM providers"
 readme = {file = "src/harn_coding_agent/README.md", content-type = "text/markdown"}
