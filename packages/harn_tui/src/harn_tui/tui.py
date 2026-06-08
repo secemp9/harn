@@ -248,6 +248,7 @@ class TUI(Container):
         self.renderRequested = False
         self.renderTimer: threading.Timer | None = None
         self.lastRenderAt = 0.0
+        self._renderLock = threading.Lock()
         self.cursorRow = 0
         self.hardwareCursorRow = 0
         self.showHardwareCursor = os.environ.get("HARN_HARDWARE_CURSOR") == "1"
@@ -712,6 +713,24 @@ class TUI(Container):
         if self.stopped:
             return
 
+        # Prevent concurrent renders from overlapping.  doRender() can be
+        # called from different threading.Timer threads (e.g. the Loader's
+        # 80ms animation timer and the streaming-event render timer).
+        # Without this lock, two renders can interleave their reads of
+        # previousLines/hardwareCursorRow and their writes to the terminal,
+        # producing duplicated lines, mispositioned footers, and scattered
+        # content fragments.
+        if not self._renderLock.acquire(blocking=False):
+            # Another render is in progress -- skip this one.
+            # The next requestRender() call will schedule a fresh render.
+            return
+
+        try:
+            self._doRenderInner()
+        finally:
+            self._renderLock.release()
+
+    def _doRenderInner(self) -> None:
         width = self.terminal.columns
         height = self.terminal.rows
         width_changed = self.previousWidth != 0 and self.previousWidth != width
