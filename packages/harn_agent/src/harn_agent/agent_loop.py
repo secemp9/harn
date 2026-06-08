@@ -107,6 +107,13 @@ class StreamOptionsNamespace(SimpleNamespace):
     def __len__(self) -> int:
         return len(self.__dict__)
 
+    def __getattr__(self, name: str) -> Any:
+        # Return None for missing attributes instead of raising AttributeError.
+        # This is needed because downstream code (e.g. build_base_options) accesses
+        # fields like cacheRetention, sessionId, etc. that may not be present when
+        # the namespace is constructed from AgentLoopConfig fields.
+        return None
+
     def model_dump(self, *, exclude_none: bool = False) -> dict[str, Any]:
         payload = dict(self.__dict__)
         if exclude_none:
