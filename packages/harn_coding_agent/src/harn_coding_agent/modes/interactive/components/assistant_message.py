@@ -74,9 +74,45 @@ class AssistantMessageComponent(Container):
 
     def updateContent(self, message: Any) -> None:
         self.lastMessage = message
-        self.contentContainer.clear()
 
         content = list(_value(message, "content", []) or [])
+
+        # Fast path: if the content is a single text block (the common
+        # streaming case), update the existing Markdown via setText() instead
+        # of tearing down and rebuilding the component tree.  This avoids a
+        # thread-safety race where the background render timer can observe
+        # the container in a partially-cleared state (between clear() and
+        # addChild()), producing incorrect line counts that corrupt the
+        # differential renderer.
+        if (
+            len(content) == 1
+            and _value(content[0], "type") == "text"
+            and not self.hasToolCalls
+        ):
+            text_value = _value(content[0], "text", "")
+            text = text_value.strip() if isinstance(text_value, str) else ""
+            if text:
+                if (
+                    hasattr(self, "_fast_markdown")
+                    and self._fast_markdown is not None
+                ):
+                    # Update existing Markdown in-place (atomic under GIL).
+                    self._fast_markdown.setText(text)
+                    return
+                else:
+                    # First update -- create persistent children.
+                    self.contentContainer.clear()
+                    self._fast_markdown = Markdown(text, 1, 0, self.markdownTheme)
+                    self.contentContainer.addChild(Spacer(1))
+                    self.contentContainer.addChild(self._fast_markdown)
+                    return
+            # Empty text -- fall through to full rebuild.
+
+        # Slow path: full rebuild for complex content (thinking blocks,
+        # multiple text blocks, tool calls, errors, etc.).
+        self._fast_markdown = None
+        self.contentContainer.clear()
+
         has_visible_content = any(_visible_content(block) for block in content)
         if has_visible_content:
             self.contentContainer.addChild(Spacer(1))
