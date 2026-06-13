@@ -6,6 +6,7 @@ import importlib.util
 import inspect
 import json
 import os
+import tomllib
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -337,17 +338,15 @@ async def discover_and_load_extensions(
 
 
 def resolve_extension_entries(dir_path: str) -> list[str] | None:
-    package_json_path = os.path.join(dir_path, "package.json")
-    if os.path.exists(package_json_path):
-        manifest = _read_harn_manifest(package_json_path)
-        if manifest and manifest.get("extensions"):
-            entries = [
-                os.path.abspath(os.path.join(dir_path, candidate))
-                for candidate in manifest["extensions"]
-                if os.path.exists(os.path.join(dir_path, candidate))
-            ]
-            if entries:
-                return entries
+    manifest = _read_harn_manifest(dir_path)
+    if manifest and manifest.get("extensions"):
+        entries = [
+            os.path.abspath(os.path.join(dir_path, candidate))
+            for candidate in manifest["extensions"]
+            if os.path.exists(os.path.join(dir_path, candidate))
+        ]
+        if entries:
+            return entries
     index_py = os.path.join(dir_path, "index.py")
     if os.path.exists(index_py):
         return [index_py]
@@ -358,12 +357,32 @@ def is_extension_file(name: str) -> bool:
     return name.endswith(".py")
 
 
-def _read_harn_manifest(package_json_path: str) -> dict[str, list[str]] | None:
+def _read_harn_manifest(dir_path: str) -> dict[str, list[str]] | None:
+    package_json_path = os.path.join(dir_path, "package.json")
+    if os.path.exists(package_json_path):
+        return _read_harn_package_json_manifest(package_json_path)
+    pyproject_path = os.path.join(dir_path, "pyproject.toml")
+    if os.path.exists(pyproject_path):
+        return _read_harn_pyproject_manifest(pyproject_path)
+    return None
+
+
+def _read_harn_package_json_manifest(package_json_path: str) -> dict[str, list[str]] | None:
     try:
         package = json.loads(Path(package_json_path).read_text(encoding="utf-8"))
     except Exception:
         return None
     harn_section = package.get("harn")
+    return harn_section if isinstance(harn_section, dict) else None
+
+
+def _read_harn_pyproject_manifest(pyproject_path: str) -> dict[str, list[str]] | None:
+    try:
+        package = tomllib.loads(Path(pyproject_path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    tool_section = package.get("tool")
+    harn_section = tool_section.get("harn") if isinstance(tool_section, dict) else None
     return harn_section if isinstance(harn_section, dict) else None
 
 

@@ -350,6 +350,32 @@ async def test_discovered_extension_paths_preserve_leading_and_trailing_spaces(t
     assert [extension.path for extension in discovered.extensions] == [str(extension_dir / "index.py")]
 
 
+@pytest.mark.asyncio
+async def test_discovered_extension_directory_supports_pyproject_harn_manifest(tmp_path: Path) -> None:
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+    agent_dir = tmp_path / "agent"
+    extension_dir = agent_dir / "extensions" / "demo"
+    extension_path = extension_dir / "src" / "entry.py"
+    extension_path.parent.mkdir(parents=True)
+    extension_path.write_text("async def default(api):\n    return None\n", encoding="utf-8")
+    (extension_dir / "pyproject.toml").write_text(
+        (
+            "[project]\n"
+            'name = "demo-extension"\n'
+            "\n"
+            "[tool.harn]\n"
+            'extensions = ["src/entry.py"]\n'
+        ),
+        encoding="utf-8",
+    )
+
+    discovered = await discover_and_load_extensions([], str(cwd), str(agent_dir))
+
+    assert discovered.errors == []
+    assert [extension.path for extension in discovered.extensions] == [str(extension_path)]
+
+
 def test_build_system_prompt_uses_context_and_skills(tmp_path: Path) -> None:
     cwd = tmp_path / "project"
     skill = Skill(
