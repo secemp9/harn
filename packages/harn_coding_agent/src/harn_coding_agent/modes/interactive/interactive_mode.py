@@ -3883,18 +3883,18 @@ class InteractiveMode:
 
             await self.session.modelRegistry.authStorage.login(
                 providerId,
-                {
-                    "onAuth": _handle_auth,
-                    "onDeviceCode": _handle_device_code,
-                    "onPrompt": lambda prompt: dialog.showPrompt(
+                SimpleNamespace(
+                    onAuth=_handle_auth,
+                    onDeviceCode=_handle_device_code,
+                    onPrompt=lambda prompt: dialog.showPrompt(
                         str(_value(prompt, "message", "")),
                         _value(prompt, "placeholder"),
                     ),
-                    "onProgress": dialog.showProgress,
-                    "onSelect": lambda prompt: self.showOAuthLoginSelect(dialog, prompt),
-                    "onManualCodeInput": lambda: manual_code_future,
-                    "signal": dialog.signal,
-                },
+                    onProgress=dialog.showProgress,
+                    onSelect=lambda prompt: self.showOAuthLoginSelect(dialog, prompt),
+                    onManualCodeInput=lambda: manual_code_future,
+                    signal=dialog.signal,
+                ),
             )
             restore_editor()
             await self.completeProviderAuthentication(providerId, providerName, "oauth", previous_model)

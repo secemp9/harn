@@ -311,6 +311,35 @@ async def test_extension_loader_requires_default_export_for_extension_modules(tm
 
 
 @pytest.mark.asyncio
+async def test_extension_loader_registers_modules_for_dataclass_annotations(tmp_path: Path) -> None:
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    extension_dir = agent_dir / "extensions" / "typed"
+    extension_dir.mkdir(parents=True)
+    (extension_dir / "index.py").write_text(
+        (
+            "from __future__ import annotations\n"
+            "from dataclasses import dataclass\n"
+            "\n"
+            "@dataclass(slots=True)\n"
+            "class Payload:\n"
+            "    value: str\n"
+            "\n"
+            "async def default(api):\n"
+            "    api.registerCommand('typed-cmd', {'handler': lambda args, ctx: Payload(value=args)})\n"
+        ),
+        encoding="utf-8",
+    )
+
+    discovered = await discover_and_load_extensions([], str(cwd), str(agent_dir))
+
+    assert discovered.errors == []
+    assert [list(extension.commands) for extension in discovered.extensions] == [["typed-cmd"]]
+
+
+@pytest.mark.asyncio
 async def test_discover_and_load_extensions_uses_configured_default_agent_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -2892,9 +2892,9 @@ async def test_show_login_dialog_only_collects_manual_code_for_callback_provider
         def showProgress(self, _message: str) -> None:
             return None
 
-    async def fake_login(_provider_id: str, callbacks: dict[str, Any]) -> None:
-        callbacks["onAuth"]({"url": "https://auth.example", "instructions": "browser"})
-        callbacks["onDeviceCode"](SimpleNamespace(verificationUri="https://verify.example", userCode="CODE"))
+    async def fake_login(_provider_id: str, callbacks: Any) -> None:
+        callbacks.onAuth({"url": "https://auth.example", "instructions": "browser"})
+        callbacks.onDeviceCode(SimpleNamespace(verificationUri="https://verify.example", userCode="CODE"))
 
     monkeypatch.setattr(interactive_mode_module, "LoginDialogComponent", FakeDialog)
 
