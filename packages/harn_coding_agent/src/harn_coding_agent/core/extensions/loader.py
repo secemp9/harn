@@ -6,6 +6,7 @@ import importlib.util
 import inspect
 import json
 import os
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -393,7 +394,16 @@ def _load_extension_module(resolved_path: str) -> ExtensionFactory | None:
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not create module spec for {resolved_path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    previous_module = sys.modules.get(spec.name)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        if previous_module is None:
+            sys.modules.pop(spec.name, None)
+        else:
+            sys.modules[spec.name] = previous_module
+        raise
     candidate = getattr(module, "default", None)
     return candidate if callable(candidate) else None
 
