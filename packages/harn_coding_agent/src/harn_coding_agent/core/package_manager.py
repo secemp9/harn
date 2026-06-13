@@ -7,17 +7,18 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal as signal_module
 import stat as stat_module
-import shutil
 import subprocess
 import sys
 import tempfile
-from urllib.parse import urlparse
+import tomllib
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, NotRequired, Protocol, TypeVar, TypedDict, cast
+from typing import Any, Literal, NotRequired, Protocol, TypedDict, TypeVar, cast
+from urllib.parse import urlparse
 
 from pathspec import GitIgnoreSpec
 from wcmatch import glob as wc_glob
@@ -397,17 +398,30 @@ def _resource_precedence_rank(metadata: PathMetadata) -> int:
 
 def _read_harn_manifest(package_root: str) -> HarnManifest | None:
     package_json_path = os.path.join(package_root, "package.json")
-    if not os.path.exists(package_json_path):
-        return None
-    return _read_harn_manifest_file(package_json_path)
+    if os.path.exists(package_json_path):
+        return _read_harn_package_json_manifest(package_json_path)
+    pyproject_path = os.path.join(package_root, "pyproject.toml")
+    if os.path.exists(pyproject_path):
+        return _read_harn_pyproject_manifest(pyproject_path)
+    return None
 
 
-def _read_harn_manifest_file(package_json_path: str) -> HarnManifest | None:
+def _read_harn_package_json_manifest(package_json_path: str) -> HarnManifest | None:
     try:
         payload = json.loads(Path(package_json_path).read_text(encoding="utf-8"))
     except Exception:
         return None
     manifest = payload.get("harn")
+    return cast(HarnManifest, manifest) if isinstance(manifest, dict) else None
+
+
+def _read_harn_pyproject_manifest(pyproject_path: str) -> HarnManifest | None:
+    try:
+        payload = tomllib.loads(Path(pyproject_path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    tool = payload.get("tool")
+    manifest = tool.get("harn") if isinstance(tool, dict) else None
     return cast(HarnManifest, manifest) if isinstance(manifest, dict) else None
 
 
@@ -569,17 +583,15 @@ def _collect_auto_theme_entries(dir_path: str) -> list[str]:
 
 
 def _resolve_extension_entries(dir_path: str) -> list[str] | None:
-    package_json_path = os.path.join(dir_path, "package.json")
-    if os.path.exists(package_json_path):
-        manifest = _read_harn_manifest_file(package_json_path)
-        if manifest and manifest.get("extensions"):
-            entries = [
-                os.path.abspath(os.path.join(dir_path, candidate))
-                for candidate in manifest["extensions"]
-                if os.path.exists(os.path.join(dir_path, candidate))
-            ]
-            if entries:
-                return entries
+    manifest = _read_harn_manifest(dir_path)
+    if manifest and manifest.get("extensions"):
+        entries = [
+            os.path.abspath(os.path.join(dir_path, candidate))
+            for candidate in manifest["extensions"]
+            if os.path.exists(os.path.join(dir_path, candidate))
+        ]
+        if entries:
+            return entries
     index_py = os.path.join(dir_path, "index.py")
     if os.path.exists(index_py):
         return [index_py]

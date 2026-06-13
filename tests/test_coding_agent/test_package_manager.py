@@ -6,8 +6,8 @@ import sys
 import textwrap
 from pathlib import Path
 
-import pytest
 import harn_coding_agent.core.package_manager as package_manager_module
+import pytest
 from harn_coding_agent.config import CONFIG_DIR_NAME, get_themes_dir
 from harn_coding_agent.core.package_manager import DefaultPackageManager
 from harn_coding_agent.core.resource_loader import DefaultResourceLoader
@@ -326,6 +326,55 @@ async def test_resource_loader_loads_project_and_cli_package_resources(tmp_path:
     assert theme_scopes["CLI Theme"] == "temporary"
     assert extension_scopes["project-addon"] == "project"
     assert extension_scopes["cli-addon"] == "temporary"
+
+
+@pytest.mark.asyncio
+async def test_resource_loader_loads_pyproject_harn_manifest_resources(tmp_path: Path) -> None:
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    package_root = tmp_path / "pyproject-addon"
+    _write_extension(package_root / "ext" / "main.py")
+    (package_root / "skill-data" / "py-skill").mkdir(parents=True)
+    (package_root / "prompt-data").mkdir(parents=True)
+    (package_root / "theme-data").mkdir(parents=True)
+    (package_root / "skill-data" / "py-skill" / "SKILL.md").write_text(
+        "---\ndescription: py-skill\n---\n# py-skill",
+        encoding="utf-8",
+    )
+    (package_root / "prompt-data" / "py-prompt.md").write_text(
+        "---\ndescription: py-prompt\n---\npy-prompt",
+        encoding="utf-8",
+    )
+    _write_valid_theme(package_root / "theme-data" / "py-theme.json", name="Pyproject Theme")
+    (package_root / "pyproject.toml").write_text(
+        (
+            "[project]\n"
+            'name = "pyproject-addon"\n'
+            "\n"
+            "[tool.harn]\n"
+            'extensions = ["ext/main.py"]\n'
+            'skills = ["skill-data/py-skill"]\n'
+            'prompts = ["prompt-data/py-prompt.md"]\n'
+            'themes = ["theme-data/py-theme.json"]\n'
+        ),
+        encoding="utf-8",
+    )
+
+    loader = DefaultResourceLoader(
+        {
+            "cwd": str(cwd),
+            "agentDir": str(agent_dir),
+            "additionalExtensionPaths": [str(package_root)],
+        }
+    )
+    await loader.reload()
+
+    assert [Path(extension.path).name for extension in loader.getExtensions().extensions] == ["main.py"]
+    assert [skill.name for skill in loader.getSkills()["skills"]] == ["py-skill"]
+    assert [prompt.name for prompt in loader.getPrompts()["prompts"]] == ["py-prompt"]
+    assert [theme.name for theme in loader.getThemes()["themes"]] == ["Pyproject Theme"]
 
 
 @pytest.mark.asyncio
